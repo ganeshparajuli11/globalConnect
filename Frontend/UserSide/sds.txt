@@ -1,0 +1,4 @@
+npm install --global eas-cli && 
+npx create-expo-app globalconnect && 
+cd globalconnect && 
+eas init --id ba17fab9-c785-483f-b716-762f57a92289

@@ -1,0 +1,102 @@
+[
+  {
+    "name": "Sujan Sharma",
+    "email": "sujan.sharma@example.com",
+    "password": "sujan123",
+    "age": 24,
+    "profile_image": "http://example.com/profile1.jpg",
+    "location": "Kathmandu, Nepal",
+    "role": "user",
+    "destination_country": "Australia, Sydney"
+  },
+  {
+    "name": "Anjali Rai",
+    "email": "anjali.rai@example.com",
+    "password": "anjali123",
+    "age": 22,
+    "profile_image": "http://example.com/profile2.jpg",
+    "location": "Pokhara, Nepal",
+    "role": "user",
+    "destination_country": "USA, New York"
+  },
+  {
+    "name": "Ravi Thapa",
+    "email": "ravi.thapa@example.com",
+    "password": "ravirocks",
+    "age": 26,
+    "profile_image": "http://example.com/profile3.jpg",
+    "location": "Biratnagar, Nepal",
+    "role": "user",
+    "destination_country": "Canada, Toronto"
+  },
+  {
+    "name": "Nisha Koirala",
+    "email": "nisha.koirala@example.com",
+    "password": "nisha123",
+    "age": 28,
+    "profile_image": "http://example.com/profile4.jpg",
+    "location": "Lalitpur, Nepal",
+    "role": "user",
+    "destination_country": "UK, London"
+  },
+  {
+    "name": "Dipesh Gautam",
+    "email": "dipesh.gautam@example.com",
+    "password": "dipeshrocks",
+    "age": 23,
+    "profile_image": "http://example.com/profile5.jpg",
+    "location": "Butwal, Nepal",
+    "role": "user",
+    "destination_country": "Germany, Berlin"
+  },
+  {
+    "name": "Priya Joshi",
+    "email": "priya.joshi@example.com",
+    "password": "priya123",
+    "age": 25,
+    "profile_image": "http://example.com/profile6.jpg",
+    "location": "Chitwan, Nepal",
+    "role": "user",
+    "destination_country": "South Korea, Seoul"
+  },
+  {
+    "name": "Manoj Pandit",
+    "email": "manoj.pandit@example.com",
+    "password": "manojrocks",
+    "age": 30,
+    "profile_image": "http://example.com/profile7.jpg",
+    "location": "Bhairahawa, Nepal",
+    "role": "user",
+    "destination_country": "Japan, Osaka"
+  },
+  {
+    "name": "Rachana Poudel",
+    "email": "rachana.poudel@example.com",
+    "password": "rachana123",
+    "age": 21,
+    "profile_image": "http://example.com/profile8.jpg",
+    "location": "Dhankuta, Nepal",
+    "role": "user",
+    "destination_country": "New Zealand, Auckland"
+  },
+  {
+    "name": "Kushal Dhakal",
+    "email": "kushal.dhakal@example.com",
+    "password": "kushal123",
+    "age": 27,
+    "profile_image": "http://example.com/profile9.jpg",
+    "location": "Hetauda, Nepal",
+    "role": "user",
+    "destination_country": "USA, Los Angeles"
+  },
+  {
+    "name": "Suman Karki",
+    "email": "suman.karki@example.com",
+    "password": "sumanrocks",
+    "age": 29,
+    "profile_image": "http://example.com/profile10.jpg",
+    "location": "Pokhara, Nepal",
+    "role": "user",
+    "destination_country": "Canada, Vancouver"
+  }
+]
