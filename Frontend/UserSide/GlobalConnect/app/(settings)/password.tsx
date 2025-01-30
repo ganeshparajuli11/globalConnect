@@ -9,9 +9,11 @@ import {
 } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
 import axios from 'axios';
-
+import config from "../config";
 import { useRouter } from "expo-router";
 const Password = () => {
+
+  const ip = config.API_IP;  
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -41,7 +43,7 @@ const Password = () => {
   
     try {
       const response = await axios.post(
-        'http://192.168.18.105:3000/api/profile/change-password',
+        `http://${ip}:3000/api/profile/change-password`,
         { currentPassword, newPassword },
         {
           headers: {

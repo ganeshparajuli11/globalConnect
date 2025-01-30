@@ -4,8 +4,9 @@ import axios from "axios";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useRouter } from "expo-router";
 import { Ionicons } from '@expo/vector-icons';  // Import Ionicons for the eye icon
-
+import config from "../config";
 export default function Login() {
+  const ip = config.API_IP;  
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
@@ -20,7 +21,7 @@ export default function Login() {
 
     setLoading(true);
     try {
-      const response = await axios.post("http://192.168.18.105:3000/api/users/login", { email, password });
+      const response = await axios.post(`http://${ip}:3000/api/users/login`, { email, password });
 
       if (response.data?.token) {
         // Store authToken and userData in AsyncStorage

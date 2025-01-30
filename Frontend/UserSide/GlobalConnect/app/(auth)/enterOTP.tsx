@@ -2,8 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert } from 'react-native';
 import axios from 'axios';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-
+import config from "../config";
 export default function EnterOTP() {
+
+  const ip = config.API_IP;  
   const [otp, setOtp] = useState('');
   const [email, setEmail] = useState('');
   const { email: emailFromQuery } = useLocalSearchParams(); 
@@ -25,7 +27,7 @@ export default function EnterOTP() {
 
     try {
       // Make API call to verify OTP
-      const response = await axios.post('http://192.168.18.105:3000/api/profile/verify-otp', {
+      const response = await axios.post(`http://${ip}:3000/api/profile/verify-otp`, {
         email,
         otp
       });

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { FaTachometerAlt, FaUsers, FaBell, FaFileAlt, FaQuestionCircle } from "react-icons/fa";
+import { FaTachometerAlt, FaUsers, FaBell, FaFileAlt, FaQuestionCircle, FaTags } from "react-icons/fa";
 import { BiLogOut } from "react-icons/bi";
 import { MdPrivacyTip } from "react-icons/md";
 import { NavLink } from "react-router-dom";
@@ -43,7 +43,7 @@ const Sidebar = () => {
           console.error("Error fetching user stats:", error);
         });
     }
-  }, [accessToken]); // Depend on accessToken to re-run once it's set
+  }, [accessToken]);
 
   return (
     <div className="h-screen w-64 bg-white shadow-md flex flex-col">
@@ -110,6 +110,28 @@ const Sidebar = () => {
             </ul>
           )}
 
+          {/* Categories Section */}
+          <li
+            className="px-6 py-3 hover:bg-blue-100 cursor-pointer flex items-center justify-between"
+            onClick={() => toggleMenu("categories")}
+          >
+            <div className="flex items-center space-x-3">
+              <FaTags className="text-lg" />
+              <span>Categories</span>
+            </div>
+            <span>{activeMenu === "categories" ? "-" : "+"}</span>
+          </li>
+          {activeMenu === "categories" && (
+            <ul className="ml-8 space-y-2">
+              <li>
+                <NavLink to="/allCategory">All Categories</NavLink>
+              </li>
+              <li>
+                <NavLink to="/categories/blocked">Blocked Categories</NavLink>
+              </li>
+            </ul>
+          )}
+
           {/* Notifications Section */}
           <li
             className="px-6 py-3 hover:bg-blue-100 cursor-pointer flex items-center justify-between"
@@ -129,32 +151,10 @@ const Sidebar = () => {
             </ul>
           )}
 
-          {/* Reports Section */}
-          <li
-            className="px-6 py-3 hover:bg-blue-100 cursor-pointer flex items-center justify-between"
-            onClick={() => toggleMenu("reports")}
-          >
-            <div className="flex items-center space-x-3">
-              <FaFileAlt className="text-lg" />
-              <span>Reports</span>
-            </div>
-            <span>{activeMenu === "reports" ? "-" : "+"}</span>
-          </li>
-          {activeMenu === "reports" && (
-            <ul className="ml-8 space-y-2">
-              <li>
-                <NavLink to="/reports/reported-posts">Reported Posts</NavLink>
-              </li>
-              <li>
-                <NavLink to="/reports/reported-users">Reported Users</NavLink>
-              </li>
-            </ul>
-          )}
-
           {/* Other Static Links */}
           <li className="px-6 py-3 hover:bg-blue-100 cursor-pointer flex items-center space-x-3">
             <FaQuestionCircle className="text-lg" />
-            <span>Help & Support</span>
+            <span>Post Categories</span>
           </li>
           <li className="px-6 py-3 hover:bg-blue-100 cursor-pointer flex items-center space-x-3">
             <FaFileAlt className="text-lg" />

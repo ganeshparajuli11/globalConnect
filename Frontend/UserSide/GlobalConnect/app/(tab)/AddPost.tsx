@@ -1,35 +1,42 @@
 import React, { useState, useEffect } from "react";
 import {
+  SafeAreaView,
   View,
   Text,
   TextInput,
   TouchableOpacity,
   StyleSheet,
-  Image,
   ScrollView,
   Alert,
+  Image,
 } from "react-native";
 import { Picker } from "@react-native-picker/picker";
 import * as ImagePicker from "expo-image-picker";
 import axios from "axios";
+import { Ionicons } from "@expo/vector-icons";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { useRouter } from "expo-router";
+import config from "../config";
 
 export default function AddPost() {
+  const ip = config.API_IP;
+  const router = useRouter();
   const [categories, setCategories] = useState([]);
   const [category, setCategory] = useState("");
-  const [fields, setFields] = useState([]); // Store dynamic fields
-  const [formData, setFormData] = useState({}); // Dynamic form data
+  const [fields, setFields] = useState([]);
+  const [formData, setFormData] = useState({});
   const [selectedImages, setSelectedImages] = useState([]);
-  const authToken = "your-auth-token"; // Replace with the actual token
+  const [tags, setTags] = useState(""); // State for tags
 
-  // Fetch categories and fields dynamically
+  // Fetch categories
   useEffect(() => {
     const fetchCategories = async () => {
       try {
-        const response = await axios.get("http://192.168.18.105:3000/api/category/all");
+        const response = await axios.get(`http://${ip}:3000/api/category/all`);
         setCategories(response.data.categories);
         if (response.data.categories.length > 0) {
-          setCategory(response.data.categories[0].id); // Set default category
-          setFields(response.data.categories[0].fields); // Set fields for the first category
+          setCategory(response.data.categories[0]._id);
+          setFields(response.data.categories[0].fields);
         }
       } catch (error) {
         console.error("Error fetching categories:", error);
@@ -39,17 +46,20 @@ export default function AddPost() {
     fetchCategories();
   }, []);
 
-  // Handle form field change dynamically
+  // Handle input change
   const handleFieldChange = (fieldName, value) => {
     setFormData((prev) => ({ ...prev, [fieldName]: value }));
   };
 
-  // Pick multiple images
+  // Pick Image
   const pickImage = async () => {
-    const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
-
+    const permissionResult =
+      await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!permissionResult.granted) {
-      Alert.alert("Permission Denied", "You need to allow access to your photos to upload images.");
+      Alert.alert(
+        "Permission Denied",
+        "Allow access to photos to upload images."
+      );
       return;
     }
 
@@ -68,175 +78,217 @@ export default function AddPost() {
     setSelectedImages(selectedImages.filter((image) => image !== uri));
   };
 
-  // Handle form submission
+  // Submit Form
   const handleSubmit = async () => {
-    const postData = {
-      category_id: category,
-      ...formData, // Include all dynamic fields in the post data
-      media: selectedImages.map((uri) => ({
-        media_path: uri,
-        media_type: "image",
-        description: "Uploaded image",
-      })),
-    };
+    const authToken = await AsyncStorage.getItem("authToken");
+    const data = new FormData();
+
+    data.append("category_id", category);
+
+    // Prepare fields as an array of objects with name and value
+    const formattedFields = fields.map((field) => {
+      return { name: field.name, value: formData[field.name] || "" };
+    });
+
+    data.append("fields", JSON.stringify(formattedFields));
+
+    // Append tags to FormData
+    const tagsArray = tags.split(",").map((tag) => tag.trim()); // Split tags by commas and remove spaces
+    data.append("tags", JSON.stringify(tagsArray));
+
+    // Append other data like location, visibility, and metadata
+    data.append("location", "Sydney, Australia");
+    data.append("visibility", "public");
+    data.append(
+      "metadata",
+      JSON.stringify({ salary: "100,000 AUD", employment_type: "Full-time" })
+    );
+
+    // Append images to FormData
+    selectedImages.forEach((uri, index) => {
+      let filename = uri.split("/").pop();
+      let match = /\.(\w+)$/.exec(filename);
+      let type = match ? `image/${match[1]}` : "image";
+
+      // Debugging: Check if the image is correctly formatted
+      console.log("Appending image:", uri, filename, type);
+
+      data.append("media", {
+        uri,
+        name: filename,
+        type,
+      });
+    });
 
     try {
-      const response = await axios.post("http://localhost:3000/api/post/create", postData, {
-        headers: {
-          Authorization: `Bearer ${authToken}`,
-          "Content-Type": "application/json",
-        },
-      });
+      console.log("Sending data:", data); // Debugging: log FormData
 
-      Alert.alert("Success", "Post created successfully!");
-      console.log("Post created:", response.data);
+      const response = await axios.post(
+        `http://${ip}:3000/api/post/create`,
+        data,
+        {
+          headers: {
+            Authorization: `Bearer ${authToken}`,
+            "Content-Type": "multipart/form-data",
+          },
+        }
+      );
+
+      if (response.status === 200) {
+        Alert.alert("Success", "Post created successfully!");
+        router.replace("/(tab)");
+      } else {
+        throw new Error("Post creation failed.");
+      }
     } catch (error) {
-      Alert.alert("Error", "Failed to create post.");
       console.error("Error creating post:", error);
+      Alert.alert("Error", "Failed to create post.");
     }
   };
 
-  // Render dynamic fields based on category and schema
-  const renderInputFields = () => {
-    return fields.map((field, index) => {
-      switch (field.type) {
-        case "text":
-          return (
-            <TextInput
-              key={index}
-              style={styles.input}
-              placeholder={field.label}
-              value={formData[field.name] || ""}
-              onChangeText={(value) => handleFieldChange(field.name, value)}
-            />
-          );
-        case "textarea":
-          return (
-            <TextInput
-              key={index}
-              style={[styles.textInput, { height: 80 }]}
-              placeholder={field.label}
-              multiline
-              value={formData[field.name] || ""}
-              onChangeText={(value) => handleFieldChange(field.name, value)}
-            />
-          );
-        case "dropdown":
-          return (
-            <Picker
-              key={index}
-              selectedValue={formData[field.name] || ""}
-              style={styles.picker}
-              onValueChange={(value) => handleFieldChange(field.name, value)}
-            >
-              {field.options.map((option, idx) => (
-                <Picker.Item key={idx} label={option.label} value={option.value} />
-              ))}
-            </Picker>
-          );
-        case "file":
-          return (
-            <TouchableOpacity key={index} style={styles.uploadButton} onPress={pickImage}>
-              <Text style={styles.uploadButtonText}>Add File</Text>
-            </TouchableOpacity>
-          );
-        default:
-          return null;
-      }
-    });
+  const handleGoBack = () => {
+    Alert.alert(
+      "Discard Post?",
+      "Are you sure you want to discard this post?",
+      [
+        {
+          text: "Cancel",
+          style: "cancel",
+        },
+        {
+          text: "Yes",
+          onPress: () => router.replace("/(tab)"), // Navigate to home tab
+        },
+      ]
+    );
   };
 
   return (
-    <ScrollView style={styles.container}>
-      <View style={styles.headerContainer}>
-        <Text style={styles.header}>Create Post</Text>
-      </View>
+    <SafeAreaView style={{ flex: 1, backgroundColor: "#f9f9f9" }}>
+      <ScrollView style={styles.container}>
+        <View style={styles.headerContainer}>
+          <TouchableOpacity onPress={handleGoBack} style={styles.backButton}>
+            <Ionicons name="arrow-back" size={24} color="black" />
+          </TouchableOpacity>
 
-      {/* Category Picker */}
-      <Text style={styles.label}>Select Category</Text>
-      <Picker
-        selectedValue={category}
-        style={styles.picker}
-        onValueChange={(itemValue) => {
-          setCategory(itemValue);
-          const selectedCategory = categories.find((cat) => cat.id === itemValue);
-          setFields(selectedCategory.fields);
-        }}
-      >
-        {categories.map((cat) => (
-          <Picker.Item key={cat.id} label={cat.name} value={cat.id} />
+          <Text style={styles.header}>Create Post</Text>
+        </View>
+
+        {/* Category Picker */}
+        <Text style={styles.label}>Select Category</Text>
+        <View style={styles.pickerWrapper}>
+          <Picker
+            selectedValue={category}
+            style={styles.picker}
+            onValueChange={(itemValue) => {
+              setCategory(itemValue);
+              const selectedCategory = categories.find(
+                (cat) => cat._id === itemValue
+              );
+              setFields(selectedCategory ? selectedCategory.fields : []);
+            }}
+          >
+            {categories.map((cat) => (
+              <Picker.Item key={cat._id} label={cat.name} value={cat._id} />
+            ))}
+          </Picker>
+        </View>
+
+        {/* Dynamic Input Fields */}
+        {fields.map((field, index) => (
+          <TextInput
+            key={index}
+            style={styles.input}
+            placeholder={field.label}
+            value={formData[field.name] || ""}
+            onChangeText={(value) => handleFieldChange(field.name, value)}
+          />
         ))}
-      </Picker>
 
-      {/* Dynamic Input Fields */}
-      {renderInputFields()}
+        {/* Tags Field */}
+        <TextInput
+          style={styles.input}
+          placeholder="Enter tags (comma separated)"
+          value={tags}
+          onChangeText={(value) => setTags(value)}
+        />
 
-      {/* Tags Input */}
-      <TextInput
-        style={styles.input}
-        placeholder="Enter tags (comma-separated)"
-        value={formData.tags || ""}
-        onChangeText={(value) => handleFieldChange("tags", value)}
-      />
+        {/* Image Upload */}
+        <TouchableOpacity style={styles.uploadButton} onPress={pickImage}>
+          <Text style={styles.uploadButtonText}>Add Image</Text>
+        </TouchableOpacity>
 
-      {/* Submit Button */}
-      <TouchableOpacity style={styles.postButton} onPress={handleSubmit}>
-        <Text style={styles.postButtonText}>Post</Text>
-      </TouchableOpacity>
-    </ScrollView>
+        {/* Display Selected Images */}
+        <ScrollView horizontal>
+          {selectedImages.map((uri, index) => (
+            <View key={index} style={{ position: "relative", marginRight: 10 }}>
+              <Image source={{ uri }} style={styles.imagePreview} />
+              <TouchableOpacity
+                style={styles.removeImage}
+                onPress={() => removeImage(uri)}
+              >
+                <Ionicons name="close-circle" size={20} color="red" />
+              </TouchableOpacity>
+            </View>
+          ))}
+        </ScrollView>
+
+        {/* Submit Button */}
+        <TouchableOpacity style={styles.postButton} onPress={handleSubmit}>
+          <Text style={styles.postButtonText}>Post</Text>
+        </TouchableOpacity>
+      </ScrollView>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    padding: 16,
-    backgroundColor: "#f9f9f9",
-  },
-  picker: {
-    flex: 1,
-    marginLeft: 8,
-  },
-  input: {
-    height: 40,
-    borderWidth: 1,
-    borderColor: "#ccc",
-    borderRadius: 8,
-    padding: 8,
-    marginBottom: 12,
-    backgroundColor: "#fff",
-  },
-  textInput: {
-    height: 120,
-    borderWidth: 1,
-    borderColor: "#ccc",
-    borderRadius: 8,
-    padding: 12,
-    backgroundColor: "#fff",
-    textAlignVertical: "top",
+  container: { flex: 1, padding: 16 },
+  headerContainer: {
+    flexDirection: "row",
+    alignItems: "center",
     marginBottom: 16,
   },
+  backButton: { marginRight: 16 },
+  header: { fontSize: 24, fontWeight: "bold" },
+  label: { fontSize: 16, fontWeight: "500", marginBottom: 8 },
+  pickerWrapper: { marginBottom: 16 },
+  picker: { height: 50, borderColor: "#ccc", borderWidth: 1, borderRadius: 8 },
+  input: {
+    height: 45,
+    borderColor: "#ccc",
+    borderWidth: 1,
+    borderRadius: 8,
+    marginBottom: 16,
+    paddingLeft: 10,
+  },
   uploadButton: {
-    backgroundColor: "#007BFF",
+    backgroundColor: "#007bff",
     padding: 12,
     borderRadius: 8,
     alignItems: "center",
-    marginBottom: 8,
+    marginBottom: 16,
   },
-  uploadButtonText: {
-    color: "#fff",
-    fontSize: 16,
-    fontWeight: "bold",
+  uploadButtonText: { color: "#fff", fontSize: 16 },
+  imagePreview: {
+    width: 100,
+    height: 100,
+    borderRadius: 8,
+    marginRight: 10,
+  },
+  removeImage: {
+    position: "absolute",
+    top: 5,
+    right: 5,
+    backgroundColor: "#fff",
+    borderRadius: 50,
+    padding: 5,
   },
   postButton: {
-    backgroundColor: "#000",
+    backgroundColor: "#28a745",
     padding: 12,
     borderRadius: 8,
     alignItems: "center",
   },
-  postButtonText: {
-    color: "#fff",
-    fontSize: 16,
-    fontWeight: "bold",
-  },
+  postButtonText: { color: "#fff", fontSize: 16 },
 });

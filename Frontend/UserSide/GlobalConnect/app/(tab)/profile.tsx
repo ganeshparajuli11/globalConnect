@@ -5,8 +5,10 @@ import axios from 'axios';
 import { useRouter } from "expo-router";
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';  // Import ImagePicker
-
+import config from "../config";
 export default function Profile() {
+
+  const ip = config.API_IP;  
   const [profileData, setProfileData] = useState(null);
   const [posts, setPosts] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -27,7 +29,7 @@ export default function Profile() {
         const config = { headers: { Authorization: `Bearer ${authToken}` } };
 
         const profileResponse = await axios.get(
-          'http://192.168.18.105:3000/api/profile/getUserProfile',
+          `http://${ip}:3000/api/profile/getUserProfile`,
           config
         );
 
@@ -89,7 +91,7 @@ export default function Profile() {
       };
 
       const response = await axios.post(
-        'http://192.168.18.105:3000/api/profile/update-profile',
+         `http://${ip}:3000/api/profile/profile/update-profile`,
         formData,
         config
       );

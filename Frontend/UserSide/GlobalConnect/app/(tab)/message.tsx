@@ -1,10 +1,20 @@
 import React, { useEffect, useState } from "react";
-import { View, Text, TextInput, FlatList, Image, TouchableOpacity, ActivityIndicator } from "react-native";
+import {
+  View,
+  Text,
+  TextInput,
+  FlatList,
+  Image,
+  TouchableOpacity,
+  ActivityIndicator,
+} from "react-native";
 import axios from "axios";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useRouter } from "expo-router"; // Assuming you're using Expo Router
-
+import config from "../config";
 export default function Message() {
+  const ip = config.API_IP;
+  console.log("ip: " + ip);
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(true);
   const router = useRouter(); // Initialize the router
@@ -21,12 +31,15 @@ export default function Message() {
         }
 
         // Send the token in the Authorization header
-        const response = await axios.get("http://192.168.18.105:3000/api/all-message", {
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`,
-          },
-        });
+        const response = await axios.get(
+          `http://${ip}:3000/api/all-message`,
+          {
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${token}`,
+            },
+          }
+        );
 
         if (response.data.success) {
           // Map the API response to match the component's data structure
@@ -51,25 +64,28 @@ export default function Message() {
     fetchMessages();
   }, []);
 
-
   const renderMessage = ({ item }) => (
     <TouchableOpacity
-  onPress={() => {
-    router.replace(
-      `/ChatPage?userId=${encodeURIComponent(item.id)}&name=${encodeURIComponent(item.name)}`
-    );
-  }}
-  style={{
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "white",
-    padding: 16,
-    borderRadius: 10,
-    marginBottom: 16,
-  }}
->
-
-      <Image source={{ uri: item.avatar }} style={{ width: 48, height: 48, borderRadius: 24 }} />
+      onPress={() => {
+        router.replace(
+          `/ChatPage?userId=${encodeURIComponent(
+            item.id
+          )}&name=${encodeURIComponent(item.name)}`
+        );
+      }}
+      style={{
+        flexDirection: "row",
+        alignItems: "center",
+        backgroundColor: "white",
+        padding: 16,
+        borderRadius: 10,
+        marginBottom: 16,
+      }}
+    >
+      <Image
+        source={{ uri: item.avatar }}
+        style={{ width: 48, height: 48, borderRadius: 24 }}
+      />
       <View style={{ marginLeft: 16 }}>
         <Text style={{ fontSize: 18, fontWeight: "600" }}>{item.name}</Text>
         <Text style={{ color: "gray" }}>{item.message}</Text>
@@ -115,7 +131,11 @@ export default function Message() {
 
       {/* Message List */}
       {loading ? (
-        <ActivityIndicator size="large" color="#0000ff" style={{ marginTop: 20 }} />
+        <ActivityIndicator
+          size="large"
+          color="#0000ff"
+          style={{ marginTop: 20 }}
+        />
       ) : (
         <FlatList
           data={messages}

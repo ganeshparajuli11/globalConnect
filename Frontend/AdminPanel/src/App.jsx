@@ -1,5 +1,10 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
-import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
+import {
+  BrowserRouter as Router,
+  Routes,
+  Route,
+  Navigate,
+} from "react-router-dom";
 import axios from "axios";
 import Login from "./components/loginAndSignup/Login";
 import Dashboard from "./components/dashboard/Dashboard";
@@ -11,6 +16,7 @@ import ActiveUser from "./components/userpage/ActiveUser";
 import InActiveUser from "./components/userpage/InActiveUser";
 import ReportedUser from "./components/userpage/ReportedUser";
 import BlockedUser from "./components/userpage/BlockedUser";
+import AllCategory from "./components/category/AllCategory";
 
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -48,48 +54,41 @@ function App() {
         {/* Redirect to login page if not authenticated */}
         <Route
           path="/"
-          element={isAuthenticated ? <Navigate to="/dashboard" /> : <Navigate to="/login" />}
+          element={
+            isAuthenticated ? (
+              <Navigate to="/dashboard" />
+            ) : (
+              <Navigate to="/login" />
+            )
+          }
         />
-        <Route path="/login" element={isAuthenticated ? <Navigate to="/dashboard" /> : <Login />} />
+        <Route
+          path="/login"
+          element={isAuthenticated ? <Navigate to="/dashboard" /> : <Login />}
+        />
         <Route
           path="/dashboard"
-          element={isAuthenticated ? <Dashboard userCount={userCount} /> : <Navigate to="/login" />}
+          element={
+            isAuthenticated ? (
+              <Dashboard userCount={userCount} />
+            ) : (
+              <Navigate to="/login" />
+            )
+          }
         />
-        <Route
-          path="/user/all"
-          element={ <UserPage />}
-        />
-         <Route
-          path="/user/active"
-          element={ <ActiveUser />}
-        />
-                 <Route
-          path="/user/inActive"
-          element={ <InActiveUser />}
-        />
-                         <Route
-          path="/user/blocked"
-          element={ <BlockedUser />}
-        />
-                 <Route
-          path="/user/reported"
-          element={ <ReportedUser/>}
-        />
-           <Route
-          path="/privacyPolicy"
-          element={ <PrivacyPolicy />}
-        />
-        <Route
-          path="/editprivacyPolicy"
-          element={ <EditPrivacyAndPolicy />}
-        />
-                <Route
-          path="/notification"
-          element={ <NotificationPage />}
-        />
+        <Route path="/user/all" element={<UserPage />} />
+        <Route path="/user/active" element={<ActiveUser />} />
+        <Route path="/user/inActive" element={<InActiveUser />} />
+        <Route path="/user/blocked" element={<BlockedUser />} />
+        <Route path="/user/reported" element={<ReportedUser />} />
+        <Route path="/privacyPolicy" element={<PrivacyPolicy />} />
+        <Route path="/editprivacyPolicy" element={<EditPrivacyAndPolicy />} />
+        <Route path="/notification" element={<NotificationPage />} />
+        <Route path="/allCategory" element={<AllCategory />} />
       </Routes>
     </Router>
   );
 }
+
 
 export default App;

@@ -1,5 +1,5 @@
 const User = require("../models/userSchema");
-const Post = require("../models/postSchema");
+const {Post} = require("../models/postSchema");
 const moment = require('moment');
 const Report = require('../models/reportCategorySchema');  
 const ReportUser = require('../models/reportUserSchema');

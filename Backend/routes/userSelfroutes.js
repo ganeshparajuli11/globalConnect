@@ -1,7 +1,7 @@
 const express = require('express');
 const { checkAuthentication, checkIsUser, bothUser } = require('../middleware/middleware');
 const { getUserProfile, sendOTP, verifyOTP, resetPassword, changePassword, updateProfileImage } = require('../controller/userSelfController');
-const uploadImage = require('../middleware/fileUploadMiddleware');
+const { uploadProfileImage } = require('../middleware/uploadMiddleware');
 const router = express.Router();
 
 
@@ -12,7 +12,13 @@ router.post('/forgot-password', sendOTP);
 router.post('/verify-otp', verifyOTP);
 router.post('/reset-password', resetPassword);
 router.post('/change-password',checkAuthentication,bothUser, changePassword);
-router.post('/update-profile',checkAuthentication,bothUser, uploadImage, updateProfileImage);
+router.post(
+    "/update-profile",
+    checkAuthentication,
+    bothUser,
+    uploadProfileImage.single("profileImage"), 
+    updateProfileImage
+  );
 
 
 

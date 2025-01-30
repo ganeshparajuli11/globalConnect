@@ -31,7 +31,7 @@ export default function TabRootLayout() {
         name="AddPost"
         options={{
           tabBarIcon: ({ color, size }) => (
-            <Icon name="chat" color={color} size={size} /> // Message icon
+            <Icon name="add-circle" color={color} size={size} /> // Plus icon for Add Post
           ),
           tabBarShowLabel: false, // Hides the label
         }}

@@ -1,54 +1,49 @@
 import React, { useEffect, useState } from "react";
 import { View, Text, StyleSheet } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { useRouter } from "expo-router";
+import { useRouter } from "expo-router";// Import from react-native-config
+import axios from "axios";  
+import config from "../config";
 
 const SplashScreen = () => {
+  const ip = config.API_IP;  // Access IP from the config
+  console.log("ip: " + ip);
+
   const router = useRouter();
   const [dots, setDots] = useState("");
 
   useEffect(() => {
     const checkToken = async () => {
       try {
-        // Retrieve the token from storage
         const token = await AsyncStorage.getItem("authToken");
         if (token) {
-          // Validate the token by hitting the backend API
-          const response = await fetch("http://192.168.18.105:3000/api/dashboard/getUserData", {
-            method: "GET",
-            headers: {
-              Authorization: `Bearer ${token}`,
-            },
+          const response = await axios.get(`http://${ip}:3000/api/dashboard/getUserData`, {
+            headers: { Authorization: `Bearer ${token}` },
           });
-          if (response.ok) {
-            const data = await response.json();
-            // Store user data if needed
+
+          if (response.status === 200) {  
+            const data = response.data;  
             await AsyncStorage.setItem("userData", JSON.stringify(data.data));
-            router.replace("/(tab)"); // Navigate to dashboard
+            router.replace("/(tab)");  
           } else {
-            router.replace("/login"); // Token is invalid, navigate to login
+            router.replace("/login"); 
           }
         } else {
-          router.replace("/login"); // No token, navigate to login
+          router.replace("/login");  
         }
       } catch (error) {
         console.error("Error validating token:", error);
-        router.replace("/login"); // Navigate to login in case of errors
+        router.replace("/login");  
       }
     };
 
-    // Handle the animated dots for the "No more stress..."
     const dotsInterval = setInterval(() => {
-      setDots((prev) => (prev.length < 3 ? prev + "." : ""));
+      setDots((prev) => (prev.length < 3 ? prev + "." : "")); // Add dots animation
     }, 200);
 
-    // Check token immediately
-    checkToken();
+    checkToken();  // Check the token on load
 
-    // Cleanup the interval on unmount
-    return () => {
-      clearInterval(dotsInterval);
-    };
+    return () => clearInterval(dotsInterval);  // Clean up interval when the component is unmounted
   }, []);
 
   return (
@@ -67,22 +62,15 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: "#f9f9f9", // Matches the design's background color
+    backgroundColor: "#f9f9f9",
   },
-  title: {
-    fontSize: 28,
-    fontWeight: "bold",
-  },
-  global: {
-    color: "#4F46E5", // Blue for "Global"
-  },
-  connect: {
-    color: "#000", // Black for "Connect"
-  },
+  title: { fontSize: 28, fontWeight: "bold" },
+  global: { color: "#4F46E5" },
+  connect: { color: "#000" },
   tagline: {
     marginTop: 10,
     fontSize: 16,
-    color: "#666", // Slightly faded for the tagline
+    color: "#666",
     fontStyle: "italic",
   },
 });

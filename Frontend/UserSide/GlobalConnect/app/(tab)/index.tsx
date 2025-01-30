@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import {
-  SafeAreaView, // Import SafeAreaView
+  SafeAreaView,
   View,
   Text,
   TextInput,
@@ -13,8 +13,10 @@ import {
 } from "react-native";
 import axios from "axios";
 import Icon from "react-native-vector-icons/FontAwesome";
+import config from "../config";
 
 const Index = () => {
+  const ip = config.API_IP;
   const [categories, setCategories] = useState([]);
   const [posts, setPosts] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -26,9 +28,7 @@ const Index = () => {
   useEffect(() => {
     const fetchCategories = async () => {
       try {
-        const response = await axios.get(
-          "http://192.168.18.105:3000/api/category/all"
-        );
+        const response = await axios.get(`http://${ip}:3000/api/category/all`);
         setCategories(response.data.categories);
       } catch (error) {
         console.error("Error fetching categories:", error);
@@ -45,20 +45,19 @@ const Index = () => {
     setLoading(true);
     try {
       const response = await axios.get(
-        `http://192.168.18.105:3000/api/post/all?page=${pageNumber}&limit=5&category=${
-          category || ""
-        }`
+        `http://${ip}:3000/api/post/all?page=${pageNumber}&limit=5&category=${category || ""}`
       );
 
       const transformedPosts = response.data.data.map((post) => ({
-        id: post._id,
-        user: post.user?.name || "Unknown User",
-        type: post.category_id?.name || "Unknown Category",
-        time: new Date(post.created_at).toLocaleDateString(),
-        content: post.text_content,
-        image: post.media_path || null,
+        id: post.id,
+        user: post.user || "Unknown User",
+        userImage: post.userImage || "https://via.placeholder.com/40", // Default if missing
+        type: post.type || "Unknown Category",
+        time: new Date(post.time).toLocaleDateString(),
+        content: post.content || "No content available",
+        image: post.image ? `http://192.168.18.105:3000${post.image}` : "", // Prepend the base URL to image
         comments: post.comments || [],
-        liked: false,
+        liked: post.liked || false,
       }));
 
       setPosts((prevPosts) =>
@@ -78,6 +77,7 @@ const Index = () => {
     fetchPosts();
   }, [selectedCategory]);
 
+  // Toggle like for a post
   const toggleLike = (id) => {
     setPosts((prevPosts) =>
       prevPosts.map((post) =>
@@ -86,14 +86,12 @@ const Index = () => {
     );
   };
 
+  // Render each post
   const renderPost = ({ item }) => (
     <View style={styles.postContainer}>
       {/* User Info */}
       <View style={styles.userInfoContainer}>
-        <Image
-          source={{ uri: "https://via.placeholder.com/40" }} // Replace with user profile image
-          style={styles.userImage}
-        />
+        <Image source={{ uri: item.userImage }} style={styles.userImage} />
         <View style={styles.userInfoTextContainer}>
           <Text style={styles.userName}>{item.user}</Text>
           <Text style={styles.postType}>{`Shared as ${item.type}`}</Text>
@@ -103,7 +101,7 @@ const Index = () => {
 
       {/* Post Content */}
       <Text style={styles.postContent}>{item.content}</Text>
-      {item.image && (
+      {item.image && item.image !== "" && (
         <Image source={{ uri: item.image }} style={styles.postImage} />
       )}
 
@@ -126,11 +124,13 @@ const Index = () => {
     </View>
   );
 
+  // Render loading footer
   const renderFooter = () => {
     if (!loading) return null;
     return <ActivityIndicator style={{ marginVertical: 20 }} />;
   };
 
+  // Handle pull to refresh
   const handleRefresh = async () => {
     setRefreshing(true);
     setPage(1);
@@ -139,10 +139,12 @@ const Index = () => {
     setRefreshing(false);
   };
 
+  // Handle load more when user scrolls
   const handleLoadMore = () => {
-    fetchPosts(page);
+    if (posts.length > 0) fetchPosts(page);
   };
 
+  // Handle category selection
   const handleCategorySelect = (categoryId) => {
     setSelectedCategory(categoryId === selectedCategory ? null : categoryId);
     setPage(1);
@@ -151,13 +153,7 @@ const Index = () => {
 
   return (
     <SafeAreaView style={styles.container}>
-      {" "}
-      {/* Wrap everything inside SafeAreaView */}
-      <StatusBar
-        hidden={false}
-        backgroundColor="#fff"
-        barStyle="dark-content"
-      />
+      <StatusBar hidden={false} backgroundColor="#fff" barStyle="dark-content" />
       {/* Search Bar */}
       <TextInput placeholder="Search" style={styles.searchBar} />
       {/* Category Tabs */}
@@ -174,8 +170,7 @@ const Index = () => {
             <Text
               style={[
                 styles.categoryTabText,
-                selectedCategory === category._id &&
-                  styles.selectedCategoryTabText,
+                selectedCategory === category._id && styles.selectedCategoryTabText,
               ]}
             >
               {category.name}
@@ -187,7 +182,7 @@ const Index = () => {
       <FlatList
         data={posts}
         renderItem={renderPost}
-        keyExtractor={(item) => item.id}
+        keyExtractor={(item, index) => item.id || index.toString()} // Use id or index if id is not available
         contentContainerStyle={styles.postsListContainer}
         ListFooterComponent={renderFooter}
         onEndReached={handleLoadMore}
@@ -296,19 +291,7 @@ const styles = StyleSheet.create({
     marginTop: 15,
     paddingTop: 10,
     borderTopWidth: 1,
-    borderTopColor: "#eee",
-  },
-  commentsHeader: {
-    fontWeight: "bold",
-    fontSize: 14,
-    marginBottom: 10,
-  },
-  commentContainer: {
-    marginBottom: 10,
-  },
-  commentText: {
-    fontSize: 14,
-    color: "#333",
+    borderTopColor: "#ddd",
   },
   selectedCategoryTab: {
     backgroundColor: "#3498db",

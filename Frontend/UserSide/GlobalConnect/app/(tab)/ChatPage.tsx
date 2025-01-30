@@ -11,8 +11,10 @@ import { useLocalSearchParams } from "expo-router";
 import axios from "axios";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Ionicons } from "@expo/vector-icons";
-
+import config from "../config";
 export default function ChatPage() {
+
+  const ip = config.API_IP;  
   const [message, setMessage] = useState("");
   const [messages, setMessages] = useState([]);
   const { userId, name } = useLocalSearchParams();
@@ -24,7 +26,7 @@ export default function ChatPage() {
         if (!authToken || !userId) return;
 
         const response = await axios.post(
-          "http://192.168.18.105:3000/api/get-message",
+          `http://${ip}:3000/api/get-message`,
           { senderId: userId },
           {
             headers: {
@@ -54,7 +56,7 @@ export default function ChatPage() {
         if (!authToken || !userId) return;
 
         const response = await axios.post(
-          "http://192.168.18.105:3000/api/message",
+          `http://${ip}:3000/api/message`,
           {
             receiverId: userId, // Assuming receiverId is the same as userId for simplicity
             content: message,

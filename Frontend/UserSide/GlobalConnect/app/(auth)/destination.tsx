@@ -12,8 +12,9 @@ import {
 import { useRouter } from "expo-router";
 import { toast } from "react-toastify";
 import axios from "axios";
-
+import config from "../config";
 const Destination = () => {
+  const ip = config.API_IP;  
   const [countries, setCountries] = useState([]);
   const [filteredCountries, setFilteredCountries] = useState([]);
   const [cities, setCities] = useState([]);
@@ -101,7 +102,7 @@ const Destination = () => {
     };
 
     axios
-      .put("http://192.168.18.105:3000/api/users/update-destination", destination, {
+      .put(`http://${ip}:3000/api/users/update-destination`, destination, {
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${accessToken}`,

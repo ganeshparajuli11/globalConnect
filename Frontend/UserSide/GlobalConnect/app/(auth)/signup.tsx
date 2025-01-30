@@ -4,8 +4,10 @@ import { toast } from 'react-toastify'; // Importing react-toastify
 import 'react-toastify/dist/ReactToastify.css'; // Importing the CSS for toastify
 import { useRouter } from "expo-router";
 import AsyncStorage from '@react-native-async-storage/async-storage';
-
+import config from "../config";
 export default function Signup() {
+
+  const ip = config.API_IP;  
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -26,8 +28,7 @@ export default function Signup() {
     }
 
     try {
-      const response = await fetch('http://192.168.18.105:3000/api/users/signup', {
-        method: 'POST',
+      const response = await fetch(`http://${ip}:3000/api/users/signup`, {
         headers: {
           'Content-Type': 'application/json',
         },

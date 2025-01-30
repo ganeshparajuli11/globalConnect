@@ -11,7 +11,6 @@ const userSchema = new mongoose.Schema(
     role: { type: String, enum: ["user", "admin"], default: "user" },
     verified: { type: Boolean, default: false },
     profile_image: { type: String, default: null },
-    cover_image: { type: String, default: null }, // Optional cover image for profile
     destination_country: { type: String, default: null },
     current_location: {
       country: { type: String, default: "Nepal" },
