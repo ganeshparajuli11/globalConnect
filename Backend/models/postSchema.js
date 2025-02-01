@@ -10,12 +10,7 @@ const postSchema = new mongoose.Schema({
     ref: "Category",
     required: true,
   },
-  text_content: [
-    {
-      field_name: { type: String },
-      value: { type: String, maxlength: 500 },
-    },
-  ],
+  text_content: { type: String, maxlength: 500 },
   media: [
     {
       media_path: { type: String },

@@ -164,47 +164,41 @@ getActiveUsers = async (req, res) => {
   }
 };
 
-
-// get inactive user
-
 const getInactiveUsers = async (req, res) => {
   try {
-    // Get the current time and subtract 30 minutes to define the "inactive" window
-    const thirtyMinutesAgo = moment().subtract(30, 'minutes').toDate();
+    const thirtyMinutesAgo = new Date(Date.now() - 30 * 60 * 1000);
 
-    // Fetch users who are active, have not logged in within the last 30 minutes,
-    // and are not blocked or admin
+    console.log("🔹 Current Time:", new Date());
+    console.log("🔹 Fetching users inactive since:", thirtyMinutesAgo);
+
+    // Find users based only on `last_login` (ignore status)
     const inactiveUsers = await User.find({
-      last_login: { $lt: thirtyMinutesAgo }, // Last login before 30 minutes ago
-      status: 'Active', // User must be active
-      is_blocked: false, // Exclude blocked users
-      role: { $ne: 'admin' }, // Exclude users with 'admin' role
+      last_login: { $exists: true, $lte: thirtyMinutesAgo }, // Users inactive for 30+ mins
+      is_blocked: false,
+      role: { $ne: "admin" },
     })
-      .sort({ last_login: 1 }) // Sort by last login date (oldest first)
-      .lean(); // Convert Mongoose documents to plain objects for easier processing
+      .sort({ last_login: 1 })
+      .lean();
 
-    // If there are no inactive users, just return a message
+    console.log("✅ Found Inactive Users:", inactiveUsers.length);
+
     if (inactiveUsers.length === 0) {
-      return res.status(200).json({
-        message: "No inactive users found.",
-        data: [],
-      });
+      return res.status(200).json({ message: "No inactive users found.", data: [] });
     }
 
-    // Map the user data to return the necessary information
     const inactiveUserData = inactiveUsers.map((user, index) => ({
       s_n: index + 1,
       name: user.name,
       email: user.email,
-      last_logged_in: user.last_login,  // Last login time
-      joined: user.created_at,  // Account creation date
-      status: user.status,
+      last_logged_in: user.last_login,
+      joined: user.date_created,
+      status: "Inactive",
     }));
 
-    // Update the status of inactive users to 'Inactive'
+    // Update inactive users' status to "Inactive"
     await User.updateMany(
-      { _id: { $in: inactiveUsers.map(user => user._id) } }, // Match users based on their IDs
-      { $set: { status: 'Inactive' } } // Update their status to 'Inactive'
+      { _id: { $in: inactiveUsers.map((user) => user._id) } },
+      { $set: { status: "Inactive" } }
     );
 
     res.status(200).json({
@@ -212,11 +206,8 @@ const getInactiveUsers = async (req, res) => {
       data: inactiveUserData,
     });
   } catch (error) {
-    console.error("Error fetching inactive users:", error);
-    res.status(500).json({
-      message: "An error occurred while fetching inactive users.",
-      error,
-    });
+    console.error("❌ Error fetching inactive users:", error);
+    res.status(500).json({ message: "An error occurred.", error: error.message });
   }
 };
 
@@ -307,19 +298,19 @@ const getReportedUsers = async (req, res) => {
 getBlockedUsers = async (req, res) => {
   try {
     // Fetch users who are blocked (is_blocked is true)
-    const blockedUsers = await User.find({ is_blocked: true })  // Filter users by is_blocked = true
-      .sort({ name: 1 })  // Sort by name (you can change it to any other field)
-      .lean();  // Convert Mongoose documents to plain objects for easier processing
+    const blockedUsers = await User.find({ is_blocked: true }) 
+      .sort({ name: 1 }) 
+      .lean(); 
 
     // Fetch the reports associated with these blocked users
     const blockedUsersWithReports = await Promise.all(
       blockedUsers.map(async (user, index) => {
         // Find reports related to this user
         const reports = await ReportUser.find({ user_id: user._id })
-          .populate('report_category', 'report_title')  // Populate only the 'report_title' field from ReportCategory
+          .populate('report_category', 'report_title')  
           .lean();
 
-        // Log the reports to debug and see if report_category is populated correctly
+        
         console.log("Reports for user:", user.name, reports);
 
         // Get the reason from the most recent report (if it exists)
