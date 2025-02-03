@@ -1,6 +1,6 @@
 const express = require('express');
 const { checkAuthentication, checkIsUser, bothUser } = require('../middleware/middleware');
-const { getUserProfile, sendOTP, verifyOTP, resetPassword, changePassword, updateProfileImage } = require('../controller/userSelfController');
+const { getUserProfile, sendOTP, verifyOTP, resetPassword, changePassword, updateProfileImage, getFollowCounts } = require('../controller/userSelfController');
 const { uploadProfileImage } = require('../middleware/uploadMiddleware');
 const router = express.Router();
 
@@ -20,6 +20,8 @@ router.post(
     updateProfileImage
   );
 
+// Route to get follower and following counts
+router.get('/follow-counts', checkAuthentication, getFollowCounts);
 
 
 

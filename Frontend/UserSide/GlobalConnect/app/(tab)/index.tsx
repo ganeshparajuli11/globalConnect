@@ -10,10 +10,15 @@ import {
   StatusBar,
   StyleSheet,
   ActivityIndicator,
+  Platform,
+  PermissionsAndroid,
 } from "react-native";
 import axios from "axios";
 import Icon from "react-native-vector-icons/FontAwesome";
 import config from "../config";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import Geolocation from 'react-native-geolocation-service';
+import SearchPost from "./SearchPost";
 
 const Index = () => {
   const ip = config.API_IP;
@@ -23,6 +28,88 @@ const Index = () => {
   const [page, setPage] = useState(1);
   const [refreshing, setRefreshing] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState(null);
+  const [searchQuery, setSearchQuery] = useState('');
+
+  useEffect(() => {
+    checkLocationPermission();
+  }, []);
+
+  // Function to check if permission is already granted
+  const checkLocationPermission = async () => {
+    const permission = await AsyncStorage.getItem("locationPermission");
+    
+    if (permission === "granted") {
+      getUserLocation();
+    } else {
+      requestLocationPermission();
+    }
+  };
+
+  // Request location permission (Only asks once)
+  const requestLocationPermission = async () => {
+    if (Platform.OS === "android") {
+      try {
+        const granted = await PermissionsAndroid.request(
+          PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
+          {
+            title: "Location Permission",
+            message:
+              "This app needs access to your location to update your profile location.",
+            buttonNeutral: "Ask Me Later",
+            buttonNegative: "Deny",
+            buttonPositive: "Allow",
+          }
+        );
+
+        if (granted === PermissionsAndroid.RESULTS.GRANTED) {
+          await AsyncStorage.setItem("locationPermission", "granted");
+          getUserLocation();
+        } else {
+          console.log("Location permission denied");
+        }
+      } catch (err) {
+        console.warn(err);
+      }
+    } else {
+      getUserLocation(); // iOS asks permission automatically
+    }
+  };
+
+  // Get user location and send it to the backend
+  const getUserLocation = () => {
+    Geolocation.getCurrentPosition(
+      async (position) => {
+        const { latitude, longitude } = position.coords;
+        console.log("User location:", latitude, longitude);
+
+        try {
+          // Reverse Geocoding (to get country/city from lat/lng)
+          const locationRes = await axios.get(
+            `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}`
+          );
+
+          const country = locationRes.data.address.country || "Unknown";
+          const city = locationRes.data.address.city || "Unknown";
+
+          // Send location data to backend
+          await axios.post(`http://${ip}:3000/api/dashboard/get-location`, {
+            lat: latitude,
+            lng: longitude,
+            country,
+            city,
+          });
+
+          console.log("Location updated successfully.");
+        } catch (error) {
+          console.error("Error updating location:", error);
+        }
+      },
+      (error) => {
+        console.error("Error getting location:", error);
+      },
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 10000 }
+    );
+  };
 
   // Fetch categories
   useEffect(() => {
@@ -40,6 +127,7 @@ const Index = () => {
 
   // Fetch posts
   const fetchPosts = async (pageNumber = 1, category = selectedCategory) => {
+    // Avoid duplicate calls
     if (loading) return;
 
     setLoading(true);
@@ -48,23 +136,32 @@ const Index = () => {
         `http://${ip}:3000/api/post/all?page=${pageNumber}&limit=5&category=${category || ""}`
       );
 
+      // Transform posts from backend response into our local shape
       const transformedPosts = response.data.data.map((post) => ({
         id: post.id,
         user: post.user || "Unknown User",
-        userImage: post.userImage || "https://via.placeholder.com/40", // Default if missing
+        userImage: post.userImage || "https://via.placeholder.com/40",
         type: post.type || "Unknown Category",
         time: new Date(post.time).toLocaleDateString(),
         content: post.content || "No content available",
-        image: post.image ? `http://192.168.18.105:3000${post.image}` : "", // Prepend the base URL to image
+        image: post.image ? `http://192.168.18.105:3000${post.image}` : "",
         comments: post.comments || [],
         liked: post.liked || false,
       }));
 
-      setPosts((prevPosts) =>
-        pageNumber === 1
-          ? transformedPosts
-          : [...prevPosts, ...transformedPosts]
-      );
+      // If we're on the first page, replace posts; otherwise, filter out duplicates and append
+      if (pageNumber === 1) {
+        setPosts(transformedPosts);
+      } else {
+        setPosts((prevPosts) => {
+          // Filter out any posts that already exist (by comparing IDs)
+          const newPosts = transformedPosts.filter(
+            (post) => !prevPosts.some((prevPost) => prevPost.id === post.id)
+          );
+          return [...prevPosts, ...newPosts];
+        });
+      }
+      // Increment the page number for next load
       setPage(pageNumber + 1);
     } catch (error) {
       console.error("Error fetching posts:", error);
@@ -73,8 +170,11 @@ const Index = () => {
     }
   };
 
+  // When category changes, reset posts and page number, then fetch new posts
   useEffect(() => {
-    fetchPosts();
+    setPage(1);
+    setPosts([]);
+    fetchPosts(1);
   }, [selectedCategory]);
 
   // Toggle like for a post
@@ -141,7 +241,9 @@ const Index = () => {
 
   // Handle load more when user scrolls
   const handleLoadMore = () => {
-    if (posts.length > 0) fetchPosts(page);
+    if (posts.length > 0) {
+      fetchPosts(page);
+    }
   };
 
   // Handle category selection
@@ -182,27 +284,38 @@ const Index = () => {
       <FlatList
         data={posts}
         renderItem={renderPost}
-        keyExtractor={(item, index) => item.id || index.toString()} // Use id or index if id is not available
+        keyExtractor={(item) => item.id} // Each post is assumed to have a unique id from the backend
         contentContainerStyle={styles.postsListContainer}
         ListFooterComponent={renderFooter}
         onEndReached={handleLoadMore}
         onEndReachedThreshold={0.5}
         refreshing={refreshing}
         onRefresh={handleRefresh}
-        ListEmptyComponent={() => {
-          return loading ? (
-            <ActivityIndicator
-              size="large"
-              color="#3498db"
-              style={{ marginVertical: 20 }}
-            />
+        ListEmptyComponent={() =>
+          loading ? (
+            <ActivityIndicator size="large" color="#3498db" style={{ marginVertical: 20 }} />
           ) : (
             <Text style={{ textAlign: "center", marginVertical: 20 }}>
               No posts available.
             </Text>
-          );
+          )
+        }
+      />
+      <View style={{ flex: 1, padding: 10 }}>
+      <TextInput
+        placeholder="Search..."
+        value={searchQuery}
+        onChangeText={setSearchQuery}
+        style={{
+          borderWidth: 1,
+          borderColor: '#ccc',
+          padding: 10,
+          borderRadius: 5,
         }}
       />
+      
+      {searchQuery.length > 0 && <SearchPost />}
+    </View>
     </SafeAreaView>
   );
 };
@@ -287,17 +400,14 @@ const styles = StyleSheet.create({
     justifyContent: "space-around",
     marginTop: 10,
   },
-  commentsSection: {
-    marginTop: 15,
-    paddingTop: 10,
-    borderTopWidth: 1,
-    borderTopColor: "#ddd",
-  },
   selectedCategoryTab: {
     backgroundColor: "#3498db",
   },
   selectedCategoryTabText: {
     color: "#fff",
+  },
+  postsListContainer: {
+    paddingBottom: 20,
   },
 });
 

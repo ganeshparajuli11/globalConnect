@@ -1,6 +1,6 @@
 // config.js
 const config = {
-  API_IP: "10.22.4.225", // Change this IP whenever needed
+  API_IP: "192.168.18.105", // Change this IP whenever needed
 };
 
 export default config;

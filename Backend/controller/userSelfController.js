@@ -5,35 +5,37 @@ const crypto = require("crypto"); // To generate a random OTP
 const bcrypt = require("bcrypt");
 const getUserProfile = async (req, res) => {
   try {
-    // Step 1: Access the user data from req.user (populated by checkAuthentication)
     const user = req.user;
 
-    console.log("Decoded user from token: ", user); // Debugging line
-
-    // Check if user data exists and if the userId is available
     if (!user || !user.id) {
-      return res
-        .status(404)
-        .json({ message: "User not found in request data." });
+      return res.status(404).json({ message: "User not found in request data." });
     }
 
-    // Step 2: Fetch user details from the database using the userId
     const userDetails = await User.findById(user.id);
-
     if (!userDetails) {
       return res.status(404).json({ message: "User not found in database." });
     }
 
-    // Step 3: Fetch all posts created by the user
-    const userPosts = await Post.find({ user_id: user.id }).sort({
-      created_at: -1,
+    const userPosts = await Post.find({ user_id: user.id }).sort({ created_at: -1 });
+
+    // Format createdAt for each post
+    const formattedPosts = userPosts.map(post => {
+      const createdAt = new Date(post.createdAt);
+      const formattedDate = createdAt.toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+      });
+      return {
+        ...post.toObject(),
+        createdAt: formattedDate,
+      };
     });
 
-    // Step 4: Return user details along with their posts
     res.status(200).json({
       data: {
         user: userDetails,
-        posts: userPosts,
+        posts: formattedPosts,
       },
     });
   } catch (error) {
@@ -41,6 +43,7 @@ const getUserProfile = async (req, res) => {
     res.status(500).json({ message: "Internal server error" });
   }
 };
+
 
 const sendOTP = async (req, res) => {
   try {
@@ -241,11 +244,40 @@ const updateProfileImage = async (req, res) => {
   }
 };
 
+const getFollowCounts = async (req, res) => {
+  try {
+    const userId = req.user.id; // Extract userId from the authenticated request
+
+    // Fetch user by userId and populate followers and following counts
+    const user = await User.findById(userId)
+      .select('followers following') // Select only the relevant fields
+      .populate('followers') // Optional, if you want to get follower details as well
+      .populate('following'); // Optional, if you want to get following details as well
+
+    if (!user) {
+      return res.status(404).send({ message: "User not found!" });
+    }
+
+    // Get the count of followers and following
+    const followerCount = user.followers.length;
+    const followingCount = user.following.length;
+
+    res.status(200).send({
+      followerCount,
+      followingCount,
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).send({ message: "Server error!" });
+  }
+};
+
+
 module.exports = {
   getUserProfile,
   sendOTP,
   verifyOTP,
   resetPassword,
   changePassword,
-  updateProfileImage,
+  updateProfileImage,getFollowCounts
 };

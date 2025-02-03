@@ -21,45 +21,43 @@ import config from "../config";
 export default function AddPost() {
   const ip = config.API_IP;
   const router = useRouter();
-  const [categories, setCategories] = useState([]);
-  const [category, setCategory] = useState("");
-  const [fields, setFields] = useState([]);
-  const [formData, setFormData] = useState({});
-  const [selectedImages, setSelectedImages] = useState([]);
-  const [tags, setTags] = useState(""); // State for tags
 
-  // Fetch categories
+  // Required fields state
+  const [textContent, setTextContent] = useState("");
+  const [tags, setTags] = useState(""); // Comma-separated string (e.g., "software, developer, hiring")
+  const [selectedImages, setSelectedImages] = useState([]);
+
+  // Category state
+  const [categories, setCategories] = useState([]);
+  const [selectedCategory, setSelectedCategory] = useState("");
+
+  // Fetch categories from API
   useEffect(() => {
     const fetchCategories = async () => {
       try {
         const response = await axios.get(`http://${ip}:3000/api/category/all`);
-        setCategories(response.data.categories);
-        if (response.data.categories.length > 0) {
-          setCategory(response.data.categories[0]._id);
-          setFields(response.data.categories[0].fields);
+        if (response.data && response.data.categories) {
+          setCategories(response.data.categories);
+          if (response.data.categories.length > 0) {
+            setSelectedCategory(response.data.categories[0]._id);
+          }
         }
       } catch (error) {
-        console.error("Error fetching categories:", error);
+        console.error(
+          "Error fetching categories:",
+          error.response ? error.response.data : error.message
+        );
       }
     };
 
     fetchCategories();
   }, []);
 
-  // Handle input change
-  const handleFieldChange = (fieldName, value) => {
-    setFormData((prev) => ({ ...prev, [fieldName]: value }));
-  };
-
-  // Pick Image
+  // Pick image from gallery (optional)
   const pickImage = async () => {
-    const permissionResult =
-      await ImagePicker.requestMediaLibraryPermissionsAsync();
+    const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!permissionResult.granted) {
-      Alert.alert(
-        "Permission Denied",
-        "Allow access to photos to upload images."
-      );
+      Alert.alert("Permission Denied", "Allow access to photos to upload images.");
       return;
     }
 
@@ -78,89 +76,77 @@ export default function AddPost() {
     setSelectedImages(selectedImages.filter((image) => image !== uri));
   };
 
-  // Submit Form
+  // Submit the post with only required fields
   const handleSubmit = async () => {
+    // Prepare our required payload
+    // Convert comma-separated tags into an array and remove empty entries.
+    const tagsArray = tags.split(",").map((tag) => tag.trim()).filter(Boolean);
+
     const authToken = await AsyncStorage.getItem("authToken");
-    const data = new FormData();
-
-    data.append("category_id", category);
-
-    // Prepare fields as an array of objects with name and value
-    const formattedFields = fields.map((field) => {
-      return { name: field.name, value: formData[field.name] || "" };
-    });
-
-    data.append("fields", JSON.stringify(formattedFields));
-
-    // Append tags to FormData
-    const tagsArray = tags.split(",").map((tag) => tag.trim()); // Split tags by commas and remove spaces
-    data.append("tags", JSON.stringify(tagsArray));
-
-    // Append other data like location, visibility, and metadata
-    data.append("location", "Sydney, Australia");
-    data.append("visibility", "public");
-    data.append(
-      "metadata",
-      JSON.stringify({ salary: "100,000 AUD", employment_type: "Full-time" })
-    );
-
-    // Append images to FormData
-    selectedImages.forEach((uri, index) => {
-      let filename = uri.split("/").pop();
-      let match = /\.(\w+)$/.exec(filename);
-      let type = match ? `image/${match[1]}` : "image";
-
-      // Debugging: Check if the image is correctly formatted
-      console.log("Appending image:", uri, filename, type);
-
-      data.append("media", {
-        uri,
-        name: filename,
-        type,
-      });
-    });
 
     try {
-      console.log("Sending data:", data); // Debugging: log FormData
+      let response;
+      // If images are selected, use FormData
+      if (selectedImages.length > 0) {
+        const data = new FormData();
+        data.append("category_id", selectedCategory);
+        data.append("text_content", textContent);
+        // Append each tag separately. Many backends (with multer) will collect these into an array.
+        tagsArray.forEach((tag) => data.append("tags", tag));
 
-      const response = await axios.post(
-        `http://${ip}:3000/api/post/create`,
-        data,
-        {
+        // Append each image file.
+        selectedImages.forEach((uri) => {
+          let filename = uri.split("/").pop();
+          let match = /\.(\w+)$/.exec(filename);
+          let type = match ? `image/${match[1]}` : "image";
+          data.append("media", { uri, name: filename, type });
+        });
+
+        response = await axios.post(`http://${ip}:3000/api/post/create`, data, {
           headers: {
             Authorization: `Bearer ${authToken}`,
             "Content-Type": "multipart/form-data",
           },
-        }
-      );
+        });
+      } else {
+        // No images: send JSON payload
+        const payload = {
+          category_id: selectedCategory,
+          text_content: textContent,
+          tags: tagsArray,
+        };
 
-      if (response.status === 200) {
+        response = await axios.post(`http://${ip}:3000/api/post/create`, payload, {
+          headers: {
+            Authorization: `Bearer ${authToken}`,
+            "Content-Type": "application/json",
+          },
+        });
+      }
+
+      if (response.status === 201 || response.status === 200) {
         Alert.alert("Success", "Post created successfully!");
         router.replace("/(tab)");
       } else {
-        throw new Error("Post creation failed.");
+        throw new Error("Post creation failed with status " + response.status);
       }
     } catch (error) {
-      console.error("Error creating post:", error);
-      Alert.alert("Error", "Failed to create post.");
+      if (error.response) {
+        console.error("Error creating post:", error.response.data);
+        Alert.alert("Error", `Failed to create post: ${JSON.stringify(error.response.data)}`);
+      } else {
+        console.error("Error creating post:", error.message);
+        Alert.alert("Error", `Failed to create post: ${error.message}`);
+      }
     }
   };
 
+  // Confirm discard
   const handleGoBack = () => {
-    Alert.alert(
-      "Discard Post?",
-      "Are you sure you want to discard this post?",
-      [
-        {
-          text: "Cancel",
-          style: "cancel",
-        },
-        {
-          text: "Yes",
-          onPress: () => router.replace("/(tab)"), // Navigate to home tab
-        },
-      ]
-    );
+    Alert.alert("Discard Post?", "Are you sure you want to discard this post?", [
+      { text: "Cancel", style: "cancel" },
+      { text: "Yes", onPress: () => router.replace("/(tab)") },
+    ]);
   };
 
   return (
@@ -170,7 +156,6 @@ export default function AddPost() {
           <TouchableOpacity onPress={handleGoBack} style={styles.backButton}>
             <Ionicons name="arrow-back" size={24} color="black" />
           </TouchableOpacity>
-
           <Text style={styles.header}>Create Post</Text>
         </View>
 
@@ -178,15 +163,9 @@ export default function AddPost() {
         <Text style={styles.label}>Select Category</Text>
         <View style={styles.pickerWrapper}>
           <Picker
-            selectedValue={category}
+            selectedValue={selectedCategory}
             style={styles.picker}
-            onValueChange={(itemValue) => {
-              setCategory(itemValue);
-              const selectedCategory = categories.find(
-                (cat) => cat._id === itemValue
-              );
-              setFields(selectedCategory ? selectedCategory.fields : []);
-            }}
+            onValueChange={(itemValue) => setSelectedCategory(itemValue)}
           >
             {categories.map((cat) => (
               <Picker.Item key={cat._id} label={cat.name} value={cat._id} />
@@ -194,26 +173,24 @@ export default function AddPost() {
           </Picker>
         </View>
 
-        {/* Dynamic Input Fields */}
-        {fields.map((field, index) => (
-          <TextInput
-            key={index}
-            style={styles.input}
-            placeholder={field.label}
-            value={formData[field.name] || ""}
-            onChangeText={(value) => handleFieldChange(field.name, value)}
-          />
-        ))}
+        {/* Text Content Input */}
+        <TextInput
+          style={styles.input}
+          placeholder="Enter your post"
+          value={textContent}
+          onChangeText={setTextContent}
+          multiline
+        />
 
-        {/* Tags Field */}
+        {/* Tags Input */}
         <TextInput
           style={styles.input}
           placeholder="Enter tags (comma separated)"
           value={tags}
-          onChangeText={(value) => setTags(value)}
+          onChangeText={setTags}
         />
 
-        {/* Image Upload */}
+        {/* Image Upload Button (Optional) */}
         <TouchableOpacity style={styles.uploadButton} onPress={pickImage}>
           <Text style={styles.uploadButtonText}>Add Image</Text>
         </TouchableOpacity>
@@ -223,10 +200,7 @@ export default function AddPost() {
           {selectedImages.map((uri, index) => (
             <View key={index} style={{ position: "relative", marginRight: 10 }}>
               <Image source={{ uri }} style={styles.imagePreview} />
-              <TouchableOpacity
-                style={styles.removeImage}
-                onPress={() => removeImage(uri)}
-              >
+              <TouchableOpacity style={styles.removeImage} onPress={() => removeImage(uri)}>
                 <Ionicons name="close-circle" size={20} color="red" />
               </TouchableOpacity>
             </View>
@@ -251,16 +225,24 @@ const styles = StyleSheet.create({
   },
   backButton: { marginRight: 16 },
   header: { fontSize: 24, fontWeight: "bold" },
-  label: { fontSize: 16, fontWeight: "500", marginBottom: 8 },
-  pickerWrapper: { marginBottom: 16 },
-  picker: { height: 50, borderColor: "#ccc", borderWidth: 1, borderRadius: 8 },
+  label: { fontSize: 16, marginBottom: 8 },
+  pickerWrapper: {
+    borderWidth: 1,
+    borderColor: "#ccc",
+    borderRadius: 8,
+    marginBottom: 16,
+    overflow: "hidden",
+  },
+  picker: { height: 50, width: "100%" },
   input: {
-    height: 45,
+    minHeight: 45,
     borderColor: "#ccc",
     borderWidth: 1,
     borderRadius: 8,
     marginBottom: 16,
-    paddingLeft: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    backgroundColor: "#fff",
   },
   uploadButton: {
     backgroundColor: "#007bff",

@@ -11,6 +11,7 @@ const userSchema = new mongoose.Schema(
     role: { type: String, enum: ["user", "admin"], default: "user" },
     verified: { type: Boolean, default: false },
     profile_image: { type: String, default: null },
+    reached_destination: { type: Boolean, default: false },
     destination_country: { type: String, default: null },
     current_location: {
       country: { type: String, default: "Nepal" },

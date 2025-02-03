@@ -1,16 +1,22 @@
 const User = require('../models/userSchema');
+const { sendNotification } = require('../controller/notificationController');
 
-// Follow a user
+let io; // Define io variable to be set from app.js
+
+// Function to initialize io
+const initSocket = (socketIo) => {
+  io = socketIo;
+};
+
 const followUser = async (req, res) => {
   try {
-    const { userId, followUserId } = req.body;
+    const userId = req.user.id;
+    const { followUserId } = req.body;
 
-    // Validate input
     if (!userId || !followUserId) {
       return res.status(400).json({ error: 'Both userId and followUserId are required.' });
     }
 
-    // Check if the user exists
     const user = await User.findById(userId);
     const followUser = await User.findById(followUserId);
 
@@ -18,18 +24,32 @@ const followUser = async (req, res) => {
       return res.status(404).json({ error: 'User not found.' });
     }
 
-    // Check if already following
     if (user.following.includes(followUserId)) {
       return res.status(400).json({ error: 'You are already following this user.' });
     }
 
-    // Add followUserId to user's following list
     user.following.push(followUserId);
     await user.save();
 
-    // Add userId to followUser's followers list
     followUser.followers.push(userId);
     await followUser.save();
+
+    // Create and save notification to DB
+    await sendNotification({
+      userId: followUserId, // recipient
+      title: `${user.name} followed you!`,
+      message: `${user.name} followed you on the platform.`,
+      type: 'follow',
+      metadata: { followerId: userId },
+    });
+
+    // Send real-time notification if the user is online
+    if (io) {
+      io.to(followUserId.toString()).emit('receiveNotification', {
+        message: `${user.name} followed you!`,
+        followerId: userId,
+      });
+    }
 
     res.status(200).json({ success: true, message: `You are now following ${followUser.name}.` });
   } catch (error) {
@@ -41,7 +61,8 @@ const followUser = async (req, res) => {
 // Unfollow a user
 const unfollowUser = async (req, res) => {
   try {
-    const { userId, unfollowUserId } = req.body;
+    const userId = req.user.id;
+    const {  unfollowUserId } = req.body;
 
     // Validate input
     if (!userId || !unfollowUserId) {
@@ -76,4 +97,4 @@ const unfollowUser = async (req, res) => {
   }
 };
 
-module.exports = { followUser, unfollowUser };
+module.exports = { followUser, unfollowUser, initSocket };

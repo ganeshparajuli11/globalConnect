@@ -1,5 +1,5 @@
 const Notification = require('../models/notificationSchema');
-const { sendRealTimeNotification } = require('./shocketController');
+const { sendRealTimeNotification } = require('./socketController');
 const mongoose = require('mongoose');
 const User = require('../models/userSchema');
 let io;
@@ -11,43 +11,35 @@ const initializeNotificationController = (socketIoInstance) => {
 
 // Send notification
 
-const sendNotification = async (req, res) => {
-    try {
-      const { userId, title, message, type, metadata } = req.body;
-  
-      // Create notification
-      const notification = new Notification({
-        userId,
-        title,
-        message,
-        type,
-        metadata,
-      });
-  
-      // Save notification to DB
-      await notification.save();
-      console.log(`Notification saved to DB for user ${userId}`);
-  
-      // Emit the notification in real-time using socket.io
-      sendRealTimeNotification(req.app.get('io'), userId, {
-        title,
-        message,
-        type,
-        createdAt: new Date(),
-      });
-  
-      res.status(200).json({ message: 'Notification sent successfully!' });
-    } catch (error) {
-      console.error('Error saving notification to database:', error);
-      res.status(500).json({ message: 'Failed to send notification' });
+const sendNotification = async ({ userId, title, message, type, metadata }) => {
+  try {
+    if (!userId) {
+      throw new Error("userId is required for notifications.");
     }
-  };
-  
+
+    // Create notification
+    const notification = new Notification({ userId, title, message, type, metadata });
+
+    // Save to DB
+    await notification.save();
+    console.log(`Notification saved for user ${userId}`);
+
+    // Emit real-time notification
+    sendRealTimeNotification(io, userId, { title, message, type, createdAt: new Date() });
+
+    return { success: true, message: "Notification sent successfully!" };
+  } catch (error) {
+    console.error("Error saving notification to database:", error);
+    return { success: false, message: "Failed to send notification" };
+  }
+};
+
+ 
 
 // Fetch notifications for a specific user
 const getUserNotifications = async (req, res) => {
-  const userId = req.userId; // Access the userId from the request (set by middleware)
-
+  const userId = req.user.id;
+  console.log("Requested user id ", userId);
   try {
     // Ensure userId is valid
     if (!mongoose.Types.ObjectId.isValid(userId)) {
@@ -72,6 +64,36 @@ const getUserNotifications = async (req, res) => {
   }
 };
 
+// Mark notification as read or unread
+const markNotificationAsRead = async (req, res) => {
+  try {
+    const { notificationId, isReadable } = req.body; // Get ID and read status
+
+    if (!mongoose.Types.ObjectId.isValid(notificationId)) {
+      return res.status(400).json({ error: 'Invalid notification ID' });
+    }
+
+    // Update the notification status
+    const updatedNotification = await Notification.findByIdAndUpdate(
+      notificationId,
+      { isReadable },
+      { new: true }
+    );
+
+    if (!updatedNotification) {
+      return res.status(404).json({ error: 'Notification not found' });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: `Notification marked as ${isReadable ? 'read' : 'unread'}.`,
+      notification: updatedNotification,
+    });
+  } catch (error) {
+    console.error('Error updating notification status:', error);
+    return res.status(500).json({ error: 'Error updating notification status' });
+  }
+};
 
 
-module.exports = { initializeNotificationController, sendNotification, getUserNotifications };
+module.exports = { initializeNotificationController, sendNotification, getUserNotifications,markNotificationAsRead };

@@ -354,6 +354,69 @@ getBlockedUsers = async (req, res) => {
 };
 
 
+// Update user's current location
+const updateLocation = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { lat, lng, country, city } = req.body; 
 
+    if (!lat || !lng) {
+      return res.status(400).json({ message: "Latitude and longitude are required." });
+    }
 
-module.exports = {getUserDashboard, getUserStats, getActiveUsers, getInactiveUsers,getReportedUsers,getAllUsers,getBlockedUsers };
+    // Find the user by ID
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ message: "User not found." });
+    }
+
+    // Update the location
+    user.current_location = {
+      country: country || user.current_location.country,
+      city: city || user.current_location.city,
+      coordinates: {
+        lat,
+        lng,
+      },
+    };
+
+    await user.save();
+
+    res.status(200).json({ message: "Location updated successfully", location: user.current_location });
+  } catch (error) {
+    console.error("Error updating location:", error);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
+const updateReachedDestination = async (req, res) => {
+  try {
+    // Get user ID from middleware (assuming req.user.id is set)
+    const user_id = req.user.id;
+
+    // Get the new state (true/false) from the request body
+    const { reached_destination } = req.body;
+
+    // Find the user by ID
+    const user = await User.findById(user_id);
+
+    // Check if user exists
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    // Update the reached_destination field
+    user.reached_destination = reached_destination;
+
+    // Save the updated user document
+    await user.save();
+
+    // Send a success response
+    return res.status(200).json({ message: "Reached destination updated successfully", user });
+  } catch (error) {
+    console.error("Error updating reached destination:", error);
+    return res.status(500).json({ message: "Server error, try again later" });
+  }
+};
+
+module.exports = {getUserDashboard, getUserStats, getActiveUsers, getInactiveUsers,getReportedUsers,getAllUsers,getBlockedUsers,updateLocation,updateReachedDestination };
