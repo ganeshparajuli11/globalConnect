@@ -1,8 +1,11 @@
 const User = require("../models/userSchema");
-const { Post } = require("../models/postSchema");
+const  Post  = require("../models/postSchema");
 const nodemailer = require("nodemailer");
 const crypto = require("crypto"); // To generate a random OTP
 const bcrypt = require("bcrypt");
+const mongoose = require("mongoose");
+
+
 const getUserProfile = async (req, res) => {
   try {
     const user = req.user;
@@ -36,6 +39,47 @@ const getUserProfile = async (req, res) => {
       data: {
         user: userDetails,
         posts: formattedPosts,
+      },
+    });
+  } catch (error) {
+    console.error("Error fetching user profile:", error);
+    res.status(500).json({ message: "Internal server error" });
+  }
+};
+
+// for admin
+const getUserProfileById = async (req, res) => {
+  try {
+    const { userId } = req.params; 
+
+    console.log("Received userId:", userId); 
+
+    if (!userId || userId === "undefined") {
+      return res.status(400).json({ message: "Invalid or missing User ID" });
+    }
+
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
+      return res.status(400).json({ message: "Invalid User ID format" });
+    }
+
+    const userDetails = await User.findById(userId).select("-password");
+    if (!userDetails) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    const userPosts = await Post.find({ user_id: userId }).sort({ createdAt: -1 });
+
+    res.status(200).json({
+      data: {
+        user: userDetails,
+        posts: userPosts.map(post => ({
+          ...post.toObject(),
+          createdAt: new Date(post.createdAt).toLocaleDateString("en-US", {
+            year: "numeric",
+            month: "long",
+            day: "numeric",
+          }),
+        })),
       },
     });
   } catch (error) {
@@ -279,5 +323,5 @@ module.exports = {
   verifyOTP,
   resetPassword,
   changePassword,
-  updateProfileImage,getFollowCounts
+  updateProfileImage,getFollowCounts,getUserProfileById
 };

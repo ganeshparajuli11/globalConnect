@@ -2,12 +2,12 @@ import axios from "axios";
 import React, { useState } from "react";
 import { BiSolidHide } from "react-icons/bi";
 import { BiShow } from "react-icons/bi";
-import { Navigate, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { toast, ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import { reactLocalStorage } from "reactjs-localstorage";
 
-const Login = () => {
+const Login = ({ setIsAuthenticated }) => {
   const [showPassword, setShowPassword] = useState(false);
   const navigate = useNavigate();
   const [loginData, setLoginData] = useState({
@@ -24,28 +24,32 @@ const Login = () => {
     setShowPassword(!showPassword);
   };
 
-  const handleLogin = (e) => {
+  const handleLogin = async (e) => {
     e.preventDefault();
-
-    axios
-      .post("http://localhost:3000/api/users/loginAdmin", loginData)
-      .then((res) => {
-        toast.success("Login successful!");
-        const { token } = res.data;
-        reactLocalStorage.set("access_token", token); 
-       navigate("/")
-      })
-      .catch((err) => {
-        if (err.response) {
-          toast.error(err.response.data.message || "Login failed. Please try again.");
-        } else if (err.request) {
-          toast.error("Server is not responding. Please try again later.");
-        } else {
-          toast.error("An error occurred. Please try again.");
-        }
-        console.error("Error during login:", err);
-      });
+  
+    try {
+      const res = await axios.post("http://localhost:3000/api/users/loginAdmin", loginData);
+      toast.success("Login successful!");
+      
+      const { token } = res.data;
+      localStorage.setItem("access_token", token); // Use localStorage instead of reactLocalStorage
+  
+      // Update authentication state (pass setIsAuthenticated as a prop)
+      setIsAuthenticated(true);
+  
+      navigate("/dashboard");
+    } catch (err) {
+      if (err.response) {
+        toast.error(err.response.data.message || "Login failed. Please try again.");
+      } else if (err.request) {
+        toast.error("Server is not responding. Please try again later.");
+      } else {
+        toast.error("An error occurred. Please try again.");
+      }
+      console.error("Error during login:", err);
+    }
   };
+  
 
   return (
     <div className="flex items-center justify-center min-h-screen bg-gray-100">

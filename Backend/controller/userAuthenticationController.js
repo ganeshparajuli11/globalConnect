@@ -3,16 +3,7 @@ const jwt = require("jsonwebtoken");
 
 // Signup Function
 async function signup(req, res) {
-  const {
-    name,
-    email,
-    password,
-    age,
-    profile_image,
-    location,
-    role,
-    destination_country,
-  } = req.body;
+  const { name, email, password, dob, profile_image, role, destination_country } = req.body;
 
   try {
     // Check if email is already registered
@@ -21,11 +12,19 @@ async function signup(req, res) {
       return res.status(400).json({ message: "Email is already registered." });
     }
 
-    // Check if age is valid
-    if (!age || age < 18) {
-      return res.status(400).json({
-        message: "You must be at least 18 years old to register.",
-      });
+    // Check if date of birth is provided and calculate age (user must be at least 18)
+    if (!dob) {
+      return res.status(400).json({ message: "Date of birth is required." });
+    }
+
+    const currentDate = new Date();
+    const birthDate = new Date(dob);
+    const age = currentDate.getFullYear() - birthDate.getFullYear();
+    const month = currentDate.getMonth() - birthDate.getMonth();
+
+    // If the user's age is less than 18
+    if (age < 18 || (age === 18 && month < 0)) {
+      return res.status(400).json({ message: "You must be at least 18 years old to register." });
     }
 
     // Create a new user instance
@@ -33,12 +32,10 @@ async function signup(req, res) {
       name,
       email,
       password, // Password will be hashed by the pre-save hook in the User model
-      age,
+      dob, // Storing the date of birth
       profile_image: profile_image || "",
-      location: location || "",
-      is_blocked: false,
       role: role || "user",
-      destination_country : destination_country || "",
+      destination_country: destination_country || "",
     });
 
     // Save the new user to the database
@@ -61,11 +58,13 @@ async function signup(req, res) {
     console.error("Error during signup:", error);
 
     // Handle server errors
-    res
-      .status(500)
-      .json({ message: "An error occurred during signup.", error: error.message });
+    res.status(500).json({
+      message: "An error occurred during signup.",
+      error: error.message,
+    });
   }
 }
+
 
 // Login
 

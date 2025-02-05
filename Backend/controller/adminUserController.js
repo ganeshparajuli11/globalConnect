@@ -53,10 +53,11 @@ getAllUsers = async (req, res) => {
   try {
     // Fetch all users excluding those with the 'admin' role
     const allUsers = await User.find({ role: { $ne: 'admin' } })  // Exclude 'admin' role
-      .sort({ name: 1 })  // Sort by name (you can change it to any other field)
-      .lean();  // Convert Mongoose documents to plain objects for easier processing
+      .sort({ name: 1 })  
+      .lean();  
 
     const userData = allUsers.map((user, index) => ({
+      userId : user._id,
       s_n: index + 1,
       name: user.name,
       email: user.email,

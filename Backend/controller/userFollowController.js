@@ -97,4 +97,39 @@ const unfollowUser = async (req, res) => {
   }
 };
 
-module.exports = { followUser, unfollowUser, initSocket };
+
+// Get the list of followers for a user
+const getFollowers = async (req, res) => {
+  try {
+    const userId = req.user.id;
+
+    const user = await User.findById(userId).populate('followers', 'name email');
+    if (!user) {
+      return res.status(404).json({ error: 'User not found.' });
+    }
+
+    res.status(200).json({ success: true, followers: user.followers });
+  } catch (error) {
+    console.error('Error fetching followers:', error);
+    res.status(500).json({ error: 'An error occurred while fetching followers.' });
+  }
+};
+
+// Get the list of users a specific user is following
+const getFollowing = async (req, res) => {
+  try {
+    const userId = req.user.id;
+
+    const user = await User.findById(userId).populate('following', 'name email');
+    if (!user) {
+      return res.status(404).json({ error: 'User not found.' });
+    }
+
+    res.status(200).json({ success: true, following: user.following });
+  } catch (error) {
+    console.error('Error fetching following list:', error);
+    res.status(500).json({ error: 'An error occurred while fetching following list.' });
+  }
+};
+
+module.exports = { followUser, unfollowUser, initSocket ,getFollowing,getFollowers};

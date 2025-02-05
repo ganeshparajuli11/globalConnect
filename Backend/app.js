@@ -18,7 +18,7 @@ const io = socketIo(server, {
 
 // Middleware
 app.use(cors());
-app.use(express.json()); // Only call this once to parse incoming JSON requests
+app.use(express.json()); 
 
 const port = 3000;
 

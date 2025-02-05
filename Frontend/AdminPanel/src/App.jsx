@@ -17,6 +17,8 @@ import InActiveUser from "./components/userpage/InActiveUser";
 import ReportedUser from "./components/userpage/ReportedUser";
 import BlockedUser from "./components/userpage/BlockedUser";
 import AllCategory from "./components/category/AllCategory";
+import { Sidebar } from "lucide-react";
+import UserProfile from "./components/userpage/UserProfile";
 
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -24,34 +26,35 @@ function App() {
 
   // Check for authentication on component mount
   useEffect(() => {
-    const token = localStorage.getItem("access_token");
+    const checkAuth = () => {
+      const token = localStorage.getItem("access_token");
+      if (token) {
+        axios
+          .get("http://localhost:3000/api/dashboard/getUserinfo", {
+            headers: { Authorization: `Bearer ${token}` },
+          })
+          .then((res) => {
+            setIsAuthenticated(true);
+            setUserCount(res.data.data);
+          })
+          .catch(() => {
+            setIsAuthenticated(false);
+          });
+      } else {
+        setIsAuthenticated(false);
+      }
+    };
 
-    // If there's a token, attempt to fetch user details to validate the token
-    if (token) {
-      // Call API to validate the token and get user details
-      axios
-        .get("http://localhost:3000/api/dashboard/getUserinfo", {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        })
-        .then((res) => {
-          // If successful, set user as authenticated and store user details
-          setIsAuthenticated(true);
-          setUserCount(res.data.data);
-        })
-        .catch((error) => {
-          console.error("Error fetching user stats:", error);
-          // If error occurs, consider the user as not authenticated
-          setIsAuthenticated(false);
-        });
-    }
+    checkAuth();
+    window.addEventListener("storage", checkAuth); // Listen for changes in localStorage
+    return () => window.removeEventListener("storage", checkAuth);
   }, []);
 
   return (
     <Router>
+      <Sidebar setIsAuthenticated={setIsAuthenticated} />
+
       <Routes>
-        {/* Redirect to login page if not authenticated */}
         <Route
           path="/"
           element={
@@ -64,7 +67,13 @@ function App() {
         />
         <Route
           path="/login"
-          element={isAuthenticated ? <Navigate to="/dashboard" /> : <Login />}
+          element={
+            isAuthenticated ? (
+              <Navigate to="/dashboard" />
+            ) : (
+              <Login setIsAuthenticated={setIsAuthenticated} />
+            )
+          }
         />
         <Route
           path="/dashboard"
@@ -85,10 +94,10 @@ function App() {
         <Route path="/editprivacyPolicy" element={<EditPrivacyAndPolicy />} />
         <Route path="/notification" element={<NotificationPage />} />
         <Route path="/allCategory" element={<AllCategory />} />
+        <Route path="/user/:userId" element={<UserProfile />} />
       </Routes>
     </Router>
   );
 }
-
 
 export default App;
