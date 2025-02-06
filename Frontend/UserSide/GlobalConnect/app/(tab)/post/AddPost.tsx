@@ -16,7 +16,7 @@ import axios from "axios";
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useRouter } from "expo-router";
-import config from "../config";
+import config from "../../config";
 
 export default function AddPost() {
   const ip = config.API_IP;

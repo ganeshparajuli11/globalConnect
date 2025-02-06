@@ -316,6 +316,36 @@ const getFollowCounts = async (req, res) => {
   }
 };
 
+// Get the users you follow or your followers
+const getFollowingOrFollowers = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { type, search } = req.query;
+
+    if (!type || (type !== "followers" && type !== "following")) {
+      return res.status(400).json({ message: "Invalid type parameter! Use 'followers' or 'following'." });
+    }
+
+    // Fetch user data and populate the relevant field
+    const user = await User.findById(userId).populate({
+      path: type,
+      match: search ? { $or: [
+        { name: { $regex: search, $options: "i" } },
+        { username: { $regex: search, $options: "i" } }
+      ] } : {}, // Search by name or username if provided
+      select: "name username profile_image",
+    });
+
+    if (!user) {
+      return res.status(404).json({ message: "User not found!" });
+    }
+
+    res.status(200).json(user[type]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Server error!" });
+  }
+};
 
 module.exports = {
   getUserProfile,
@@ -323,5 +353,5 @@ module.exports = {
   verifyOTP,
   resetPassword,
   changePassword,
-  updateProfileImage,getFollowCounts,getUserProfileById
+  updateProfileImage,getFollowCounts,getUserProfileById,getFollowingOrFollowers
 };

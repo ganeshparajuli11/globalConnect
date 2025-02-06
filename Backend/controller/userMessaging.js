@@ -36,7 +36,7 @@ const sendMessage = async (req, res) => {
         const message = new Message({ sender: senderId, receiver: receiverId, content });
         await message.save();
 
-        await sendFirebaseNotification(receiverId, 'New Message', content);
+        // await sendFirebaseNotification(receiverId, 'New Message', content);
 
         res.status(200).json({ success: true, message: 'Message sent successfully.', data: message });
     } catch (error) {

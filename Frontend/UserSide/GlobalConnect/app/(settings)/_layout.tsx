@@ -47,6 +47,7 @@ export default function TabRootLayout() {
           ),
         }}
       />
+
       <Tabs.Screen
         name="TermsAndConditionScreen"
         options={{

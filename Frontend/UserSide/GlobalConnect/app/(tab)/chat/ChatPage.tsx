@@ -11,7 +11,7 @@ import { useLocalSearchParams } from "expo-router";
 import axios from "axios";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Ionicons } from "@expo/vector-icons";
-import config from "../config";
+import config from "../../config";
 export default function ChatPage() {
 
   const ip = config.API_IP;  

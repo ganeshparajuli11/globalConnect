@@ -13,6 +13,7 @@ import { useRouter } from "expo-router";
 import { toast } from "react-toastify";
 import axios from "axios";
 import config from "../config";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 const Destination = () => {
   const ip = config.API_IP;  
   const [countries, setCountries] = useState([]);
@@ -26,7 +27,7 @@ const Destination = () => {
   const [citySearch, setCitySearch] = useState("");
   const router = useRouter();
 
-  const accessToken = localStorage.getItem("authToken");
+  const accessToken = AsyncStorage.getItem("authToken");
 
   // Fetch the list of countries
   useEffect(() => {

@@ -14,7 +14,7 @@ import axios from 'axios';
 import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
-import config from "../config";
+import config from "../../config";
 
 export default function Profile() {
   const ip = config.API_IP;

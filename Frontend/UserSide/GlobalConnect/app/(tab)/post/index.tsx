@@ -12,13 +12,13 @@ import {
 } from "react-native";
 import axios from "axios";
 import Icon from "react-native-vector-icons/FontAwesome";
-import config from "../config";
+import config from "../../config";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 const Posts = () => {
   const ip = config.API_IP;
   // Replace with your actual current user id from context/authentication
-  const currentUserId = "CURRENT_USER_ID"; 
+  const currentUserId = "CURRENT_USER_ID";
 
   const [posts, setPosts] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -28,7 +28,7 @@ const Posts = () => {
   const [selectedPost, setSelectedPost] = useState(null);
   const [menuPostId, setMenuPostId] = useState(null); // For three-dot menu modal
   const [showShareModal, setShowShareModal] = useState(false);
-  const [users, setUsers] = useState([]); // List of followed users
+  const [users, setUsers] = useState([]); // List of users you are following
   const [selectedUsers, setSelectedUsers] = useState([]);
   const [hasMore, setHasMore] = useState(true); // Track if more posts exist
 
@@ -37,70 +37,80 @@ const Posts = () => {
     fetchUsers();
   }, []);
 
-  const fetchPosts = useCallback(async (pageNumber = 1, isFirstLoad = false) => {
-    if (loading || !hasMore) return;
+  const fetchPosts = useCallback(
+    async (pageNumber = 1, isFirstLoad = false) => {
+      if (loading || !hasMore) return;
 
-    setLoading(true);
+      setLoading(true);
 
-    try {
-      const authToken = await AsyncStorage.getItem("authToken");
-      const response = await axios.get(
-        `http://${ip}:3000/api/post/all?page=${pageNumber}&limit=5`,
-        {
-          headers: { Authorization: `Bearer ${authToken}` },
+      try {
+        const authToken = await AsyncStorage.getItem("authToken");
+        const response = await axios.get(
+          `http://${ip}:3000/api/post/all?page=${pageNumber}&limit=5`,
+          {
+            headers: { Authorization: `Bearer ${authToken}` },
+          }
+        );
+
+        const newPosts = response.data.data.map((post) => ({
+          id: post._id, // or post.id if that's available
+          user: post.user,
+          userImage:
+            post.user?.profile_image || "https://via.placeholder.com/40",
+          type: post.type || "Unknown Category",
+          time: post.time,
+          content: post.content || "No content available",
+          media:
+            post.media && post.media.length > 0
+              ? post.media.map((m) => `http://${ip}:3000${m.media_path}`)
+              : [],
+          liked: post.liked || false,
+          likeCount: post.likeCount || 0,
+          commentCount: post.commentCount || 0,
+          shareCount: post.shareCount || 0,
+        }));
+
+        setPosts((prev) => (isFirstLoad ? newPosts : [...prev, ...newPosts]));
+        setPage(pageNumber + 1);
+
+        // Stop loading more if no new posts are fetched
+        if (newPosts.length === 0) {
+          setHasMore(false);
         }
-      );
-
-      const newPosts = response.data.data.map((post) => ({
-        id: post.id,
-        user: post.user,
-        userImage: post.user?.profile_image || "https://via.placeholder.com/40",
-        type: post.type || "Unknown Category",
-        time: post.time,
-        content: post.content || "No content available",
-        image: post.image ? `http://${ip}:3000${post.image}` : "",
-        liked: post.liked || false,
-        likeCount: post.likeCount || 0, 
-        commentCount: post.commentCount || 0,
-        shareCount: post.shareCount || 0,
-      }));
-
-      setPosts((prev) => (isFirstLoad ? newPosts : [...prev, ...newPosts]));
-      setPage(pageNumber + 1);
-
-      // Stop loading more if no new posts are fetched
-      if (newPosts.length === 0) {
-        setHasMore(false);
+      } catch (error) {
+        console.error("Error fetching posts:", error);
+      } finally {
+        setLoading(false);
       }
-    } catch (error) {
-      console.error("Error fetching posts:", error);
-    } finally {
-      setLoading(false);
-    }
-  }, [loading, hasMore]);
+    },
+    [loading, hasMore]
+  );
 
+  // This function fetches the list of users you are following.
   const fetchUsers = async () => {
     try {
       const authToken = await AsyncStorage.getItem("authToken");
-      
+
       if (!authToken) {
         console.error("No auth token found");
         return;
       }
-  
+
       const response = await axios.get(`http://${ip}:3000/api/following`, {
         headers: {
           Authorization: `Bearer ${authToken}`,
         },
       });
-  
-      // Assume response.data is an array of user objects that the current user follows.
-      setUsers(response.data.following);
+
+      // Adjust according to your API response structure
+      const followingList = response.data.following || response.data;
+      setUsers(followingList);
     } catch (error) {
       console.error("Error fetching users:", error);
     }
   };
-  
+
+  // Follow user API call (only when you're not already following)
   const followUser = async (followUserId) => {
     try {
       const authToken = await AsyncStorage.getItem("authToken");
@@ -108,21 +118,21 @@ const Posts = () => {
         console.error("No auth token found");
         return;
       }
-  
-      // Send follow request
+
       const response = await axios.post(
-        "http://localhost:3000/api/follow",
-        { followUserId }, // Send followUserId as part of the body
+        `http://${ip}:3000/api/follow`,
+        { followUserId },
         {
           headers: {
-            Authorization: `Bearer ${authToken}`, // Send authToken as Authorization header
+            Authorization: `Bearer ${authToken}`,
           },
         }
       );
-  
+
       if (response.status === 200) {
         console.log("Followed user successfully");
-        fetchUsers(); // Optionally refresh the users list
+        // Refresh the following list so that the UI updates accordingly.
+        fetchUsers();
       } else {
         console.error("Failed to follow user");
       }
@@ -130,16 +140,14 @@ const Posts = () => {
       console.error("Error following user:", error);
     }
   };
-  
+
   const toggleLike = async (postId) => {
     const postIndex = posts.findIndex((post) => post.id === postId);
     const post = posts[postIndex];
-  console.log("Post index: " + post)
-    // Check if the post is already liked
+    console.log("Post index: ", post);
     const isLiked = post.liked;
-  
-    try {
 
+    try {
       const response = await axios.put(
         `http://${ip}:3000/api/post/like-unlike/${postId}`,
         {},
@@ -149,16 +157,15 @@ const Posts = () => {
           },
         }
       );
-  
+
       if (response.status === 200) {
-        // If the like/unlike was successful, update the state
         setPosts((prev) =>
           prev.map((item) =>
             item.id === postId
               ? {
                   ...item,
-                  liked: !isLiked, // Toggle like status
-                  likeCount: isLiked ? item.likeCount - 1 : item.likeCount + 1, // Update like count
+                  liked: !isLiked,
+                  likeCount: isLiked ? item.likeCount - 1 : item.likeCount + 1,
                 }
               : item
           )
@@ -167,11 +174,12 @@ const Posts = () => {
         console.error("Error while toggling like/unlike.");
       }
     } catch (error) {
-      console.error("Error liking/unliking the post:", error.response ? error.response.data : error.message);
-
+      console.error(
+        "Error liking/unliking the post:",
+        error.response ? error.response.data : error.message
+      );
     }
   };
-  
 
   const handleComment = (postId) => {
     if (commentText.trim() === "") return;
@@ -193,23 +201,22 @@ const Posts = () => {
   };
 
   const handleMenuAction = (action, postId) => {
-    // Handle menu actions like reporting or hiding the post.
     if (action === "report") {
       console.log("Reporting post", postId);
       // TODO: Add API call to report post.
     } else if (action === "hide") {
       console.log("Hiding post", postId);
-      // Optionally remove the post from the feed
       setPosts((prev) => prev.filter((post) => post.id !== postId));
     }
     setMenuPostId(null);
   };
 
   const renderPost = ({ item }) => {
-    // Determine if the current user follows the post's author
+    // Convert both IDs to strings in case types differ
     const isFollowing = users.some(
-      (user) => user._id === item.user._id
+      (user) => String(user._id) === String(item.user._id)
     );
+
     return (
       <View style={styles.postContainer}>
         {/* Post Header */}
@@ -223,7 +230,14 @@ const Posts = () => {
           </View>
           {/* Follow/Following Button */}
           {item.user._id !== currentUserId && (
-            <TouchableOpacity style={styles.followButton}>
+            <TouchableOpacity
+              style={styles.followButton}
+              onPress={() => {
+                if (!isFollowing) {
+                  followUser(item.user._id);
+                }
+              }}
+            >
               <Text style={styles.followButtonText}>
                 {isFollowing ? "Following" : "Follow"}
               </Text>
@@ -236,9 +250,18 @@ const Posts = () => {
         </View>
         {/* Post Content */}
         <Text style={styles.postContent}>{item.content}</Text>
-        {item.image ? (
-          <Image source={{ uri: item.image }} style={styles.postImage} />
-        ) : null}
+        {/* Render multiple images if available */}
+        {item.media && item.media.length > 0 && (
+          <View style={styles.mediaContainer}>
+            {item.media.map((imgUri, index) => (
+              <Image
+                key={index}
+                source={{ uri: imgUri }}
+                style={styles.postImage}
+              />
+            ))}
+          </View>
+        )}
         {/* Post Actions */}
         <View style={styles.actionsRow}>
           <TouchableOpacity
@@ -272,7 +295,9 @@ const Posts = () => {
           <View style={styles.commentSection}>
             <FlatList
               data={comments[item.id] || []}
-              keyExtractor={(c, i) => i.toString()}
+              keyExtractor={(c, index) =>
+                c && typeof c === "string" ? index.toString() : index.toString()
+              }
               renderItem={({ item: comment }) => (
                 <Text style={styles.comment}>{comment}</Text>
               )}
@@ -299,7 +324,9 @@ const Posts = () => {
       <FlatList
         data={posts}
         renderItem={renderPost}
-        keyExtractor={(item) => item.id.toString()}
+        keyExtractor={(item, index) =>
+          item.id ? item.id.toString() : index.toString()
+        }
         contentContainerStyle={styles.postsListContainer}
         onEndReached={() => fetchPosts(page)}
         onEndReachedThreshold={0.5}
@@ -330,7 +357,9 @@ const Posts = () => {
               <Text style={styles.modalOption}>Hide Post</Text>
             </TouchableOpacity>
             <TouchableOpacity onPress={() => setMenuPostId(null)}>
-              <Text style={[styles.modalOption, { color: "#999" }]}>Cancel</Text>
+              <Text style={[styles.modalOption, { color: "#999" }]}>
+                Cancel
+              </Text>
             </TouchableOpacity>
           </View>
         </TouchableOpacity>
@@ -344,7 +373,6 @@ const Posts = () => {
       >
         <View style={styles.shareModal}>
           <Text style={styles.shareTitle}>Share Post</Text>
-          {/* Implement your share logic here */}
           <TouchableOpacity onPress={sharePost} style={styles.shareButton}>
             <Text style={styles.shareButtonText}>Share</Text>
           </TouchableOpacity>
@@ -505,6 +533,12 @@ const styles = StyleSheet.create({
   shareButtonText: {
     color: "#fff",
     fontSize: 16,
+  },
+  mediaContainer: {
+    flexDirection: "row",
+    flexWrap: "wrap", // Adjust layout as needed
+    justifyContent: "space-between",
+    marginVertical: 10,
   },
 });
 

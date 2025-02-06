@@ -11,18 +11,20 @@ import {
 import axios from "axios";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useRouter } from "expo-router"; // Assuming you're using Expo Router
-import config from "../config";
+import config from "../../config";
+
 export default function Message() {
   const ip = config.API_IP;
   console.log("ip: " + ip);
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [filteredMessages, setFilteredMessages] = useState([]);
   const router = useRouter(); // Initialize the router
 
   useEffect(() => {
     const fetchMessages = async () => {
       try {
-        // Retrieve the auth token from AsyncStorage
         const token = await AsyncStorage.getItem("authToken");
         console.log("this is a token", token);
         if (!token) {
@@ -30,19 +32,14 @@ export default function Message() {
           return;
         }
 
-        // Send the token in the Authorization header
-        const response = await axios.get(
-          `http://${ip}:3000/api/all-message`,
-          {
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${token}`,
-            },
-          }
-        );
+        const response = await axios.get(`http://${ip}:3000/api/all-message`, {
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+        });
 
         if (response.data.success) {
-          // Map the API response to match the component's data structure
           console.log("Messages: ", response.data.data);
           const formattedMessages = response.data.data.map((item) => ({
             id: item.userId,
@@ -51,6 +48,7 @@ export default function Message() {
             avatar: item.avatar,
           }));
           setMessages(formattedMessages);
+          setFilteredMessages(formattedMessages);
         } else {
           console.error("Failed to fetch messages: ", response.data.message);
         }
@@ -63,6 +61,18 @@ export default function Message() {
 
     fetchMessages();
   }, []);
+
+  const handleSearch = (text) => {
+    setSearchQuery(text);
+    if (text.trim() === "") {
+      setFilteredMessages(messages);
+    } else {
+      const filtered = messages.filter((message) =>
+        message.name.toLowerCase().includes(text.toLowerCase())
+      );
+      setFilteredMessages(filtered);
+    }
+  };
 
   const renderMessage = ({ item }) => (
     <TouchableOpacity
@@ -118,6 +128,8 @@ export default function Message() {
         <TextInput
           placeholder="Search"
           placeholderTextColor="#aaa"
+          value={searchQuery}
+          onChangeText={handleSearch}
           style={{
             height: 48,
             backgroundColor: "white",
@@ -138,7 +150,7 @@ export default function Message() {
         />
       ) : (
         <FlatList
-          data={messages}
+          data={filteredMessages}
           keyExtractor={(item) => item.id}
           renderItem={renderMessage}
           contentContainerStyle={{ padding: 16 }}

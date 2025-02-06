@@ -1,7 +1,7 @@
 import React from "react";
 import { SafeAreaView, TextInput, View } from "react-native";
-import Posts from "./Post"; 
-import SearchPost from "./SearchPost";
+import Posts from "./post"; 
+import SearchPost from "./post/SearchPost";
 
 const Index = () => {
   const [searchQuery, setSearchQuery] = React.useState("");
