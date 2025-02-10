@@ -5,12 +5,13 @@ import {
   FaBell,
   FaFileAlt,
   FaTags,
+  FaFileContract, // Added for Terms & Conditions
+  // You can import more icons if needed, e.g., FaCogs for Settings
 } from "react-icons/fa";
 import { BiLogOut } from "react-icons/bi";
 import { MdPrivacyTip } from "react-icons/md";
 import { NavLink, useNavigate, useLocation } from "react-router-dom";
 import axios from "axios";
-
 
 const Sidebar = ({ setIsAuthenticated }) => {
   const navigate = useNavigate();
@@ -23,6 +24,7 @@ const Sidebar = ({ setIsAuthenticated }) => {
     role: "",
   });
   const [showLogoutDialog, setShowLogoutDialog] = useState(false);
+
   // Function to toggle the active menu
   const toggleMenu = (menu) => {
     setActiveMenu(activeMenu === menu ? "" : menu);
@@ -37,7 +39,7 @@ const Sidebar = ({ setIsAuthenticated }) => {
 
   const handleLogout = () => {
     localStorage.removeItem("access_token");
-    setIsAuthenticated(false); 
+    setIsAuthenticated(false);
     navigate("/login");
   };
 
@@ -196,30 +198,70 @@ const Sidebar = ({ setIsAuthenticated }) => {
           )}
 
           {/* Notifications Section */}
-          <li
-            onClick={() => toggleMenu("notifications")}
+          <NavLink
+            onClick={() => navigate("/notification")} // Navigate to /notification
             className="cursor-pointer"
           >
-            <div
-              className={`px-6 py-3 flex justify-between ${
-                activeMenu === "notifications"
-                  ? "bg-blue-100"
-                  : "hover:bg-blue-100"
-              }`}
-            >
+            <div className="px-6 py-3 flex justify-between hover:bg-blue-100">
               <div className="flex items-center space-x-3">
                 <FaBell className="text-lg" />
                 <span>Notifications</span>
               </div>
-              <span>{activeMenu === "notifications" ? "-" : "+"}</span>
             </div>
-          </li>
+          </NavLink>
 
           {/* Static Links */}
-          <li className="px-6 py-3 hover:bg-blue-100 flex items-center space-x-3">
-            <MdPrivacyTip className="text-lg" />
-            <span>Privacy Policy</span>
+          <li>
+            <NavLink
+              to="/privacyPolicy"
+              className={({ isActive }) =>
+                `px-6 py-3 flex items-center space-x-3 ${
+                  isActive
+                    ? "bg-blue-100 text-blue-700 font-bold"
+                    : "hover:bg-blue-100 text-gray-700"
+                }`
+              }
+            >
+              <MdPrivacyTip className="text-lg" />
+              <span>Privacy Policy</span>
+            </NavLink>
           </li>
+
+          <li>
+            <NavLink
+              to="/termsAndCondition"
+              className={({ isActive }) =>
+                `px-6 py-3 flex items-center space-x-3 ${
+                  isActive
+                    ? "bg-blue-100 text-blue-700 font-bold"
+                    : "hover:bg-blue-100 text-gray-700"
+                }`
+              }
+            >
+              <FaFileContract className="text-lg" />
+              <span>Terms &amp; Conditions</span>
+            </NavLink>
+          </li>
+
+          {/* (Optional) Additional Link: Settings or Reports */}
+          {/* Uncomment and modify the code below if you wish to add another option */}
+          {/*
+          <li>
+            <NavLink
+              to="/settings"
+              className={({ isActive }) =>
+                `px-6 py-3 flex items-center space-x-3 ${
+                  isActive
+                    ? "bg-blue-100 text-blue-700 font-bold"
+                    : "hover:bg-blue-100 text-gray-700"
+                }`
+              }
+            >
+              <FaCogs className="text-lg" />
+              <span>Settings</span>
+            </NavLink>
+          </li>
+          */}
         </ul>
       </div>
 

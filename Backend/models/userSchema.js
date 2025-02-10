@@ -56,7 +56,7 @@ const userSchema = new mongoose.Schema(
       enum: ["Active", "Inactive", "Under Review", "Suspended", "Banned"],
       default: "Active",
     },
-    suspended_until: { type: Date, default: null }, // Suspend the account until this date
+    suspended_until: { type: Date, default: null }, 
 
     // Interests and personalized recommendations
     interests: [{ type: String }],

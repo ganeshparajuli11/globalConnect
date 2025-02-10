@@ -1,9 +1,8 @@
-const Post = require("../models/postSchema"); 
+const Post = require("../models/postSchema");
 
 const { comment } = require("../models/commentSchema");
-const Category = require("../models/categorySchema"); 
+const Category = require("../models/categorySchema");
 const User = require("../models/userSchema");
-
 
 async function createPost(req, res) {
   try {
@@ -18,7 +17,9 @@ async function createPost(req, res) {
 
     // Optionally, ensure that the post contains either text or media
     if (!text_content && (!req.files || req.files.length === 0)) {
-      return res.status(400).json({ message: "Post must have text content or media." });
+      return res
+        .status(400)
+        .json({ message: "Post must have text content or media." });
     }
 
     // Process uploaded media files (if any)
@@ -35,7 +36,6 @@ async function createPost(req, res) {
     if (typeof tags === "string") {
       postTags = tags.split(",").map((tag) => tag.trim());
     }
-
 
     // Create and save the post (other fields like status, views, shares, etc. use default values from the schema)
     const post = await Post.create({
@@ -60,9 +60,6 @@ async function createPost(req, res) {
   }
 }
 
-
-
-
 const getAllPost = async (req, res) => {
   try {
     // Get pagination and category filter from query parameters
@@ -77,20 +74,37 @@ const getAllPost = async (req, res) => {
     }
 
     // Fetch user details (only need preferred_categories and following)
-    const user = await User.findById(userId).select("preferred_categories following");
+    const user = await User.findById(userId).select(
+      "preferred_categories following"
+    );
     if (!user) {
       return res.status(404).json({ message: "User not found." });
     }
 
-    // Base query for active posts only
-    let baseQuery = { status: "Active" };
+    // Base query to exclude blocked/under-review/suspended posts
+    const currentDate = new Date();
+    let baseQuery = {
+      isBlocked: false,
+      isUnderReview: false,
+      $or: [
+        { isSuspended: false }, // Not suspended
+        {
+          isSuspended: true,
+          // Include posts where suspension has expired
+          $and: [
+            { suspended_until: { $ne: null } }, // Ensure suspended_until exists
+            { suspended_until: { $lte: currentDate } }, // Suspension has ended
+          ],
+        },
+      ],
+    };
 
     // If a specific category is requested, add that filter
     if (category) {
       baseQuery.category_id = category;
 
       const posts = await Post.find(baseQuery)
-        .populate("user_id", "name profile_image") // Using updated field names
+        .populate("user_id", "name profile_image")
         .populate("category_id")
         .sort({ createdAt: -1 })
         .skip((page - 1) * limit)
@@ -101,7 +115,7 @@ const getAllPost = async (req, res) => {
         data: formatPosts(posts),
       });
     } else {
-      // Build an interest-based query for posts in user's preferred categories or from followed users
+      // Build interest-based query for preferred categories or followed users
       const interestQuery = {
         ...baseQuery,
         $or: [
@@ -110,12 +124,12 @@ const getAllPost = async (req, res) => {
         ],
       };
 
-      // Determine if the user is new (has no preferences and follows no one)
-      const isNewUser = user.preferred_categories.length === 0 && user.following.length === 0;
+      // Determine if the user is new (no preferences/following)
+      const isNewUser =
+        user.preferred_categories.length === 0 && user.following.length === 0;
 
-      // If the user is not new, fetch a mix of interest-based and general posts
       if (!isNewUser) {
-        // Calculate limits for interest-based and general posts
+        // Split limit: 70% interest-based, 30% general
         const interestLimit = Math.ceil(limit * 0.7);
         const generalLimit = limit - interestLimit;
 
@@ -126,24 +140,30 @@ const getAllPost = async (req, res) => {
           .sort({ createdAt: -1 })
           .limit(interestLimit);
 
-        // Fetch general posts
+        // Fetch general posts (still respecting baseQuery filters)
         const generalPosts = await Post.find(baseQuery)
           .populate("user_id", "name profile_image")
           .populate("category_id")
           .sort({ createdAt: -1 })
           .limit(generalLimit);
 
-        // Combine the results and shuffle them to mix the order
-        const combinedPosts = [...interestBasedPosts, ...generalPosts].sort(() => Math.random() - 0.5);
+        // Combine and shuffle posts
+        const combinedPosts = [...interestBasedPosts, ...generalPosts]
+          .filter(
+            (post, index, self) =>
+              index ===
+              self.findIndex((p) => p._id.toString() === post._id.toString()) // Remove duplicates
+          )
+          .sort(() => Math.random() - 0.5);
 
         return res.status(200).json({
           message: "Posts retrieved successfully.",
-          data: formatPosts(combinedPosts),
+          data: formatPosts(combinedPosts.slice(0, limit)), // Ensure total <= limit
         });
       }
     }
 
-    // Fallback for new users or if no interest-based logic applies: simply fetch posts with pagination
+    // Fallback for new users: fetch general posts with pagination
     const posts = await Post.find(baseQuery)
       .populate("user_id", "name profile_image")
       .populate("category_id")
@@ -161,6 +181,107 @@ const getAllPost = async (req, res) => {
   }
 };
 
+const getPostById = async (req, res) => {
+  try {
+    const { postId } = req.params;
+
+    // Ensure a valid post ID is provided
+    if (!postId) {
+      return res.status(400).json({ message: "Post ID is required." });
+    }
+
+    // Fetch the post and populate relevant fields
+    const post = await Post.findById(postId)
+      .populate("user_id", "name profile_image email") // Include user details
+      .populate("category_id", "name description") // Include category details
+      .populate("comments") // Assuming comments are stored in a separate collection
+      .populate({
+        path: "comments",
+        populate: { path: "user_id", select: "name profile_image" }, // Populate comment user details
+      });
+
+    // If post not found
+    if (!post) {
+      return res.status(404).json({ message: "Post not found." });
+    }
+
+    return res.status(200).json({
+      message: "Post retrieved successfully.",
+      data: post,
+    });
+  } catch (error) {
+    console.error("Error retrieving post:", error);
+    return res
+      .status(500)
+      .json({ message: "Failed to retrieve post details." });
+  }
+};
+
+// post for admin
+const getAllPostAdmin = async (req, res) => {
+  try {
+    // Extract pagination, category, and status filters from the query parameters.
+    let { page = 1, limit = 5, category = "", status = "" } = req.query;
+    page = parseInt(page);
+    limit = parseInt(limit);
+
+    // Build the query object
+    const query = {};
+    if (category) {
+      query.category_id = category;
+    }
+    if (status) {
+      query.status = status;
+    }
+
+    // Fetch posts with pagination.
+    const posts = await Post.find(query)
+      .populate("user_id", "name profile_image")
+      .populate("category_id")
+      .sort({ createdAt: -1 })
+      .skip((page - 1) * limit)
+      .limit(limit);
+
+    // Get the total count of posts (for pagination).
+    const totalCount = await Post.countDocuments(query);
+
+    // Optionally format the posts if needed.
+    const formattedPosts =
+      typeof formatPosts === "function" ? formatPosts(posts) : posts;
+
+    return res.status(200).json({
+      message: "Posts retrieved successfully.",
+      data: formattedPosts,
+      totalCount,
+    });
+  } catch (error) {
+    console.error("Error retrieving posts for admin:", error);
+    return res.status(500).json({ message: "Failed to retrieve posts." });
+  }
+};
+
+const getPostStatsAdmin = async (req, res) => {
+  try {
+    const total = await Post.countDocuments();
+    const active = await Post.countDocuments({ status: "Active" });
+    const suspended = await Post.countDocuments({ status: "Suspended" });
+    const blocked = await Post.countDocuments({ status: "Blocked" });
+    const underReview = await Post.countDocuments({ status: "Under Review" });
+    const deleted = await Post.countDocuments({ status: "Deleted" });
+
+    return res.status(200).json({
+      total,
+      active,
+      suspended,
+      blocked,
+      underReview,
+      deleted,
+    });
+  } catch (error) {
+    console.error("Error retrieving post stats:", error);
+    return res.status(500).json({ message: "Failed to retrieve post stats." });
+  }
+};
 
 // Function to format posts
 const formatPosts = (posts) => {
@@ -168,17 +289,20 @@ const formatPosts = (posts) => {
     id: post._id,
     user: {
       _id: post.user_id ? post.user_id._id : null,
-      name: post.user_id ? post.user_id.name : "Unknown User",  // Fallback value
-      profile_image: post.user_id && post.user_id.profile_image ? post.user_id.profile_image : "https://via.placeholder.com/40",
+      name: post.user_id ? post.user_id.name : "Unknown User", // Fallback value
+      profile_image:
+        post.user_id && post.user_id.profile_image
+          ? post.user_id.profile_image
+          : "https://via.placeholder.com/40",
     },
     type: post.category_id?.name || "Unknown Category",
     time: post.createdAt,
     content: post.text_content || "No content available",
     image: post.image || "",
-    liked: post.likes.includes(post.user_id._id),  // Check if the user liked the post
+    liked: post.likes.includes(post.user_id._id), // Check if the user liked the post
     likeCount: post.likes.length || 0,
     commentCount: post.comments.length || 0,
-    shareCount: post.shares?.length || 0,  // If shares are stored, include them
+    shareCount: post.shares?.length || 0, // If shares are stored, include them
     comments: post.comments.map((comment) => ({
       user: comment.user_id.name,
       text: comment.text,
@@ -187,16 +311,85 @@ const formatPosts = (posts) => {
   }));
 };
 
+// Get posts that have been reported (i.e. at least one report exists)
+const getReportedPosts = async (req, res) => {
+  try {
+    const { page = 1, limit = 10 } = req.query;
+    const posts = await Post.find({ "reports.0": { $exists: true } })
+      .populate("user_id", "name profile_image email")
+      .populate("category_id", "name")
+      .populate("reports.reported_by", "name profile_image")
+      .sort({ createdAt: -1 })
+      .skip((page - 1) * parseInt(limit))
+      .limit(parseInt(limit));
 
+    return res.status(200).json({
+      message: "Reported posts retrieved successfully",
+      data: posts,
+    });
+  } catch (error) {
+    console.error("Error retrieving reported posts:", error);
+    return res
+      .status(500)
+      .json({ message: "Internal server error", error: error.message });
+  }
+};
 
+// Get posts with status "Suspended"
+const getSuspendedPosts = async (req, res) => {
+  try {
+    const { page = 1, limit = 10 } = req.query;
+    // Here we filter on the status field (which is updated in our status updates)
+    const posts = await Post.find({ status: "Suspended" })
+      .populate("user_id", "name profile_image email")
+      .populate("category_id", "name")
+      .populate("moderation_history.admin", "name")
+      .sort({ createdAt: -1 })
+      .skip((page - 1) * parseInt(limit))
+      .limit(parseInt(limit));
 
+    return res.status(200).json({
+      message: "Suspended posts retrieved successfully",
+      data: posts,
+    });
+  } catch (error) {
+    console.error("Error retrieving suspended posts:", error);
+    return res
+      .status(500)
+      .json({ message: "Internal server error", error: error.message });
+  }
+};
+
+// Get posts with status "Blocked"
+const getBlockedPosts = async (req, res) => {
+  try {
+    const { page = 1, limit = 10 } = req.query;
+    // We filter on the status field for blocked posts.
+    const posts = await Post.find({ status: "Blocked" })
+      .populate("user_id", "name profile_image email")
+      .populate("category_id", "name")
+      .populate("moderation_history.admin", "name")
+      .sort({ createdAt: -1 })
+      .skip((page - 1) * parseInt(limit))
+      .limit(parseInt(limit));
+
+    return res.status(200).json({
+      message: "Blocked posts retrieved successfully",
+      data: posts,
+    });
+  } catch (error) {
+    console.error("Error retrieving blocked posts:", error);
+    return res
+      .status(500)
+      .json({ message: "Internal server error", error: error.message });
+  }
+};
 
 // Controller to like or unlike a post
 const likeUnlikePost = async (req, res) => {
   try {
-
-    const { postId } = req.params; 
-    const userId = req.user.id; 
+    const { postId } = req.params;
+    const userId = req.user.id;
 
     // Find the post by ID
     const post = await Post.findById(postId);
@@ -205,17 +398,15 @@ const likeUnlikePost = async (req, res) => {
     }
 
     if (post.likes.includes(userId)) {
-
-      post.likes = post.likes.filter((id) => id.toString() !== userId.toString());
+      post.likes = post.likes.filter(
+        (id) => id.toString() !== userId.toString()
+      );
     } else {
-
       post.likes.push(userId);
     }
 
-
     await post.save();
 
-    
     res.status(200).json({
       message: "Post liked/unliked successfully",
       likesCount: post.likes.length,
@@ -226,4 +417,114 @@ const likeUnlikePost = async (req, res) => {
     res.status(500).json({ message: "Internal server error" });
   }
 };
-module.exports = { createPost, getAllPost,likeUnlikePost };
+
+const updatePostStatus = async (req, res) => {
+  try {
+    const { postId } = req.params;
+    const { status, reason, suspended_from, suspended_until } = req.body;
+
+    // Define allowed statuses.
+    const allowedStatuses = [
+      "Active",
+      "Suspended",
+      "Blocked",
+      "Under Review",
+      "Deleted",
+    ];
+
+    // Validate the provided status.
+    if (!allowedStatuses.includes(status)) {
+      return res.status(400).json({ message: "Invalid status provided." });
+    }
+
+    // For statuses that require a reason, enforce its presence.
+    if (
+      (status === "Suspended" ||
+        status === "Blocked" ||
+        status === "Under Review") &&
+      !reason
+    ) {
+      return res
+        .status(400)
+        .json({ message: "A reason is required for the selected status." });
+    }
+
+    // Find the post by its ID.
+    const post = await Post.findById(postId);
+    if (!post) {
+      return res.status(404).json({ message: "Post not found." });
+    }
+
+    // If status is "Suspended", validate and update suspension dates.
+    if (status === "Suspended") {
+      if (!suspended_from || !suspended_until) {
+        return res.status(400).json({
+          message:
+            "Both 'suspended_from' and 'suspended_until' dates are required for suspension.",
+        });
+      }
+      const suspendedFromDate = new Date(suspended_from);
+      const suspendedUntilDate = new Date(suspended_until);
+      const now = new Date();
+
+      if (suspendedFromDate < now || suspendedUntilDate < now) {
+        return res
+          .status(400)
+          .json({ message: "Suspension dates must be in the future." });
+      }
+
+      post.suspended_from = suspendedFromDate;
+      post.suspended_until = suspendedUntilDate;
+      post.isSuspended = true;
+    } else {
+      // Clear suspension details if status is not "Suspended".
+      post.suspended_from = null;
+      post.suspended_until = null;
+      post.isSuspended = false;
+    }
+
+    // Set additional boolean flags based on the status.
+    post.isBlocked = status === "Blocked";
+    post.isUnderReview = status === "Under Review";
+
+    // Update the main status.
+    post.status = status;
+
+    // For statuses that require a reason, update the schema's reason field.
+    // (Assuming the schema uses 'suspension_reason' as the field to store the reason.)
+    if (["Suspended", "Blocked", "Under Review"].includes(status)) {
+      post.suspension_reason = reason;
+    } else {
+      post.suspension_reason = "";
+    }
+
+    // Save the updated post.
+    await post.save();
+
+    return res.status(200).json({
+      message: "Post status updated successfully.",
+      data: post,
+    });
+  } catch (error) {
+    console.error("Error updating post status:", error);
+    return res.status(500).json({
+      message: "Internal server error.",
+      error: error.message,
+    });
+  }
+};
+
+module.exports = { updatePostStatus };
+
+module.exports = {
+  createPost,
+  getAllPost,
+  likeUnlikePost,
+  getPostById,
+  updatePostStatus,
+  getBlockedPosts,
+  getSuspendedPosts,
+  getReportedPosts,
+  getAllPostAdmin,
+  getPostStatsAdmin,
+};

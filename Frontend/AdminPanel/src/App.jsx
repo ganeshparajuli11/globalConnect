@@ -10,15 +10,16 @@ import Login from "./components/loginAndSignup/Login";
 import Dashboard from "./components/dashboard/Dashboard";
 import UserPage from "./components/userpage/UserPage";
 import PrivacyPolicy from "./components/privacyAndPolicy/PrivacyPolicy";
-import EditPrivacyAndPolicy from "./components/privacyAndPolicy/EditPrivacyAndPolicy";
 import NotificationPage from "./components/notification/NotificationPage";
 import ActiveUser from "./components/userpage/ActiveUser";
 import InActiveUser from "./components/userpage/InActiveUser";
 import ReportedUser from "./components/userpage/ReportedUser";
 import BlockedUser from "./components/userpage/BlockedUser";
 import AllCategory from "./components/category/AllCategory";
-import { Sidebar } from "lucide-react";
 import UserProfile from "./components/userpage/UserProfile";
+import AllPost from "./components/post/AllPost";
+import PostProfile from "./components/post/PostProfile";
+import TermsAndCondition from "./components/terms and Condition/TermsAndCondition";
 
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -52,8 +53,8 @@ function App() {
 
   return (
     <Router>
-      <Sidebar setIsAuthenticated={setIsAuthenticated} />
-
+      {/* <Sidebar setIsAuthenticated={setIsAuthenticated} /> */}
+      
       <Routes>
         <Route
           path="/"
@@ -86,12 +87,18 @@ function App() {
           }
         />
         <Route path="/user/all" element={<UserPage />} />
+        <Route path="/posts/all" element={<AllPost />} />
+        <Route path="/posts/:postId" element={<PostProfile />} />
+
+
         <Route path="/user/active" element={<ActiveUser />} />
         <Route path="/user/inActive" element={<InActiveUser />} />
         <Route path="/user/blocked" element={<BlockedUser />} />
         <Route path="/user/reported" element={<ReportedUser />} />
         <Route path="/privacyPolicy" element={<PrivacyPolicy />} />
-        <Route path="/editprivacyPolicy" element={<EditPrivacyAndPolicy />} />
+        <Route path="/termsAndCondition" element={<TermsAndCondition />} />
+
+        
         <Route path="/notification" element={<NotificationPage />} />
         <Route path="/allCategory" element={<AllCategory />} />
         <Route path="/user/:userId" element={<UserProfile />} />

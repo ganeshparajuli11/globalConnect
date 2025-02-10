@@ -15,7 +15,7 @@ const moderationHistorySchema = new mongoose.Schema({
     enum: ["Suspended", "Blocked", "Reviewed", "Reinstated"],
     required: true
   },
-  note: { type: String },
+  reason: { type: String },
   date: { type: Date, default: Date.now }
 });
 
@@ -67,7 +67,12 @@ const postSchema = new mongoose.Schema(
       enum: ["Active", "Suspended", "Blocked", "Under Review", "Deleted"],
       default: "Active"
     },
-    suspended_until: { type: Date, default: null }, // Suspension expiration date
+    isSuspended: { type: Boolean, default: false }, // Indicates if the post is suspended
+    isBlocked: { type: Boolean, default: false }, // Indicates if the post is blocked
+    isUnderReview: { type: Boolean, default: false }, // Indicates if the post is under review
+    suspended_from: { type: Date, default: null }, // Start date of suspension
+    suspended_until: { type: Date, default: null }, // End date of suspension
+    suspension_reason: { type: String }, // Reason for suspension
     reports: [reportSchema],
     moderation_history: [moderationHistorySchema],
     pinned: { type: Boolean, default: false },

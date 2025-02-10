@@ -33,6 +33,7 @@ const userCommentRoute = require('./routes/userCommentRoute');
 const getUserProfileRoute = require('./routes/userSelfroutes');
 const userMessagingRoute = require('./routes/userMessagingRoute');
 const userFollowRoute = require('./routes/userFollowRoute');
+const adminPolicyRoutes = require('./routes/adminPrivacyPolicy')
 const { initSocket } = require('./controller/userFollowController');
 initSocket(io);
 
@@ -49,6 +50,8 @@ app.use('/api/comment', userCommentRoute);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api', userMessagingRoute);
 app.use('/api', userFollowRoute);
+app.use('/api', adminPolicyRoutes);
+
 app.use('/uploads', express.static("uploads")); 
 
 // MongoDB Connection

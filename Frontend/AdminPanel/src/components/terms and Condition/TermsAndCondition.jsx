@@ -4,46 +4,46 @@ import axios from "axios";
 import ReactQuill from "react-quill"; // Rich text editor
 import "react-quill/dist/quill.snow.css";
 
-const PrivacyPolicy = () => {
-  const [policy, setPolicy] = useState("");         // Current saved policy content (HTML)
+const TermsAndCondition = () => {
+  const [terms, setterms] = useState("");         // Current saved terms content (HTML)
   const [isEditing, setIsEditing] = useState(false);  // Editing mode toggle
-  const [updatedPolicy, setUpdatedPolicy] = useState(""); // Editor value
+  const [updatedterms, setUpdatedTerms] = useState(""); // Editor value
 
   useEffect(() => {
-    // Fetch the current policy from the backend
+    // Fetch the current terms from the backend
     axios
-      .get("http://localhost:3000/api/privacy-policy")
+      .get("http://localhost:3000/api/terms-conditions")
       .then((res) => {
-        // Use the content field from the returned policy object
-        setPolicy(res.data.policy ? res.data.policy.content : "");
+        // Use the content field from the returned terms object
+        setterms(res.data.terms ? res.data.terms.content : "");
       })
-      .catch((err) => console.error("Error fetching policy:", err));
+      .catch((err) => console.error("Error fetching terms:", err));
   }, []);
 
   const handleEdit = () => {
-    setUpdatedPolicy(policy);
+    setUpdatedTerms(terms);
     setIsEditing(true);
   };
 
   const handleSave = () => {
-    const apiUrl = "http://localhost:3000/api/privacy-policy";
+    const apiUrl = "http://localhost:3000/api/terms-conditions";
     axios
-      .post(apiUrl, { content: updatedPolicy })
+      .post(apiUrl, { content: updatedterms })
       .then((res) => {
-        setPolicy(updatedPolicy);
+        setterms(updatedterms);
         setIsEditing(false);
       })
-      .catch((err) => console.error("Error saving policy:", err));
+      .catch((err) => console.error("Error saving terms:", err));
   };
 
   const handleDelete = () => {
-    if (window.confirm("Are you sure you want to delete the Privacy Policy?")) {
+    if (window.confirm("Are you sure you want to delete the Privacy terms?")) {
       axios
-        .delete("http://localhost:3000/api/privacy-policy")
+        .delete("http://localhost:3000/api/terms-conditions")
         .then(() => {
-          setPolicy("");
+          setterms("");
         })
-        .catch((err) => console.error("Error deleting policy:", err));
+        .catch((err) => console.error("Error deleting terms:", err));
     }
   };
 
@@ -53,16 +53,16 @@ const PrivacyPolicy = () => {
 
       <div className="ml-0 flex-1 min-h-screen bg-gray-100 p-6">
         <header className="flex justify-between items-center bg-white shadow-md px-6 py-4 rounded-md">
-          <h1 className="text-2xl font-bold text-gray-800">Privacy Policy</h1>
+          <h1 className="text-2xl font-bold text-gray-800">Terms & Condition</h1>
           {!isEditing ? (
             <div className="flex space-x-2">
               <button
                 className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700"
                 onClick={handleEdit}
               >
-                {policy ? "Edit" : "Add"}
+                {terms ? "Edit" : "Add"}
               </button>
-              {policy && (
+              {terms && (
                 <button
                   className="bg-red-600 text-white px-4 py-2 rounded-md hover:bg-red-700"
                   onClick={handleDelete}
@@ -84,12 +84,12 @@ const PrivacyPolicy = () => {
         <section className="mt-6 bg-white shadow-md p-6 rounded-md">
           {isEditing ? (
             // Render the rich text editor when editing
-            <ReactQuill value={updatedPolicy} onChange={setUpdatedPolicy} />
+            <ReactQuill value={updatedterms} onChange={setUpdatedTerms} />
           ) : (
-            // Render the policy content as HTML when not editing
+            // Render the terms content as HTML when not editing
             <div
               className="text-gray-700"
-              dangerouslySetInnerHTML={{ __html: policy || "No privacy policy available." }}
+              dangerouslySetInnerHTML={{ __html: terms || "No privacy terms available." }}
             />
           )}
         </section>
@@ -98,4 +98,4 @@ const PrivacyPolicy = () => {
   );
 };
 
-export default PrivacyPolicy;
+export default TermsAndCondition;

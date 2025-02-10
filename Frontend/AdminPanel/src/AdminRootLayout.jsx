@@ -3,11 +3,10 @@ import { Outlet } from "react-router-dom";
 import Sidebar from "./components/sidebar/Sidebar";
 
 
-function AdminRootLayout() {
+function AdminRootLayout({setIsAuthenticated}) {
   return (
     <div style={{ display: "flex" }}>
-      {/* Sidebar */}
-      <Sidebar />
+      <Sidebar setIsAuthenticated={setIsAuthenticated}/>
 
       {/* Main Content */}
       <div style={{ flex: 1, padding: "20px" }}>
