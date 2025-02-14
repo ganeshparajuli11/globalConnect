@@ -74,9 +74,7 @@ const getAllPost = async (req, res) => {
     }
 
     // Fetch user details (only need preferred_categories and following)
-    const user = await User.findById(userId).select(
-      "preferred_categories following"
-    );
+    const user = await User.findById(userId).select("preferred_categories following");
     if (!user) {
       return res.status(404).json({ message: "User not found." });
     }
@@ -87,19 +85,18 @@ const getAllPost = async (req, res) => {
       isBlocked: false,
       isUnderReview: false,
       $or: [
-        { isSuspended: false }, // Not suspended
+        { isSuspended: false },
         {
           isSuspended: true,
-          // Include posts where suspension has expired
           $and: [
-            { suspended_until: { $ne: null } }, // Ensure suspended_until exists
-            { suspended_until: { $lte: currentDate } }, // Suspension has ended
+            { suspended_until: { $ne: null } },
+            { suspended_until: { $lte: currentDate } },
           ],
         },
       ],
     };
 
-    // If a specific category is requested, add that filter
+    // If a specific category is requested, simply filter and use pagination
     if (category) {
       baseQuery.category_id = category;
 
@@ -125,40 +122,46 @@ const getAllPost = async (req, res) => {
       };
 
       // Determine if the user is new (no preferences/following)
-      const isNewUser =
-        user.preferred_categories.length === 0 && user.following.length === 0;
+      const isNewUser = user.preferred_categories.length === 0 && user.following.length === 0;
 
       if (!isNewUser) {
         // Split limit: 70% interest-based, 30% general
         const interestLimit = Math.ceil(limit * 0.7);
         const generalLimit = limit - interestLimit;
 
-        // Fetch interest-based posts
+        // Use pagination for both parts:
         const interestBasedPosts = await Post.find(interestQuery)
           .populate("user_id", "name profile_image")
           .populate("category_id")
           .sort({ createdAt: -1 })
+          .skip((page - 1) * interestLimit)
           .limit(interestLimit);
 
-        // Fetch general posts (still respecting baseQuery filters)
-        const generalPosts = await Post.find(baseQuery)
+        // Exclude any posts already returned by interest-based query.
+        const interestPostIds = interestBasedPosts.map(post => post._id);
+
+        // For general posts, exclude posts already fetched in interest-based query.
+        const generalPosts = await Post.find({
+          ...baseQuery,
+          _id: { $nin: interestPostIds }
+        })
           .populate("user_id", "name profile_image")
           .populate("category_id")
           .sort({ createdAt: -1 })
+          .skip((page - 1) * generalLimit)
           .limit(generalLimit);
 
-        // Combine and shuffle posts
-        const combinedPosts = [...interestBasedPosts, ...generalPosts]
-          .filter(
-            (post, index, self) =>
-              index ===
-              self.findIndex((p) => p._id.toString() === post._id.toString()) // Remove duplicates
-          )
-          .sort(() => Math.random() - 0.5);
+        // Combine the results
+        const combinedPosts = [...interestBasedPosts, ...generalPosts];
+
+        // Remove duplicates (if any) based on post._id
+        const uniquePosts = combinedPosts.filter((post, index, self) =>
+          index === self.findIndex(p => p._id.toString() === post._id.toString())
+        ).sort((a, b) => b.createdAt - a.createdAt);
 
         return res.status(200).json({
           message: "Posts retrieved successfully.",
-          data: formatPosts(combinedPosts.slice(0, limit)), // Ensure total <= limit
+          data: formatPosts(uniquePosts),
         });
       }
     }
@@ -180,6 +183,38 @@ const getAllPost = async (req, res) => {
     return res.status(500).json({ message: "Failed to retrieve posts." });
   }
 };
+
+// Function to format posts
+const formatPosts = (posts) => {
+  return posts.map((post) => ({
+    id: post._id,
+    user: {
+      _id: post.user_id ? post.user_id._id : null,
+      name: post.user_id ? post.user_id.name : "Unknown User",
+      profile_image:
+        post.user_id && post.user_id.profile_image
+          ? `${post.user_id.profile_image}`
+          : "https://via.placeholder.com/40",
+    },
+    type: post.category_id?.name || "Unknown Category",
+    time: post.createdAt,
+    content: post.text_content || "No content available",
+    media:
+      post.media && post.media.length > 0
+        ? post.media.map((m) => `${m.media_path}`)
+        : [],
+    liked: post.likes && post.user_id ? post.likes.includes(post.user_id._id) : false,
+    likeCount: post.likes ? post.likes.length : 0,
+    commentCount: post.comments ? post.comments.length : 0,
+    shareCount: post.shares ? post.shares.length : 0,
+    comments: post.comments.map((comment) => ({
+      user: comment.user_id ? comment.user_id.name : "Unknown",
+      text: comment.text,
+      time: comment.createdAt,
+    })),
+  }));
+};
+
 
 const getPostById = async (req, res) => {
   try {
@@ -284,32 +319,7 @@ const getPostStatsAdmin = async (req, res) => {
 };
 
 // Function to format posts
-const formatPosts = (posts) => {
-  return posts.map((post) => ({
-    id: post._id,
-    user: {
-      _id: post.user_id ? post.user_id._id : null,
-      name: post.user_id ? post.user_id.name : "Unknown User", // Fallback value
-      profile_image:
-        post.user_id && post.user_id.profile_image
-          ? post.user_id.profile_image
-          : "https://via.placeholder.com/40",
-    },
-    type: post.category_id?.name || "Unknown Category",
-    time: post.createdAt,
-    content: post.text_content || "No content available",
-    image: post.image || "",
-    liked: post.likes.includes(post.user_id._id), // Check if the user liked the post
-    likeCount: post.likes.length || 0,
-    commentCount: post.comments.length || 0,
-    shareCount: post.shares?.length || 0, // If shares are stored, include them
-    comments: post.comments.map((comment) => ({
-      user: comment.user_id.name,
-      text: comment.text,
-      time: comment.createdAt,
-    })),
-  }));
-};
+
 
 // Get posts that have been reported (i.e. at least one report exists)
 const getReportedPosts = async (req, res) => {

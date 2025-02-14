@@ -1,17 +1,18 @@
 const User = require("../models/userSchema");
-const  Post  = require("../models/postSchema");
+const Post = require("../models/postSchema");
 const nodemailer = require("nodemailer");
 const crypto = require("crypto"); // To generate a random OTP
 const bcrypt = require("bcrypt");
 const mongoose = require("mongoose");
-
 
 const getUserProfile = async (req, res) => {
   try {
     const user = req.user;
 
     if (!user || !user.id) {
-      return res.status(404).json({ message: "User not found in request data." });
+      return res
+        .status(404)
+        .json({ message: "User not found in request data." });
     }
 
     const userDetails = await User.findById(user.id);
@@ -19,15 +20,17 @@ const getUserProfile = async (req, res) => {
       return res.status(404).json({ message: "User not found in database." });
     }
 
-    const userPosts = await Post.find({ user_id: user.id }).sort({ created_at: -1 });
+    const userPosts = await Post.find({ user_id: user.id }).sort({
+      created_at: -1,
+    });
 
     // Format createdAt for each post
-    const formattedPosts = userPosts.map(post => {
+    const formattedPosts = userPosts.map((post) => {
       const createdAt = new Date(post.createdAt);
-      const formattedDate = createdAt.toLocaleDateString('en-US', {
-        year: 'numeric',
-        month: 'long',
-        day: 'numeric',
+      const formattedDate = createdAt.toLocaleDateString("en-US", {
+        year: "numeric",
+        month: "long",
+        day: "numeric",
       });
       return {
         ...post.toObject(),
@@ -50,9 +53,9 @@ const getUserProfile = async (req, res) => {
 // for admin
 const getUserProfileById = async (req, res) => {
   try {
-    const { userId } = req.params; 
+    const { userId } = req.params;
 
-    console.log("Received userId:", userId); 
+    console.log("Received userId:", userId);
 
     if (!userId || userId === "undefined") {
       return res.status(400).json({ message: "Invalid or missing User ID" });
@@ -67,12 +70,14 @@ const getUserProfileById = async (req, res) => {
       return res.status(404).json({ message: "User not found" });
     }
 
-    const userPosts = await Post.find({ user_id: userId }).sort({ createdAt: -1 });
+    const userPosts = await Post.find({ user_id: userId }).sort({
+      createdAt: -1,
+    });
 
     res.status(200).json({
       data: {
         user: userDetails,
-        posts: userPosts.map(post => ({
+        posts: userPosts.map((post) => ({
           ...post.toObject(),
           createdAt: new Date(post.createdAt).toLocaleDateString("en-US", {
             year: "numeric",
@@ -87,7 +92,6 @@ const getUserProfileById = async (req, res) => {
     res.status(500).json({ message: "Internal server error" });
   }
 };
-
 
 const sendOTP = async (req, res) => {
   try {
@@ -240,12 +244,10 @@ const changePassword = async (req, res) => {
     user.password = newPassword; // No need to hash manually; schema middleware will handle it
     await user.save();
 
-    res
-      .status(200)
-      .json({
-        message:
-          "Password changed successfully. Please login with your new password for security reasons.",
-      });
+    res.status(200).json({
+      message:
+        "Password changed successfully. Please login with your new password for security reasons.",
+    });
   } catch (error) {
     console.error("Error changing password:", error);
     res.status(500).json({ message: "Internal server error." });
@@ -275,12 +277,12 @@ const updateProfileImage = async (req, res) => {
     }
 
     // Update profile image path
-    userDetails.profileImage = req.file.path.replace(/\\/g, "/"); // Ensure cross-platform compatibility
+    userDetails.profile_image = req.file.path.replace(/\\/g, "/"); // Ensure cross-platform compatibility
     await userDetails.save();
 
     return res.status(200).json({
       message: "Profile image updated successfully.",
-      profileImage: userDetails.profileImage,
+      profileImage: userDetails.profile_image,
     });
   } catch (error) {
     console.error("Error updating profile image:", error);
@@ -294,9 +296,9 @@ const getFollowCounts = async (req, res) => {
 
     // Fetch user by userId and populate followers and following counts
     const user = await User.findById(userId)
-      .select('followers following') // Select only the relevant fields
-      .populate('followers') // Optional, if you want to get follower details as well
-      .populate('following'); // Optional, if you want to get following details as well
+      .select("followers following") // Select only the relevant fields
+      .populate("followers") // Optional, if you want to get follower details as well
+      .populate("following"); // Optional, if you want to get following details as well
 
     if (!user) {
       return res.status(404).send({ message: "User not found!" });
@@ -323,16 +325,22 @@ const getFollowingOrFollowers = async (req, res) => {
     const { type, search } = req.query;
 
     if (!type || (type !== "followers" && type !== "following")) {
-      return res.status(400).json({ message: "Invalid type parameter! Use 'followers' or 'following'." });
+      return res.status(400).json({
+        message: "Invalid type parameter! Use 'followers' or 'following'.",
+      });
     }
 
     // Fetch user data and populate the relevant field
     const user = await User.findById(userId).populate({
       path: type,
-      match: search ? { $or: [
-        { name: { $regex: search, $options: "i" } },
-        { username: { $regex: search, $options: "i" } }
-      ] } : {}, // Search by name or username if provided
+      match: search
+        ? {
+            $or: [
+              { name: { $regex: search, $options: "i" } },
+              { username: { $regex: search, $options: "i" } },
+            ],
+          }
+        : {}, // Search by name or username if provided
       select: "name username profile_image",
     });
 
@@ -347,11 +355,217 @@ const getFollowingOrFollowers = async (req, res) => {
   }
 };
 
+// update name, bio, email
+const updateUserProfile = async (req, res) => {
+  try {
+    const { name, email, bio, otp } = req.body;
+    const userId = req.user.id;
+
+    // Find user by ID
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ message: "User not found." });
+    }
+
+    // Update email if provided and if it's different from the current email
+    if (typeof email !== "undefined" && email !== user.email) {
+      // Ensure the new email is not an empty string
+      if (!email.trim()) {
+        return res.status(400).json({ message: "Email cannot be empty." });
+      }
+
+      // Check if the email is already taken by another user
+      const existingUser = await User.findOne({ email });
+      if (existingUser) {
+        return res.status(400).json({ message: "Email is already in use." });
+      }
+
+      // Require OTP for email update
+      if (!otp) {
+        return res
+          .status(400)
+          .json({ message: "OTP is required to update email." });
+      }
+      if (user.reset_otp !== otp || user.otp_expiry < new Date()) {
+        return res.status(400).json({ message: "Invalid or expired OTP." });
+      }
+
+      // Update email and clear OTP fields
+      user.email = email;
+      user.reset_otp = null;
+      user.otp_expiry = null;
+    }
+
+    // Update name if provided (even if it is an empty string)
+    if (typeof name !== "undefined") {
+      user.name = name;
+    }
+
+    // Update bio if provided
+    if (typeof bio !== "undefined") {
+      user.bio = bio;
+    }
+
+    await user.save();
+
+    res.status(200).json({ message: "Profile updated successfully.", user });
+  } catch (error) {
+    console.error("Error updating profile:", error);
+    res.status(500).json({ message: "Internal server error." });
+  }
+};
+
+// get Blocked users from a user
+// Get blocked users with name and profile image
+const getBlockedUsers = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const user = await User.findById(userId).populate(
+      "blocked_users",
+      "name profile_image"
+    );
+
+    if (!user) {
+      return res.status(404).json({ message: "User not found." });
+    }
+
+    res.status(200).json({
+      message: "Successfully fetched blocked users.",
+      blocked_users: user.blocked_users,
+    });
+  } catch (error) {
+    console.error("Error getting blocked users:", error);
+    res.status(500).json({ message: "Internal server error." });
+  }
+};
+
+// Block or Unblock a user
+const blockUnblockUser = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { targetUserId } = req.body; // User to block/unblock
+
+    if (!targetUserId) {
+      return res.status(400).json({ message: "Target user ID is required." });
+    }
+
+    const user = await User.findById(userId);
+    const targetUser = await User.findById(targetUserId);
+
+    if (!user || !targetUser) {
+      return res.status(404).json({ message: "User not found." });
+    }
+
+    const isBlocked = user.blocked_users.includes(targetUserId);
+
+    if (isBlocked) {
+      // Unblock user
+      user.blocked_users = user.blocked_users.filter(
+        (id) => id.toString() !== targetUserId
+      );
+      await user.save();
+      return res.status(200).json({ message: "User unblocked successfully." });
+    } else {
+      // Block user
+      user.blocked_users.push(targetUserId);
+      await user.save();
+      return res.status(200).json({ message: "User blocked successfully." });
+    }
+  } catch (error) {
+    console.error("Error blocking/unblocking user:", error);
+    res.status(500).json({ message: "Internal server error." });
+  }
+};
+
+const sendProfileUpdateOTP = async (req, res) => {
+  try {
+    const { email } = req.body;
+    const user = await User.findById(req.user.id);
+    if (!user) {
+      return res.status(404).json({ message: "User not found." });
+    }
+
+    // Generate OTP and set expiry for 15 minutes
+    const otp = crypto.randomInt(100000, 999999).toString();
+    const otpExpiry = new Date(Date.now() + 15 * 60 * 1000);
+    user.reset_otp = otp;
+    user.otp_expiry = otpExpiry;
+    await user.save();
+
+    // Create a transporter using Gmail (adjust if using a different service)
+    const transporter = nodemailer.createTransport({
+      service: "Gmail",
+      auth: { user: process.env.EMAIL, pass: process.env.EMAIL_PASSWORD },
+    });
+
+    // Create the email HTML with a custom design and logo
+    const mailOptions = {
+      from: process.env.EMAIL,
+      to: email,
+      subject: "Your Email Update OTP",
+      html: `
+      <html>
+      <head>
+        <meta charset="UTF-8">
+        <title>Email Update OTP</title>
+      </head>
+      <body style="font-family: Arial, sans-serif; margin: 0; padding: 0; background-color: #f4f4f4;">
+        <table width="100%" border="0" cellspacing="0" cellpadding="0">
+          <tr>
+            <td align="center" style="padding: 20px 0;">
+              <table width="600" border="0" cellspacing="0" cellpadding="0" style="background-color: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+                <!-- Logo/Header -->
+                <tr>
+                  <td align="center" style="padding: 20px;">
+                    <h1 style="margin: 0; font-size: 28px;">
+                      <span style="color: #4F46E5;">global</span><span style="color: #000000;">Connect</span>
+                    </h1>
+                  </td>
+                </tr>
+                <!-- OTP Message -->
+                <tr>
+                  <td align="center" style="padding: 30px;">
+                    <p style="font-size: 18px; margin: 0 0 20px;">Your OTP for updating your email is:</p>
+                    <p style="font-size: 32px; font-weight: bold; margin: 0 0 20px; letter-spacing: 4px;">${otp}</p>
+                    <p style="font-size: 14px; color: #777777; margin: 0;">This OTP is valid for 15 minutes.</p>
+                  </td>
+                </tr>
+                <!-- Footer -->
+                <tr>
+                  <td align="center" style="background-color: #f4f4f4; padding: 20px; font-size: 12px; color: #999999;">
+                    &copy; ${new Date().getFullYear()} globalConnect. All rights reserved.
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+        </table>
+      </body>
+      </html>
+      `,
+    };
+
+    await transporter.sendMail(mailOptions);
+    res.status(200).json({ message: "OTP sent to your email." });
+  } catch (error) {
+    console.error("Error sending OTP:", error);
+    res.status(500).json({ message: "Internal server error." });
+  }
+};
+
+
 module.exports = {
   getUserProfile,
   sendOTP,
   verifyOTP,
   resetPassword,
   changePassword,
-  updateProfileImage,getFollowCounts,getUserProfileById,getFollowingOrFollowers
+  updateProfileImage,
+  getFollowCounts,
+  getUserProfileById,
+  getFollowingOrFollowers,
+  updateUserProfile,
+  sendProfileUpdateOTP,
+  getBlockedUsers,
+  blockUnblockUser,
 };

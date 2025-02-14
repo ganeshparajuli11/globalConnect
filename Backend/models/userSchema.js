@@ -86,7 +86,7 @@ const userSchema = new mongoose.Schema(
       sms: { type: Boolean, default: false },
       push: { type: Boolean, default: true },
     },
-
+    last_activity: { type: Date, default: null },
     // Login activity log
     login_history: [
       {
@@ -101,7 +101,7 @@ const userSchema = new mongoose.Schema(
     warnings: [warningSchema],
   },
   {
-    timestamps: true, // Automatically creates createdAt and updatedAt fields
+    timestamps: true, 
   }
 );
 
