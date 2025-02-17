@@ -220,37 +220,47 @@ const getPostById = async (req, res) => {
   try {
     const { postId } = req.params;
 
-    // Ensure a valid post ID is provided
-    if (!postId) {
-      return res.status(400).json({ message: "Post ID is required." });
-    }
-
-    // Fetch the post and populate relevant fields
+    // Fetch post with necessary details
     const post = await Post.findById(postId)
-      .populate("user_id", "name profile_image email") // Include user details
-      .populate("category_id", "name description") // Include category details
-      .populate("comments") // Assuming comments are stored in a separate collection
-      .populate({
-        path: "comments",
-        populate: { path: "user_id", select: "name profile_image" }, // Populate comment user details
-      });
+      .populate("user_id", "name profile_image")
+      .populate("category_id");
 
-    // If post not found
     if (!post) {
       return res.status(404).json({ message: "Post not found." });
     }
 
+    // Format media array to match `getAllPost`
+    const formattedMedia = post.media.map(media => media.media_path);
+
+    // Construct response in the same structure as `getAllPost`
+    const formattedPost = {
+      id: post._id,
+      user: {
+        _id: post.user_id._id,
+        name: post.user_id.name,
+        profile_image: post.user_id.profile_image,
+      },
+      type: post.category_id.name,
+      time: post.createdAt,
+      content: post.text_content,
+      media: formattedMedia,
+      liked: post.likes.includes(req.user.id), // Check if the user liked it
+      likeCount: post.likes.length,
+      commentCount: post.comments.length,
+      shareCount: post.shares,
+      comments: post.comments, // You may need to format comments separately if needed
+    };
+
     return res.status(200).json({
       message: "Post retrieved successfully.",
-      data: post,
+      data: formattedPost,
     });
   } catch (error) {
     console.error("Error retrieving post:", error);
-    return res
-      .status(500)
-      .json({ message: "Failed to retrieve post details." });
+    return res.status(500).json({ message: "Failed to retrieve post." });
   }
 };
+
 
 // post for admin
 const getAllPostAdmin = async (req, res) => {

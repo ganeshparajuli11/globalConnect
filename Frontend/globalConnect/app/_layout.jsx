@@ -1,17 +1,18 @@
 import React, { useEffect, useState } from "react";
-import { View, ActivityIndicator, LogBox } from "react-native";
+import { View, ActivityIndicator, LogBox, Alert } from "react-native";
 import { Stack, useRouter, useNavigationContainerRef } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import axios from "axios";
 import { AuthProvider, userAuth } from "../contexts/AuthContext";
 import config from "../constants/config";
+import SocketInitializer from "../components/SocketInitializer";
 
 const ip = config.API_IP;
 
 const MainLayout = () => {
-  const { setUserData, setAuth } = userAuth();
+  const { user, setUserData, setAuth } = userAuth();
   const router = useRouter();
-  const navigationRef = useNavigationContainerRef(); // Track navigation readiness
+  const navigationRef = useNavigationContainerRef();
   const [isCheckingAuth, setIsCheckingAuth] = useState(true);
   const [isMounted, setIsMounted] = useState(false);
 
@@ -44,12 +45,7 @@ const MainLayout = () => {
               router.replace("/home");
             }
           } else {
-            console.warn("Non-200 response received:", response.status);
-            setAuth(null);
-            await AsyncStorage.removeItem("authToken");
-            if (navigationRef.isReady()) {
-              router.replace("/Welcome");
-            }
+            handleAuthFailure();
           }
         } else {
           console.log("No token found, redirecting to Welcome");
@@ -58,24 +54,24 @@ const MainLayout = () => {
           }
         }
       } catch (error) {
-        if (axios.isAxiosError(error)) {
-          console.error(
-            "Axios error validating token:",
-            error.response ? JSON.stringify(error.response.data) : error.message
-          );
-        } else {
-          console.error("Unexpected error validating token:", error);
-        }
-        if (navigationRef.isReady()) {
-          router.replace("/login");
-        }
+        console.error("Error during token validation:", error);
+        handleAuthFailure();
       } finally {
         setIsCheckingAuth(false);
       }
     };
 
+    const handleAuthFailure = () => {
+      setAuth(null);
+      AsyncStorage.removeItem("authToken");
+      if (navigationRef.isReady()) {
+        router.replace("/login");
+      }
+      Alert.alert("Authentication Failed", "Please log in again.");
+    };
+
     checkToken();
-  }, [isMounted]); // Ensure navigation only happens after mount
+  }, [isMounted]);
 
   if (isCheckingAuth) {
     return (
@@ -85,7 +81,19 @@ const MainLayout = () => {
     );
   }
 
-  return <Stack screenOptions={{ headerShown: false }} />;
+  return (
+    <>
+      {user && <SocketInitializer />}
+      <Stack screenOptions={{ headerShown: false }}>
+        <Stack.Screen
+          name="postDetails"
+          options={{
+            presentation: 'modal', 
+          }}
+        />
+      </Stack>
+    </>
+  );
 };
 
 LogBox.ignoreLogs([

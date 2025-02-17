@@ -27,6 +27,7 @@ const Home = () => {
 
         {/* Posts List */}
         <FlatList
+    
           data={posts}
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.listStyle}

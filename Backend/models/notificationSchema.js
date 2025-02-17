@@ -5,6 +5,7 @@ const userNotificationSchema = new mongoose.Schema(
     userId: { type: String, required: true }, // User's ID
     message: { type: String, required: true },
     isRead: { type: Boolean, default: false },
+    metadata: { type: Object }, 
   },
   { timestamps: true }
 );

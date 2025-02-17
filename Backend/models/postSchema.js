@@ -3,7 +3,7 @@ const mongoose = require("mongoose");
 // Schema for individual reports on a post
 const reportSchema = new mongoose.Schema({
   reported_by: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
-  reason: { type: String, required: true },
+  reason: { type: String, required: true },  // The name of the report category
   reported_at: { type: Date, default: Date.now }
 });
 
@@ -67,12 +67,12 @@ const postSchema = new mongoose.Schema(
       enum: ["Active", "Suspended", "Blocked", "Under Review", "Deleted"],
       default: "Active"
     },
-    isSuspended: { type: Boolean, default: false }, // Indicates if the post is suspended
+    isSuspended: { type: Boolean, default: false },
     isBlocked: { type: Boolean, default: false }, // Indicates if the post is blocked
-    isUnderReview: { type: Boolean, default: false }, // Indicates if the post is under review
-    suspended_from: { type: Date, default: null }, // Start date of suspension
-    suspended_until: { type: Date, default: null }, // End date of suspension
-    suspension_reason: { type: String }, // Reason for suspension
+    isUnderReview: { type: Boolean, default: false },
+    suspended_from: { type: Date, default: null },
+    suspended_until: { type: Date, default: null },
+    suspension_reason: { type: String },
     reports: [reportSchema],
     moderation_history: [moderationHistorySchema],
     pinned: { type: Boolean, default: false },

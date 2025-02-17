@@ -1,3 +1,5 @@
+// anotherPostDetailCard.jsx
+
 import React, { useState } from "react";
 import {
   StyleSheet,
@@ -19,12 +21,12 @@ import { userAuth } from "../contexts/AuthContext";
 import axios from "axios";
 import { useFetchFollowing } from "../services/followFetchService";
 
-const PostCard = ({
+const PostCardDetails = ({
   item,
   currentUser,
   router,
   hasShadow = true,
-  showMoreIcon = true,
+  showMoreIcon = false,
 }) => {
   const { authToken } = userAuth();
   const ip = config.API_IP;
@@ -40,7 +42,10 @@ const PostCard = ({
   // State for share modal
   const [shareModalVisible, setShareModalVisible] = useState(false);
 
-  // Following list for share modal
+  // **New**: state for “Report Post” modal
+  const [reportModalVisible, setReportModalVisible] = useState(false);
+
+  // Following list
   const { following, loading: loadingFollowing } = useFetchFollowing();
 
   const profileImageURL = item?.user?.profile_image
@@ -53,10 +58,14 @@ const PostCard = ({
   // HTML content width
   const contentWidth = Dimensions.get("window").width - 32;
 
-  // Only navigate to post details if showMoreIcon is true
+  // Handle three-dots press. In post details, show the Report Post modal.
   const handleThreeDotsPress = () => {
     if (showMoreIcon) {
+      // In other contexts, navigate to post details
       router.push(`/postDetails?postId=${item.id}`);
+    } else {
+      // For post details, open the "Report Post" modal
+      setReportModalVisible(true);
     }
   };
 
@@ -76,32 +85,32 @@ const PostCard = ({
 
   const onLike = async () => {
     try {
-
-      setLiked(!liked); 
       const url = `http://${ip}:3000/api/post/like-unlike/${item.id}`;
       const response = await axios.put(
         url,
         {},
-        { headers: { Authorization: `Bearer ${authToken}` } }
+        {
+          headers: { Authorization: `Bearer ${authToken}` },
+        }
       );
+
       const { liked: updatedLiked, likesCount } = response.data;
-      setLiked(updatedLiked); // Set the liked state based on API response
-      setLikeCount(likesCount); // Update like count
+      setLiked(updatedLiked);
+      setLikeCount(likesCount);
     } catch (error) {
       console.error(
         "Error toggling like:",
         error.response ? error.response.data : error.message
       );
-      // Revert to the previous state if there's an error
-      setLiked(liked);
     }
   };
-  
 
+  // Instead of directly sharing, open the share modal
   const onShare = async () => {
     setShareModalVisible(true);
   };
 
+  // Placeholder for actual share
   const sharePostToUser = async (user) => {
     try {
       const url = `http://${ip}:3000/api/post/share`;
@@ -120,32 +129,46 @@ const PostCard = ({
     setShareModalVisible(false);
   };
 
+  const handleReportPost = () => {
+    console.log("Report Post clicked");
+    router.push("/report");
+    router.replace(
+        `/report?postId=${item.id}`
+      );
+    setReportModalVisible(false);
+  };
+
   return (
     <View style={[styles.container, hasShadow && styles.shadow]} key={item.id}>
-      {/* Header with user info and three-dots icon (only when showMoreIcon is true) */}
+      {/* Header with user info and three-dots */}
       <View style={styles.header}>
         <View style={styles.userInfo}>
-          <Avator size={hp(4.5)} uri={profileImageURL} rounded={theme.radius.md} />
+          <Avator
+            size={hp(4.5)}
+            uri={profileImageURL}
+            rounded={theme.radius.md}
+          />
           <View style={styles.userDetails}>
             <Text style={styles.userName}>{item.user.name}</Text>
             <Text style={styles.postTime}>{createdAt}</Text>
           </View>
         </View>
-        {showMoreIcon && (
-          <TouchableOpacity onPress={handleThreeDotsPress}>
-            <Icon
-              name="threeDotsHorizontal"
-              size={hp(3.4)}
-              strokeWidth={3}
-              color={theme.colors.text}
-            />
-          </TouchableOpacity>
-        )}
+        <TouchableOpacity onPress={handleThreeDotsPress}>
+          <Icon
+            name="threeDotsHorizontal"
+            size={hp(3.4)}
+            strokeWidth={3}
+            color={theme.colors.text}
+          />
+        </TouchableOpacity>
       </View>
 
       {/* Post content */}
       <View style={styles.content}>
-        <RenderHtml contentWidth={contentWidth} source={{ html: item.content }} />
+        <RenderHtml
+          contentWidth={contentWidth}
+          source={{ html: item.content }}
+        />
       </View>
 
       {/* Media images (up to 4) */}
@@ -166,7 +189,10 @@ const PostCard = ({
       {/* Fullscreen Modal for images */}
       <Modal visible={fullScreenVisible} transparent={true}>
         <View style={styles.fullScreenContainer}>
-          <Image source={{ uri: selectedImage }} style={styles.fullScreenImage} />
+          <Image
+            source={{ uri: selectedImage }}
+            style={styles.fullScreenImage}
+          />
           <TouchableOpacity style={styles.closeIcon} onPress={closeFullScreen}>
             <Icon name="cross" size={24} color={theme.colors.text} />
           </TouchableOpacity>
@@ -190,10 +216,14 @@ const PostCard = ({
 
         <View style={styles.footerButton}>
           {showMoreIcon ? (
-            <TouchableOpacity onPress={() => router.push(`/postDetails?postId=${item.id}`)}>
+            // Only navigate if showMoreIcon = true
+            <TouchableOpacity
+              onPress={() => router.push(`/postDetails?postId=${item.id}`)}
+            >
               <Icon name="comment" size={24} color={theme.colors.textLight} />
             </TouchableOpacity>
           ) : (
+            // If showMoreIcon = false, just show the icon (no onPress)
             <Icon name="comment" size={24} color={theme.colors.textLight} />
           )}
           <Text style={styles.count}>{item.commentCount}</Text>
@@ -207,7 +237,11 @@ const PostCard = ({
       </View>
 
       {/* Share Modal */}
-      <Modal visible={shareModalVisible} transparent={true} animationType="slide">
+      <Modal
+        visible={shareModalVisible}
+        transparent={true}
+        animationType="slide"
+      >
         <View style={styles.shareModalContainer}>
           <View style={styles.shareModalContent}>
             <Text style={styles.shareModalTitle}>Share Post With</Text>
@@ -236,11 +270,38 @@ const PostCard = ({
           </View>
         </View>
       </Modal>
+
+      {/* Report Post Modal */}
+      <Modal
+        visible={reportModalVisible}
+        transparent={true}
+        animationType="fade"
+      >
+        <View style={styles.reportModalContainer}>
+          <View style={styles.reportModalContent}>
+            <Text style={styles.reportTitle}>Options</Text>
+            <TouchableOpacity
+              onPress={handleReportPost}
+              style={styles.reportButton}
+            >
+              <Text style={styles.reportButtonText}>Report Post</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.reportButton, { backgroundColor: "#ccc" }]}
+              onPress={() => setReportModalVisible(false)}
+            >
+              <Text style={[styles.reportButtonText, { color: "#333" }]}>
+                Cancel
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 };
 
-export default PostCard;
+export default PostCardDetails;
 
 const styles = StyleSheet.create({
   container: {
@@ -376,6 +437,37 @@ const styles = StyleSheet.create({
   },
   cancelButtonText: {
     color: theme.colors.textLight,
+    fontSize: 16,
+  },
+  reportModalContainer: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 20,
+  },
+  reportModalContent: {
+    backgroundColor: theme.colors.white,
+    borderRadius: 10,
+    padding: 20,
+    width: "80%",
+    alignItems: "center",
+  },
+  reportTitle: {
+    fontSize: 18,
+    fontWeight: "bold",
+    marginBottom: 15,
+  },
+  reportButton: {
+    width: "100%",
+    paddingVertical: 12,
+    borderRadius: 8,
+    backgroundColor: "red",
+    marginBottom: 10,
+    alignItems: "center",
+  },
+  reportButtonText: {
+    color: "#fff",
     fontSize: 16,
   },
 });
