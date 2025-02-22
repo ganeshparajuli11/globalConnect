@@ -10,7 +10,6 @@ import Login from "./components/loginAndSignup/Login";
 import Dashboard from "./components/dashboard/Dashboard";
 import UserPage from "./components/userpage/UserPage";
 import PrivacyPolicy from "./components/privacyAndPolicy/PrivacyPolicy";
-import NotificationPage from "./components/notification/NotificationPage";
 import ActiveUser from "./components/userpage/ActiveUser";
 import InActiveUser from "./components/userpage/InActiveUser";
 import ReportedUser from "./components/userpage/ReportedUser";
@@ -20,6 +19,8 @@ import UserProfile from "./components/userpage/UserProfile";
 import AllPost from "./components/post/AllPost";
 import PostProfile from "./components/post/PostProfile";
 import TermsAndCondition from "./components/terms and Condition/TermsAndCondition";
+import NotificationPage from "./components/notification/NotificationPage";
+import Message from "./components/message/Message";
 
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -97,11 +98,12 @@ function App() {
         <Route path="/user/reported" element={<ReportedUser />} />
         <Route path="/privacyPolicy" element={<PrivacyPolicy />} />
         <Route path="/termsAndCondition" element={<TermsAndCondition />} />
-
-        
         <Route path="/notification" element={<NotificationPage />} />
+
         <Route path="/allCategory" element={<AllCategory />} />
         <Route path="/user/:userId" element={<UserProfile />} />
+        <Route path="/message" element={<Message />} />
+
       </Routes>
     </Router>
   );

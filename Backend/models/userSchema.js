@@ -1,12 +1,14 @@
 const mongoose = require("mongoose");
 const bcrypt = require("bcrypt");
 
+const SALT_ROUNDS = 12;
+
 // Schema for logging moderation actions on a user account
 const moderationHistorySchema = new mongoose.Schema({
   admin: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
   action: {
     type: String,
-    enum: ["Suspended", "Banned", "Reinstated", "Warning Issued"],
+    enum: ["Suspended", "Banned", "Reinstated", "Warning Issued", "Login"],
     required: true,
   },
   note: { type: String },
@@ -22,7 +24,6 @@ const warningSchema = new mongoose.Schema({
 
 const userSchema = new mongoose.Schema(
   {
-    // Basic profile details
     username: { type: String, unique: true, sparse: true },
     name: { type: String, required: true },
     email: { type: String, required: true, unique: true },
@@ -51,14 +52,15 @@ const userSchema = new mongoose.Schema(
     // Account and moderation status
     is_blocked: { type: Boolean, default: false },
     reported_count: { type: Number, default: 0 },
+    reported_by: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
     status: {
       type: String,
       enum: ["Active", "Inactive", "Under Review", "Suspended", "Banned"],
       default: "Active",
     },
-    suspended_until: { type: Date, default: null }, 
+    suspended_until: { type: Date, default: null },
 
-    // Interests and personalized recommendations
+    // Interests
     interests: [{ type: String }],
     preferred_categories: [{ type: mongoose.Schema.Types.ObjectId, ref: "Category" }],
 
@@ -73,13 +75,13 @@ const userSchema = new mongoose.Schema(
     likes_given: { type: Number, default: 0 },
     likes_received: { type: Number, default: 0 },
 
-    // Authentication and security fields
+    // Authentication and security
     reset_otp: { type: String, default: null },
     otp_expiry: { type: Date, default: null },
     otp_attempts: { type: Number, default: 0 },
     otp_blocked_until: { type: Date, default: null },
 
-    // Notification settings
+    // Notifications
     notifications_enabled: { type: Boolean, default: true },
     notification_preferences: {
       email: { type: Boolean, default: true },
@@ -87,6 +89,8 @@ const userSchema = new mongoose.Schema(
       push: { type: Boolean, default: true },
     },
     last_activity: { type: Date, default: null },
+    last_login: { type: Date, default: null },
+
     // Login activity log
     login_history: [
       {
@@ -96,48 +100,48 @@ const userSchema = new mongoose.Schema(
       },
     ],
 
-    // Moderation and warning history for audit purposes
+    // Moderation and warning history
     moderation_history: [moderationHistorySchema],
     warnings: [warningSchema],
+
+    // Soft delete
+    is_deleted: { type: Boolean, default: false },
+    deleted_at: { type: Date, default: null },
   },
   {
-    timestamps: true, 
+    timestamps: true,
   }
 );
 
 // Middleware to hash the password before saving
 userSchema.pre("save", async function (next) {
   if (!this.isModified("password")) return next();
-  this.password = await bcrypt.hash(this.password, 10);
-  console.log("Hashed Password:", this.password);
+  this.password = await bcrypt.hash(this.password, SALT_ROUNDS);
   next();
 });
 
-// Instance method to compare provided password with hashed password
-userSchema.methods.comparePassword = async function (password) {
-  return await bcrypt.compare(password, this.password);
+// ✅ Fix: Add comparePassword method
+userSchema.methods.comparePassword = async function (enteredPassword) {
+  return await bcrypt.compare(enteredPassword, this.password);
 };
 
-// Check if OTP is currently blocked
-userSchema.methods.isOTPBlocked = function () {
-  if (!this.otp_blocked_until) return false;
-  return this.otp_blocked_until > new Date();
-};
-
-// Add a follower if not already following
-userSchema.methods.addFollower = function (followerId) {
-  if (!this.followers.includes(followerId)) {
-    this.followers.push(followerId);
+// Methods for blocking/unblocking users
+userSchema.methods.blockUser = function (userId) {
+  if (!this.blocked_users.includes(userId)) {
+    this.blocked_users.push(userId);
     return this.save();
   }
 };
 
-// Add a following if not already following
-userSchema.methods.addFollowing = function (userId) {
-  if (!this.following.includes(userId)) {
-    this.following.push(userId);
-    return this.save();
-  }
+userSchema.methods.unblockUser = function (userId) {
+  this.blocked_users = this.blocked_users.filter(id => id.toString() !== userId.toString());
+  return this.save();
+};
+
+// Track last login
+userSchema.methods.updateLastLogin = function () {
+  this.last_login = new Date();
+  return this.save();
 };
 
 module.exports = mongoose.model("User", userSchema);

@@ -7,6 +7,7 @@ import {
   Dimensions,
   Modal,
   Image,
+  Alert,
 } from "react-native";
 import moment from "moment";
 import RenderHtml from "react-native-render-html";
@@ -29,7 +30,7 @@ const PostCard = ({
   const { authToken } = userAuth();
   const ip = config.API_IP;
 
-  // State for likes
+  // State for likes (specific to current user)
   const [liked, setLiked] = useState(item.liked);
   const [likeCount, setLikeCount] = useState(item.likeCount);
 
@@ -75,28 +76,30 @@ const PostCard = ({
   };
 
   const onLike = async () => {
-    try {
+    // Save previous state in case the API call fails
+    const prevLiked = liked;
+    const prevLikeCount = likeCount;
+    const newLiked = !liked;
+    const newLikeCount = likeCount + (liked ? -1 : 1);
 
-      setLiked(!liked); 
+    // Optimistically update UI
+    setLiked(newLiked);
+    setLikeCount(newLikeCount);
+
+    try {
       const url = `http://${ip}:3000/api/post/like-unlike/${item.id}`;
-      const response = await axios.put(
-        url,
-        {},
-        { headers: { Authorization: `Bearer ${authToken}` } }
-      );
-      const { liked: updatedLiked, likesCount } = response.data;
-      setLiked(updatedLiked); // Set the liked state based on API response
-      setLikeCount(likesCount); // Update like count
+      await axios.put(url, {}, { headers: { Authorization: `Bearer ${authToken}` } });
+      // Do not override our optimistic state. If needed, you can later sync with server data.
     } catch (error) {
       console.error(
         "Error toggling like:",
         error.response ? error.response.data : error.message
       );
-      // Revert to the previous state if there's an error
-      setLiked(liked);
+      // Revert to previous state if there was an error
+      setLiked(prevLiked);
+      setLikeCount(prevLikeCount);
     }
   };
-  
 
   const onShare = async () => {
     setShareModalVisible(true);
@@ -122,7 +125,7 @@ const PostCard = ({
 
   return (
     <View style={[styles.container, hasShadow && styles.shadow]} key={item.id}>
-      {/* Header with user info and three-dots icon (only when showMoreIcon is true) */}
+      {/* Header with user info and three-dots icon */}
       <View style={styles.header}>
         <View style={styles.userInfo}>
           <Avator size={hp(4.5)} uri={profileImageURL} rounded={theme.radius.md} />
@@ -148,7 +151,7 @@ const PostCard = ({
         <RenderHtml contentWidth={contentWidth} source={{ html: item.content }} />
       </View>
 
-      {/* Media images (up to 4) */}
+      {/* Media images */}
       {item.media && item.media.length > 0 && (
         <View style={styles.mediaContainer}>
           {item.media.slice(0, 4).map((mediaUrl, index) => (
@@ -178,7 +181,6 @@ const PostCard = ({
         <View style={styles.footerButton}>
           <TouchableOpacity onPress={onLike}>
             <Icon
-              key={`heart-${liked}`}
               name="heart"
               size={24}
               fill={liked ? theme.colors.heart : "transparent"}

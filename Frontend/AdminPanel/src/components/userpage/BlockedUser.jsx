@@ -37,6 +37,10 @@ const BlockedUser = () => {
         }
     }, [accessToken]);
 
+    const handleUserClick = (userId) => {
+        navigate(`/user/${userId}`);
+      };
+      
     return (
         <div className="flex min-h-screen bg-gray-100 font-sans">
             <div className="w-64 bg-white shadow-md">

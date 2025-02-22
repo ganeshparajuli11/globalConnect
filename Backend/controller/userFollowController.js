@@ -20,47 +20,33 @@ const followUser = async (req, res) => {
     const { followUserId } = req.body;
 
     if (!userId || !followUserId) {
-      return res.status(400).json({ error: 'Both userId and followUserId are required.' });
+      return res.status(400).json({ error: "Both userId and followUserId are required." });
     }
 
     const user = await User.findById(userId);
     const followUser = await User.findById(followUserId);
 
     if (!user || !followUser) {
-      return res.status(404).json({ error: 'User not found.' });
+      return res.status(404).json({ error: "User not found." });
     }
 
-    // Check if already following
     if (user.following.includes(followUserId)) {
-      return res.status(400).json({ error: 'You are already following this user.' });
+      return res.status(400).json({ error: "You are already following this user." });
     }
 
-    // Update following and followers lists
     user.following.push(followUserId);
     await user.save();
 
     followUser.followers.push(userId);
     await followUser.save();
 
-    // Create and send a follow notification
-    const notificationResult = await sendFollowNotification({ followerId: userId, followedId: followUserId });
-    console.log('Notification result:', notificationResult);
-
-    // Emit an additional real-time notification if the followed user is online
-    if (io) {
-      io.to(followUserId.toString()).emit('receiveNotification', {
-        message: `${user.name} followed you!`,
-        followerId: userId,
-        createdAt: new Date(),
-      });
-    }
-
     return res.status(200).json({ success: true, message: `You are now following ${followUser.name}.` });
   } catch (error) {
-    console.error('Error following user:', error);
-    return res.status(500).json({ error: 'An error occurred while following the user.' });
+    console.error("Error following user:", error);
+    return res.status(500).json({ error: error.message || "An error occurred while following the user." });
   }
 };
+
 
 /**
  * Unfollow a user.
@@ -72,22 +58,20 @@ const unfollowUser = async (req, res) => {
     const { unfollowUserId } = req.body;
 
     if (!userId || !unfollowUserId) {
-      return res.status(400).json({ error: 'Both userId and unfollowUserId are required.' });
+      return res.status(400).json({ error: "Both userId and unfollowUserId are required." });
     }
 
     const user = await User.findById(userId);
     const unfollowUser = await User.findById(unfollowUserId);
 
     if (!user || !unfollowUser) {
-      return res.status(404).json({ error: 'User not found.' });
+      return res.status(404).json({ error: "User not found." });
     }
 
-    // Check if the user is actually following the target user
     if (!user.following.includes(unfollowUserId)) {
-      return res.status(400).json({ error: 'You are not following this user.' });
+      return res.status(400).json({ error: "You are not following this user." });
     }
 
-    // Remove the follow relationship
     user.following = user.following.filter((id) => id.toString() !== unfollowUserId);
     await user.save();
 
@@ -96,10 +80,11 @@ const unfollowUser = async (req, res) => {
 
     return res.status(200).json({ success: true, message: `You have unfollowed ${unfollowUser.name}.` });
   } catch (error) {
-    console.error('Error unfollowing user:', error);
-    return res.status(500).json({ error: 'An error occurred while unfollowing the user.' });
+    console.error("Error unfollowing user:", error);
+    return res.status(500).json({ error: error.message || "An error occurred while unfollowing the user." });
   }
 };
+
 
 /**
  * Get the list of followers for the logged-in user.

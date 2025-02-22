@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 import { StyleSheet, Text, View, FlatList, ActivityIndicator } from "react-native";
 import BottomNav from "../../components/bottomNav";
 import { theme } from "../../constants/theme";
@@ -8,10 +8,33 @@ import { useRouter } from "expo-router";
 import { useFetchPosts } from "../../services/postServices";
 import PostCard from "../../components/PostCard";
 import { StatusBar } from "expo-status-bar";
+import SearchBar from "../../components/SearchBar";
+import SortCategory from "../../components/SortCategory";
+import UserCard from "../../components/UserCard";
+import { useSearchUsers } from "../../services/useSearchUsers";
 
 const Home = () => {
   const router = useRouter();
-  const { posts, fetchPosts, loading, hasMore, page } = useFetchPosts();
+  const [searchQuery, setSearchQuery] = useState("");
+  // Default to "All" so all posts are fetched initially.
+  const [selectedCategory, setSelectedCategory] = useState("All");
+
+  // Hook for posts
+  const { posts, fetchPosts, loading, hasMore, page, resetPosts } = useFetchPosts(selectedCategory);
+
+  // Hook for searching users (people)
+  const { users, loading: searchLoading } = useSearchUsers(searchQuery);
+
+  // When the selected category changes, reset and fetch fresh posts.
+  useEffect(() => {
+    resetPosts();
+    fetchPosts(1, true);
+  }, [selectedCategory]);
+
+  // Decide which content to show:
+  // If there's a search query, we'll show search results (people)
+  // Otherwise, we show the normal posts (with category sort)
+  const isSearching = searchQuery.trim().length > 0;
 
   return (
     <ScreenWrapper>
@@ -25,48 +48,72 @@ const Home = () => {
           </Text>
         </View>
 
-        {/* Posts List */}
-        <FlatList
-    
-          data={posts}
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={styles.listStyle}
-          keyExtractor={(item) => item.id}
-          renderItem={({ item }) => (
-            <PostCard item={item} router={router} />
-          )}
-          onEndReached={() => {
-            if (hasMore && !loading) {
-              fetchPosts(page, false);
-            }
-          }}
-          onEndReachedThreshold={0.5}
-          // Display a message if no posts are available at all
-          ListEmptyComponent={
-            !loading && (
-              <View style={styles.emptyContainer}>
-                <Text style={styles.emptyText}>No posts available</Text>
-              </View>
-            )
-          }
-          // Footer component for loading indicator or "no more posts" message
-          ListFooterComponent={() => {
-            if (loading) {
-              return <ActivityIndicator style={{ marginVertical: 30 }} size="large" />;
-            }
-            if (!hasMore && posts.length > 0) {
-              return (
-                <View style={styles.footerContainer}>
-                  <Text style={styles.footerText}>No more posts available</Text>
+        {/* Search Bar */}
+        <SearchBar searchQuery={searchQuery} setSearchQuery={setSearchQuery} />
+
+        {isSearching ? (
+          // Render search results for people
+          <FlatList
+            data={users}
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={styles.listStyle}
+            keyExtractor={(item) => item._id}
+            renderItem={({ item }) => (
+              <UserCard user={item} isFollowing={false} onFollowToggle={() => {}} router = {router} />
+            )}
+            ListEmptyComponent={
+              !searchLoading && (
+                <View style={styles.emptyContainer}>
+                  <Text style={styles.emptyText}>No users found</Text>
                 </View>
-              );
+              )
             }
-            return null;
-          }}
-        />
+            ListFooterComponent={
+              searchLoading && <ActivityIndicator style={{ marginVertical: 30 }} size="large" />
+            }
+          />
+        ) : (
+          // Otherwise, show posts & sorting
+          <>
+            <SortCategory selectedCategory={selectedCategory} setSelectedCategory={setSelectedCategory} />
+            <FlatList
+              data={posts}
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={styles.listStyle}
+              keyExtractor={(item) => item.id}
+              renderItem={({ item }) => <PostCard item={item} router={router} />}
+              onEndReached={() => {
+                if (hasMore && !loading) {
+                  fetchPosts(page, false);
+                }
+              }}
+              onEndReachedThreshold={0.5}
+              ListEmptyComponent={
+                !loading && (
+                  <View style={styles.emptyContainer}>
+                    <Text style={styles.emptyText}>No posts available</Text>
+                  </View>
+                )
+              }
+              ListFooterComponent={() => {
+                if (loading) {
+                  return <ActivityIndicator style={{ marginVertical: 30 }} size="large" />;
+                }
+                if (!hasMore && posts.length > 0) {
+                  return (
+                    <View style={styles.footerContainer}>
+                      <Text style={styles.footerText}>No more posts available</Text>
+                    </View>
+                  );
+                }
+                return null;
+              }}
+            />
+          </>
+        )}
       </View>
 
-      {/* Bottom Navigation always rendered at the bottom */}
+      {/* Bottom Navigation */}
       <BottomNav />
     </ScreenWrapper>
   );
@@ -98,7 +145,7 @@ const styles = StyleSheet.create({
   listStyle: {
     paddingTop: 20,
     paddingHorizontal: wp(4),
-    paddingBottom: hp(8), // Ensures content isn't hidden behind BottomNav
+    paddingBottom: hp(8),
   },
   emptyContainer: {
     alignItems: "center",

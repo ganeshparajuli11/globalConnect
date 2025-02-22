@@ -1,5 +1,5 @@
 const express = require("express");
-const { getUserDashboard, getUserStats, getActiveUsers, getInactiveUsers, getAllUsers, getBlockedUsers, getReportedUsers, updateLocation, updateReachedDestination } = require("../controller/adminUserController");
+const { getUserDashboard, getUserStats, getActiveUsers, getInactiveUsers, getAllUsers, getBlockedUsers, getReportedUsers, updateLocation, updateReachedDestination, updateUserActivity } = require("../controller/adminUserController");
 const { checkAuthentication, checkIsAdmin, checkIsUser } = require("../middleware/middleware");
 const router = express.Router();
 
@@ -12,6 +12,8 @@ router.get("/get-blocked-user",checkAuthentication,checkIsAdmin,getBlockedUsers)
 router.get("/get-all-reported-user",checkAuthentication,checkIsAdmin,getReportedUsers )
 router.post("/get-location",checkAuthentication,checkIsUser,updateLocation )
 router.put("/reached",checkAuthentication,checkIsUser,updateReachedDestination )
+router.put("/update-status",checkAuthentication,checkIsUser,updateUserActivity )
+
 
 
 

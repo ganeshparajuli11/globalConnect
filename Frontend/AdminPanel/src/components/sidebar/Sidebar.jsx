@@ -5,7 +5,9 @@ import {
   FaBell,
   FaFileAlt,
   FaTags,
-  FaFileContract, // Added for Terms & Conditions
+  FaFileContract, // For Terms & Conditions
+  FaUserShield, // For Admin Management
+  FaComments, // Added for Chat option
   // You can import more icons if needed, e.g., FaCogs for Settings
 } from "react-icons/fa";
 import { BiLogOut } from "react-icons/bi";
@@ -147,7 +149,7 @@ const Sidebar = ({ setIsAuthenticated }) => {
           </li>
           {activeMenu === "posts" && (
             <ul className="ml-8 space-y-2">
-              {["all", "blocked"].map((type) => (
+              {["all", "report"].map((type) => (
                 <li key={type}>
                   <NavLink
                     to={`/posts/${type}`}
@@ -199,14 +201,31 @@ const Sidebar = ({ setIsAuthenticated }) => {
 
           {/* Notifications Section */}
           <NavLink
-            onClick={() => navigate("/notification")} // Navigate to /notification
-            className="cursor-pointer"
+            to="/notification"
+            className={({ isActive }) =>
+              `px-6 py-3 flex justify-between hover:bg-blue-100 ${
+                isActive ? "bg-blue-100" : ""
+              }`
+            }
           >
-            <div className="px-6 py-3 flex justify-between hover:bg-blue-100">
-              <div className="flex items-center space-x-3">
-                <FaBell className="text-lg" />
-                <span>Notifications</span>
-              </div>
+            <div className="flex items-center space-x-3">
+              <FaBell className="text-lg" />
+              <span>Notifications</span>
+            </div>
+          </NavLink>
+
+          {/* Chat Option */}
+          <NavLink
+            to="/message"
+            className={({ isActive }) =>
+              `px-6 py-3 flex justify-between hover:bg-blue-100 ${
+                isActive ? "bg-blue-100" : ""
+              }`
+            }
+          >
+            <div className="flex items-center space-x-3">
+              <FaComments className="text-lg" />
+              <span>Chat</span>
             </div>
           </NavLink>
 
@@ -243,25 +262,60 @@ const Sidebar = ({ setIsAuthenticated }) => {
             </NavLink>
           </li>
 
-          {/* (Optional) Additional Link: Settings or Reports */}
-          {/* Uncomment and modify the code below if you wish to add another option */}
-          {/*
-          <li>
-            <NavLink
-              to="/settings"
-              className={({ isActive }) =>
-                `px-6 py-3 flex items-center space-x-3 ${
-                  isActive
-                    ? "bg-blue-100 text-blue-700 font-bold"
-                    : "hover:bg-blue-100 text-gray-700"
-                }`
-              }
+          {/* Admin Management Section */}
+          <li onClick={() => toggleMenu("admin")} className="cursor-pointer">
+            <div
+              className={`px-6 py-3 flex justify-between ${
+                activeMenu === "admin" ? "bg-blue-100" : "hover:bg-blue-100"
+              }`}
             >
-              <FaCogs className="text-lg" />
-              <span>Settings</span>
-            </NavLink>
+              <div className="flex items-center space-x-3">
+                <FaUserShield className="text-lg" />
+                <span>Admin Management</span>
+              </div>
+              <span>{activeMenu === "admin" ? "-" : "+"}</span>
+            </div>
           </li>
-          */}
+          {activeMenu === "admin" && (
+            <ul className="ml-8 space-y-2">
+              <li>
+                <NavLink
+                  to="/admin/roles"
+                  className={({ isActive }) =>
+                    `block py-2 ${
+                      isActive ? "text-blue-700 font-bold" : "text-gray-700"
+                    }`
+                  }
+                >
+                  Roles
+                </NavLink>
+              </li>
+              <li>
+                <NavLink
+                  to="/admin/permissions"
+                  className={({ isActive }) =>
+                    `block py-2 ${
+                      isActive ? "text-blue-700 font-bold" : "text-gray-700"
+                    }`
+                  }
+                >
+                  Permissions
+                </NavLink>
+              </li>
+              <li>
+                <NavLink
+                  to="/admin/audit-logs"
+                  className={({ isActive }) =>
+                    `block py-2 ${
+                      isActive ? "text-blue-700 font-bold" : "text-gray-700"
+                    }`
+                  }
+                >
+                  Audit Logs
+                </NavLink>
+              </li>
+            </ul>
+          )}
         </ul>
       </div>
 

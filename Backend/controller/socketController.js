@@ -1,15 +1,15 @@
 let onlineUsers = new Map(); // Track online users
 
-// Function to handle user connection
 const handleConnection = (io, socket) => {
   console.log("A user connected:", socket.id);
 
+  // Handle user joining
   socket.on("join", (userId) => {
     onlineUsers.set(userId, socket.id);
     socket.userId = userId;
     console.log(`User ${userId} is online with socket ID: ${socket.id}`);
+    io.emit("updateOnlineUsers", Array.from(onlineUsers.keys())); // Broadcast updated online users
   });
-  
 
   // Handle Follow Notification
   socket.on("sendFollowNotification", ({ recipientId, followerId }) => {
@@ -40,42 +40,46 @@ const handleConnection = (io, socket) => {
     }
   });
 
-  // Handle Sending Messages
-  socket.on("sendMessage", (data, callback) => {
-    const { senderId, receiverId, content, messageType, postId } = data;
-    console.log(`Sending message from ${senderId} to ${receiverId}...`);
-  
-    const recipientSocketId = onlineUsers.get(receiverId);
-    console.log(`Recipient Socket ID: ${recipientSocketId}`);
-  
-    if (recipientSocketId) {
-      io.to(recipientSocketId).emit("receiveMessage", {
-        senderId,
-        content,
-        messageType,
-        postId: postId || null,
-        timestamp: Date.now(),
-      });
-  
-      if (callback) callback({ status: "delivered", timestamp: Date.now() });
-    } else {
-      if (callback) callback({ status: "offline", timestamp: Date.now() });
-    }
-  });
-  
 
-  // Handle Receiving Messages
+// Handle Sending Messages
+socket.on("sendMessage", (data, callback) => {
+  const { senderId, receiverId, content, messageType, postId } = data;
+  console.log(`📩 Sending message from ${senderId} to ${receiverId}...`);
+
+  const recipientSocketId = onlineUsers.get(receiverId);
+  console.log(`Recipient Socket ID: ${recipientSocketId}`);
+
+  if (recipientSocketId) {
+    console.log(`✅ Emitting message to socket: ${recipientSocketId}`);
+    io.to(recipientSocketId).emit("receiveMessage", {
+      senderId,
+      content,
+      messageType,
+      postId: postId || null,
+      timestamp: Date.now(),
+    });
+
+    if (callback) callback({ status: "delivered", timestamp: Date.now() });
+  } else {
+    console.log(`❌ User ${receiverId} is offline. Message not delivered.`);
+    if (callback) callback({ status: "offline", timestamp: Date.now() });
+  }
+});
+
+
+  // Handle Listening for Messages
   socket.on("receiveMessageRequest", (userId) => {
     console.log(`User ${userId} is listening for messages.`);
     socket.emit("receiveMessageAcknowledged", { message: "Listening for messages..." });
   });
 
-  // Handle user disconnection
+  // Handle User Disconnection
   socket.on("disconnect", () => {
     console.log("User disconnected:", socket.id);
     if (socket.userId) {
       onlineUsers.delete(socket.userId);
       console.log(`User ${socket.userId} is offline.`);
+      io.emit("updateOnlineUsers", Array.from(onlineUsers.keys())); // Broadcast updated online users
     }
   });
 };
@@ -87,4 +91,4 @@ const initSocket = (io) => {
   });
 };
 
-module.exports = { initSocket };
+module.exports = { initSocket, onlineUsers };

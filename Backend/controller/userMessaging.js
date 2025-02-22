@@ -3,7 +3,7 @@ const User = require("../models/userSchema");
 const Message = require("../models/messageSchema");
 const Post = require("../models/postSchema"); // For handling post messages
 const { sendFirebaseNotification } = require("./firebaseController");
-const { io } = require("../app");
+const { onlineUsers } = require("./socketController");
 
 // Convert the hex string from .env to a 32-byte Buffer.
 const ENCRYPTION_KEY = Buffer.from(process.env.ENCRYPTION_KEY, "hex");
@@ -54,7 +54,7 @@ const canMessage = async (userId1, userId2) => {
   return user1FollowsUser2 && user2FollowsUser1;
 };
 
-const sendMessage = async (req, res) => {
+const sendMessage = async (req, res, io) => {
   try {
     const senderId = req.user?.id;
     const { receiverId, content, messageType, postId } = req.body;
@@ -65,57 +65,62 @@ const sendMessage = async (req, res) => {
     console.log("Content:", content);
 
     if (!receiverId || !messageType) {
-      return res
-        .status(400)
-        .json({ error: "Receiver ID and message type are required." });
+      return res.status(400).json({ error: "Receiver ID and message type are required." });
     }
 
-    let encryptedContent = content; // Initialize with content as-is
-    let media = []; // Store uploaded media if message type is 'image'
+    let encryptedContent = content;
+    let media = [];
 
-    // Handle text message
+    // Encrypt text messages
     if (messageType === "text") {
       if (!content || typeof content !== "string") {
-        return res
-          .status(400)
-          .json({ error: "Text content is required for text messages." });
+        return res.status(400).json({ error: "Text content is required for text messages." });
       }
       encryptedContent = encrypt(content);
     }
 
-    // Handle image messages (similar to post media processing)
+    // Handle image messages
     if (messageType === "image") {
       if (!req.files || req.files.length === 0) {
-        return res
-          .status(400)
-          .json({ error: "At least one image file is required." });
+        return res.status(400).json({ error: "At least one image file is required." });
       }
-
-      // Process uploaded media files
       media = req.files.map((file) => ({
         media_path: `/uploads/messages/${file.filename}`,
         media_type: file.mimetype,
       }));
     }
 
-    // Create and save the message
+    // Save message to database
     const message = new Message({
       sender: senderId,
       receiver: receiverId,
       messageType,
-      content: messageType === "image" ? null : encryptedContent, // Store null if it's an image message
-      media: messageType === "image" ? media : [], // Store media array for image messages
+      content: messageType === "image" ? null : encryptedContent,
+      media: messageType === "image" ? media : [],
       post: messageType === "post" ? postId : null,
     });
 
     await message.save();
 
-    // Send message via WebSocket if receiver is online
-    if (io && io.sockets.adapter.rooms.has(receiverId)) {
-      io.to(receiverId).emit("newMessage", { senderId, message });
-      console.log(`Message sent to Receiver: ${receiverId}`);
+    // Fetch the socket ID of the receiver
+    const recipientSocketId = onlineUsers.get(receiverId);
+    console.log(`Recipient Socket ID: ${recipientSocketId}`);
+
+    if (recipientSocketId) {
+      console.log(`🔹 Sending message via WebSocket to ${receiverId} at socket ${recipientSocketId}`);
+
+      io.to(recipientSocketId).emit("receiveMessage", {
+        senderId,
+        content: messageType === "text" ? content : null,
+        messageType,
+        media: messageType === "image" ? media : [],
+        postId: postId || null,
+        timestamp: Date.now(),
+      });
+
+      console.log(`✅ Message delivered to ${receiverId}`);
     } else {
-      console.log(`Receiver ${receiverId} is not connected to WebSocket.`);
+      console.log(`❌ Receiver ${receiverId} is not online. Storing message.`);
     }
 
     res.status(200).json({
@@ -125,9 +130,7 @@ const sendMessage = async (req, res) => {
     });
   } catch (error) {
     console.error("Error sending message:", error);
-    res
-      .status(500)
-      .json({ error: "An error occurred while sending the message." });
+    res.status(500).json({ error: "An error occurred while sending the message." });
   }
 };
 

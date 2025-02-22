@@ -2,7 +2,17 @@ import { useState, useEffect } from "react";
 import { useParams } from "react-router-dom";
 import axios from "axios";
 import Sidebar from "../sidebar/Sidebar";
-import UserBar from "./UserBar";
+import ProfilePostCard from "./profilePostCard";
+import moment from "moment";
+// Helper to get full profile image URL
+const getProfileUrl = (path) => {
+  if (!path) return "https://via.placeholder.com/150";
+  if (path.startsWith("http") || path.startsWith("//")) return path;
+  return `http://localhost:3000/${path}`;
+};
+
+
+
 
 // Placeholder for an activity graph (you can replace this with an actual chart component)
 const ActivityGraph = () => (
@@ -14,62 +24,7 @@ const ActivityGraph = () => (
   </div>
 );
 
-// Reusable component to render individual posts
-const PostCard = ({ post, user }) => (
-  <div className="bg-white shadow rounded-lg p-4 mb-6">
-    {/* Header */}
-    <div className="flex items-center mb-3">
-      <img
-        src={user.profile_image || "https://via.placeholder.com/40"}
-        alt="User Profile"
-        className="w-10 h-10 rounded-full mr-3 object-cover"
-      />
-      <div>
-        <h3 className="text-md font-semibold">{user.name}</h3>
-        <p className="text-xs text-gray-500">
-          {new Date(post.createdAt).toLocaleString()}
-        </p>
-      </div>
-    </div>
-    {/* Content */}
-    <div className="mb-3">
-      <p className="text-gray-800">{post.text_content}</p>
-    </div>
-    {/* Media */}
-    {post.media && post.media.length > 0 && (
-      <div className="mb-3">
-        {post.media.map((mediaItem) =>
-          mediaItem.media_type.startsWith("image") ? (
-            <img
-              key={mediaItem._id}
-              src={mediaItem.media_path}
-              alt="Media"
-              className="w-full rounded-lg object-cover"
-            />
-          ) : (
-            <video key={mediaItem._id} controls className="w-full rounded-lg">
-              <source src={mediaItem.media_path} type={mediaItem.media_type} />
-              Your browser does not support video.
-            </video>
-          )
-        )}
-      </div>
-    )}
-    {/* Tags */}
-    {post.tags && post.tags.length > 0 && (
-      <div className="flex flex-wrap">
-        {post.tags.map((tag, index) => (
-          <span
-            key={index}
-            className="text-xs bg-gray-200 text-gray-800 rounded-full px-2 py-1 mr-2 mb-2"
-          >
-            #{tag}
-          </span>
-        ))}
-      </div>
-    )}
-  </div>
-);
+
 
 // Overview Tab: Basic profile details and activity graph
 const OverviewTab = ({ user }) => (
@@ -85,7 +40,7 @@ const OverviewTab = ({ user }) => (
             <strong>Email:</strong> {user.email}
           </p>
           <p>
-            <strong>Age:</strong> {user.age}
+            <strong>Age:</strong> {moment(user.dob).format("MMMM D, YYYY")}
           </p>
           <p>
             <strong>Gender:</strong> {user.gender}
@@ -103,7 +58,7 @@ const OverviewTab = ({ user }) => (
           </p>
           <p>
             <strong>Joined:</strong>{" "}
-            {new Date(user.date_created).toLocaleString()}
+            {moment(user.date_created).format("MMMM D, YYYY, h:mm A")}
           </p>
         </div>
       </div>
@@ -112,19 +67,50 @@ const OverviewTab = ({ user }) => (
   </div>
 );
 
-// Posts Tab: Display user's posts
-const PostsTab = ({ posts, user }) => (
-  <div className="p-6">
-    <h3 className="text-xl font-bold mb-4">User Posts</h3>
-    {posts.length > 0 ? (
-      posts.map((post) => (
-        <PostCard key={post._id} post={post} user={user} />
-      ))
-    ) : (
-      <p className="text-gray-600">No posts available.</p>
-    )}
-  </div>
-);
+
+const PostsTab = ({ posts, user }) => {
+  const [sortBy, setSortBy] = useState("latest");
+  // Sorting Logic
+  const sortedPosts = [...posts].sort((a, b) => {
+    if (sortBy === "latest")
+      return new Date(b.createdAt) - new Date(a.createdAt);
+    if (sortBy === "oldest")
+      return new Date(a.createdAt) - new Date(b.createdAt);
+    if (sortBy === "report_count")
+      return (b.report_count || 0) - (a.report_count || 0);
+    return 0;
+  });
+
+  return (
+    <div className="p-6">
+      <div className="flex justify-between items-center mb-4">
+        <h3 className="text-xl font-bold">User Posts</h3>
+
+        {/* Sorting Dropdown */}
+        <select
+          className="border p-2 rounded"
+          value={sortBy}
+          onChange={(e) => setSortBy(e.target.value)}
+        >
+          <option value="latest">Latest</option>
+          <option value="oldest">Oldest</option>
+          <option value="report_count">Most Reported</option>
+        </select>
+      </div>
+
+      {/* Scrollable Post List */}
+      <div className="h-[500px] overflow-y-auto p-2 bg-gray-50 rounded-lg">
+        {sortedPosts.length > 0 ? (
+          sortedPosts.map((post) => (
+            <ProfilePostCard key={post._id} post={post} user={user} />
+          ))
+        ) : (
+          <p className="text-gray-600">No posts available.</p>
+        )}
+      </div>
+    </div>
+  );
+};
 
 // Activity Tab: Login history and activity logs
 const ActivityTab = ({ user }) => (
@@ -168,12 +154,10 @@ const EngagementTab = ({ user }) => (
     <div className="bg-white p-4 rounded shadow">
       <h3 className="text-lg font-bold mb-2">Social Connections</h3>
       <p>
-        <strong>Followers:</strong>{" "}
-        {user.followers ? user.followers.length : 0}
+        <strong>Followers:</strong> {user.followers ? user.followers.length : 0}
       </p>
       <p>
-        <strong>Following:</strong>{" "}
-        {user.following ? user.following.length : 0}
+        <strong>Following:</strong> {user.following ? user.following.length : 0}
       </p>
       <p>
         <strong>Blocked Users:</strong>{" "}
@@ -304,16 +288,12 @@ const UserProfileDashboard = () => {
       </div>
       {/* Main Content */}
       <div className="flex-1">
-        <UserBar />
         {/* User Profile Header */}
         <div className="bg-white shadow rounded-lg m-6 p-6 flex items-center">
           <img
-            src={
-              userData.user.profile_image ||
-              "https://via.placeholder.com/150"
-            }
+            src={getProfileUrl(userData.user.profile_image)}
             alt="Profile"
-            className="w-24 h-24 rounded-full mr-6 object-cover"
+            className="w-20 h-20 rounded-full mr-6 object-cover"
           />
           <div>
             <h2 className="text-3xl font-bold">{userData.user.name}</h2>

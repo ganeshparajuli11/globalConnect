@@ -3,15 +3,17 @@ import Sidebar from "../sidebar/Sidebar";
 import { reactLocalStorage } from "reactjs-localstorage";
 import axios from "axios";
 import UserBar from "../userpage/UserBar";
+import { useNavigate } from "react-router-dom";
 
 const Dashboard = () => {
+  const navigate = useNavigate();
   const [accessToken, setAccessToken] = useState(null);
   const [reportedUsers, setReportedUsers] = useState([]);
 
   useEffect(() => {
     const token = reactLocalStorage.get("access_token");
     if (token) {
-      setAccessToken(token); // Set token to state
+      setAccessToken(token);
     }
   }, []);
 
@@ -29,11 +31,15 @@ const Dashboard = () => {
         },
       })
       .then((res) => {
-        setReportedUsers(res.data.data); // Storing the reported users data
+        setReportedUsers(res.data.data);
       })
       .catch((error) => {
         console.error("Error fetching reported users:", error);
       });
+  };
+
+  const handleUserClick = (userId) => {
+    navigate(`/user/${userId}`);
   };
 
   return (
@@ -56,31 +62,47 @@ const Dashboard = () => {
         </div>
 
         {/* User Stats Section */}
-        <UserBar />{/* Use UserBar */}
+        <UserBar />
 
         {/* Table Section */}
         <div className="bg-white rounded-md shadow-md p-6">
-          <h2 className="text-lg font-bold text-gray-700 mb-4">Highly Reported Users</h2>
+          <h2 className="text-lg font-bold text-gray-700 mb-4">
+            Highly Reported Users
+          </h2>
           <table className="w-full text-left border-collapse">
             <thead>
               <tr>
-                <th className="border-b py-3 px-4 text-gray-600 font-medium">Sr. No</th>
-                <th className="border-b py-3 px-4 text-gray-600 font-medium">User Name</th>
-                <th className="border-b py-3 px-4 text-gray-600 font-medium">Blocked</th>
-                <th className="border-b py-3 px-4 text-gray-600 font-medium">Reported Content</th>
-                <th className="border-b py-3 px-4 text-gray-600 font-medium">Reported Count</th> {/* New column */}
+                <th className="border-b py-3 px-4 text-gray-600 font-medium">
+                  Sr. No
+                </th>
+                <th className="border-b py-3 px-4 text-gray-600 font-medium">
+                  User Name
+                </th>
+                <th className="border-b py-3 px-4 text-gray-600 font-medium">
+                  Reported Post
+                </th>
+                <th className="border-b py-3 px-4 text-gray-600 font-medium">
+                  Reported Content
+                </th>
+                <th className="border-b py-3 px-4 text-gray-600 font-medium">
+                  Reported Count
+                </th>
               </tr>
             </thead>
             <tbody>
               {reportedUsers.map((user, index) => (
-                <tr key={user.s_n}>
+                <tr
+                  key={user.s_n}
+                  onClick={() => handleUserClick(user.user_id)}
+                  className="cursor-pointer hover:bg-gray-200 transition duration-200"
+                >
                   <td className="border-b py-3 px-4">{user.s_n}</td>
                   <td className="border-b py-3 px-4">{user.name}</td>
                   <td className="border-b py-3 px-4">
-                    {user.blocked_count === 1 ? "Blocked" : "Not Blocked"} {/* Condition for Blocked status */}
+                    {user.blocked_count === 1 ? "Reported" : "Not Reported"}
                   </td>
                   <td className="border-b py-3 px-4">{user.reported_posts}</td>
-                  <td className="border-b py-3 px-4">{user.reported_count}</td> {/* Display reported_count */}
+                  <td className="border-b py-3 px-4">{user.reported_count}</td>
                 </tr>
               ))}
             </tbody>

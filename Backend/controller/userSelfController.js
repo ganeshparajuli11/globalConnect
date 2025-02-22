@@ -553,9 +553,101 @@ const sendProfileUpdateOTP = async (req, res) => {
   }
 };
 
+const searchUser = async (req, res) => {
+
+  try {
+    const { query } = req.query;
+    // Search for users by name, username, etc.
+    // This is just an example. You can use regex or text search based on your needs.
+    const users = await User.find({ name: { $regex: query, $options: "i" } }).limit(10);
+    res.status(200).json({ data: users });
+  } catch (error) {
+    console.error("Error searching users:", error);
+    res.status(500).json({ message: "Search failed" });
+  }
+}
+
+
+const getUserProfileForMobile = async (req, res) => {
+  try {
+    const { userId } = req.params;
+
+    console.log("Fetching profile for userId:", userId);
+
+    if (!userId || userId === "undefined") {
+      return res.status(400).json({ message: "Invalid or missing User ID" });
+    }
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
+      return res.status(400).json({ message: "Invalid User ID format" });
+    }
+
+    // Fetch user details and exclude sensitive data
+    const userDetails = await User.findById(userId)
+      .select("-password -reported_by -moderation_history -warnings")
+      .lean();
+
+    if (!userDetails) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    // Ensure followers array exists before calling map()
+    const currentUserId = req.user.id;
+    const isFollowing = userDetails.followers?.some(
+      (follower) => follower.toString() === currentUserId.toString()
+    ) || false;
+
+    // Fetch posts by this user
+    const userPosts = await Post.find({ user_id: userId })
+      .sort({ createdAt: -1 })
+      .select("text_content media likes comments createdAt")
+      .lean();
+
+    const formattedPosts = userPosts.map((post) => ({
+      ...post,
+      createdAt: new Date(post.createdAt).toLocaleDateString("en-US", {
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+      }),
+      likesCount: post.likes.length,
+      commentsCount: post.comments.length,
+    }));
+
+    res.status(200).json({
+      data: {
+        user: {
+          id: userDetails._id,
+          username: userDetails.username,
+          name: userDetails.name,
+          email: userDetails.email,
+          bio: userDetails.bio,
+          profile_image: userDetails.profile_image,
+          dob: userDetails.dob,
+          gender: userDetails.gender,
+          location: userDetails.current_location,
+          destination: userDetails.destination_country,
+          followersCount: userDetails.followers?.length || 0,
+          followingCount: userDetails.following?.length || 0,
+          postsCount: userDetails.posts_count || 0,
+          likesReceived: userDetails.likes_received || 0,
+          status: userDetails.status,
+          isBlocked: userDetails.is_blocked,
+          isSuspended: userDetails.status === "Suspended",
+          isFollowing, // ✅ Now correctly returns true/false
+        },
+        posts: formattedPosts,
+      },
+    });
+  } catch (error) {
+    console.error("Error fetching user profile:", error);
+    res.status(500).json({ message: "Internal server error" });
+  }
+};
+
 
 module.exports = {
   getUserProfile,
+  searchUser,
   sendOTP,
   verifyOTP,
   resetPassword,
@@ -568,4 +660,5 @@ module.exports = {
   sendProfileUpdateOTP,
   getBlockedUsers,
   blockUnblockUser,
+  getUserProfileForMobile
 };

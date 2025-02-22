@@ -1,9 +1,18 @@
 const User = require("../models/userSchema");
 const jwt = require("jsonwebtoken");
+const DeviceDetector = require("device-detector-js");
 
 // Signup Function
 async function signup(req, res) {
-  const { name, email, password, dob, profile_image, role, destination_country } = req.body;
+  const {
+    name,
+    email,
+    password,
+    dob,
+    profile_image,
+    role,
+    destination_country,
+  } = req.body;
 
   try {
     // Check if email is already registered
@@ -24,7 +33,9 @@ async function signup(req, res) {
 
     // If the user's age is less than 18
     if (age < 18 || (age === 18 && month < 0)) {
-      return res.status(400).json({ message: "You must be at least 18 years old to register." });
+      return res
+        .status(400)
+        .json({ message: "You must be at least 18 years old to register." });
     }
 
     // Create a new user instance
@@ -43,11 +54,9 @@ async function signup(req, res) {
 
     // Generate JWT token
     const JWT_SECRET_KEY = process.env.JWT_SECRET_KEY || "default_secret";
-    const token = jwt.sign(
-      { id: user._id, role: user.role },
-      JWT_SECRET_KEY,
-      { expiresIn: "1h" }
-    );
+    const token = jwt.sign({ id: user._id, role: user.role }, JWT_SECRET_KEY, {
+      expiresIn: "1h",
+    });
 
     // Return success response with token
     res.status(201).json({
@@ -65,55 +74,71 @@ async function signup(req, res) {
   }
 }
 
-
 // Login
 
 async function login(req, res) {
   const { email, password } = req.body;
+  const userIp = req.ip || req.headers["x-forwarded-for"] || req.connection.remoteAddress;
+  const deviceDetector = new DeviceDetector();
+  const deviceInfo = deviceDetector.parse(req.headers["user-agent"]);
 
   try {
-    // Check if the user exists
+    // Check if user exists
     const user = await User.findOne({ email });
     if (!user) {
       return res.status(404).json({ message: "User not found. Please sign up first." });
     }
 
-    // If user status is inactive, set it to active
+    // If user status is inactive, activate account
     if (user.status === "Inactive") {
       user.status = "Active";
-      await user.save(); // Save the updated status
     }
 
-    // Check if the user is blocked
+    // Check if user is blocked
     if (user.is_blocked) {
       return res.status(403).json({ message: "Your account is currently blocked. Please contact support." });
     }
 
-    // Log the password and stored hashed password
-    console.log("Login Attempt - Password:", password);
-    console.log("Stored Password Hash:", user.password);
-
     // Compare password
     const isPasswordValid = await user.comparePassword(password);
-    console.log("Password Validity:", isPasswordValid); // Log result
     if (!isPasswordValid) {
-      console.error("Invalid password");
       return res.status(401).json({ message: "Invalid email or password." });
     }
 
     // Generate JWT token
     const token = jwt.sign(
-      {
-        id: user._id,
-        email: user.email,
-        role: user.role,
-      },
-      process.env.JWT_SECRET_KEY || "default_secret", // Use an environment variable or fallback to default
+      { id: user._id, email: user.email, role: user.role },
+      process.env.JWT_SECRET_KEY || "default_secret",
       { expiresIn: "7d" }
     );
 
-    // Update last login timestamp
+    // ✅ Update last login timestamp
     user.last_login = new Date();
+
+    // ✅ Save login history with user IP & device details
+    user.login_history.push({
+      date: new Date(),
+      ip_address: userIp,
+      device: deviceInfo.client ? deviceInfo.client.name : "Unknown Device",
+    });
+
+    // ✅ Keep only the last 10 login records
+    if (user.login_history.length > 10) {
+      user.login_history = user.login_history.slice(-10);
+    }
+
+    // ✅ Track login in moderation history
+    user.moderation_history.push({
+      admin: user._id, // Self-tracking (optional: replace with an admin if needed)
+      action: "Login",
+      note: `User logged in from ${deviceInfo.client ? deviceInfo.client.name : "Unknown Device"} (${userIp})`,
+      date: new Date(),
+    });
+
+    // ✅ Explicitly mark fields as modified
+    user.markModified("login_history");
+    user.markModified("moderation_history");
+
     await user.save();
 
     // Return success response
@@ -125,17 +150,18 @@ async function login(req, res) {
         name: user.name,
         email: user.email,
         role: user.role,
-        location: user.location,
         profile_image: user.profile_image,
         verified: user.verified,
+        last_login: user.last_login,
+        login_history: user.login_history,
+        moderation_history: user.moderation_history,
       },
     });
   } catch (error) {
-    console.error("Login Error:", error); // Log full error for debugging
+    console.error("Login Error:", error);
     res.status(500).json({ message: "An error occurred during login.", error: error.message });
   }
 }
-
 
 
 async function loginAdmin(req, res) {
@@ -145,7 +171,9 @@ async function loginAdmin(req, res) {
     // Check if the user exists
     const user = await User.findOne({ email });
     if (!user) {
-      return res.status(404).json({ message: "User not found. Please sign up first." });
+      return res
+        .status(404)
+        .json({ message: "User not found. Please sign up first." });
     }
 
     // Check if the user has an admin role
@@ -155,7 +183,11 @@ async function loginAdmin(req, res) {
 
     // Check if the user is active
     if (user.status !== "Active") {
-      return res.status(403).json({ message: "Your account is currently blocked. Please contact support." });
+      return res
+        .status(403)
+        .json({
+          message: "Your account is currently blocked. Please contact support.",
+        });
     }
 
     // Compare password
@@ -197,11 +229,16 @@ async function loginAdmin(req, res) {
     });
   } catch (error) {
     console.error("Login Error:", error); // Log full error for debugging
-    res.status(500).json({ message: "An error occurred during login.", error: error.message });
+    res
+      .status(500)
+      .json({
+        message: "An error occurred during login.",
+        error: error.message,
+      });
   }
 }
 
-// selecting the destination country: 
+// selecting the destination country:
 async function updateDestinationCountry(req, res) {
   try {
     // Retrieve the user ID from the authenticated token
@@ -210,7 +247,9 @@ async function updateDestinationCountry(req, res) {
 
     // Validate input
     if (!destination_country) {
-      return res.status(400).json({ message: "Destination country is required." });
+      return res
+        .status(400)
+        .json({ message: "Destination country is required." });
     }
 
     // Update the user's destination country
@@ -236,9 +275,10 @@ async function updateDestinationCountry(req, res) {
     });
   } catch (error) {
     console.error("Error updating destination country:", error);
-    res.status(500).json({ message: "An error occurred.", error: error.message });
+    res
+      .status(500)
+      .json({ message: "An error occurred.", error: error.message });
   }
 }
 
-
-  module.exports = {login, signup,loginAdmin,updateDestinationCountry};
+module.exports = { login, signup, loginAdmin, updateDestinationCountry };

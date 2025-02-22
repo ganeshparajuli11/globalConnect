@@ -59,31 +59,29 @@ async function createPost(req, res) {
     });
   }
 }
-
 const getAllPost = async (req, res) => {
   try {
-    // Get pagination and category filter from query parameters
     let { page = 1, limit = 5, category = "" } = req.query;
     page = parseInt(page);
     limit = parseInt(limit);
 
-    // Ensure the user is authenticated
     const userId = req.user.id;
     if (!userId) {
       return res.status(401).json({ message: "Unauthorized access." });
     }
 
-    // Fetch user details (only need preferred_categories and following)
     const user = await User.findById(userId).select("preferred_categories following");
     if (!user) {
       return res.status(404).json({ message: "User not found." });
     }
 
-    // Base query to exclude blocked/under-review/suspended posts
     const currentDate = new Date();
+    // Base query: exclude blocked, under review posts, and ensure suspension (if any) has expired.
+    // Also filter out posts that have 5 or more reports.
     let baseQuery = {
       isBlocked: false,
       isUnderReview: false,
+      "reports.4": { $exists: false }, // if 5th report exists then skip this post
       $or: [
         { isSuspended: false },
         {
@@ -96,23 +94,39 @@ const getAllPost = async (req, res) => {
       ],
     };
 
-    // If a specific category is requested, simply filter and use pagination
-    if (category) {
-      baseQuery.category_id = category;
+    // Apply category filtering if provided (and not "All")
+    if (category && category !== "All") {
+      // If the category value contains a comma, assume multiple IDs are provided
+      if (category.includes(",")) {
+        const categoryArray = category.split(","); // e.g. "cat1,cat2,cat3"
+        baseQuery.category_id = { $in: categoryArray };
+      } else {
+        baseQuery.category_id = category;
+      }
+    }
 
-      const posts = await Post.find(baseQuery)
-        .populate("user_id", "name profile_image")
+    // For queries with a category filter (i.e. user selected one or more categories other than "All")
+    if (category && category !== "All") {
+      let posts = await Post.find(baseQuery)
+        .populate({
+          path: "user_id",
+          select: "name profile_image reported_count",
+          match: { reported_count: { $lt: 4 } }, // filter out posts from users with reported_count >= 4
+        })
         .populate("category_id")
         .sort({ createdAt: -1 })
         .skip((page - 1) * limit)
         .limit(limit);
 
+      // Remove posts whose populated user is null (i.e. user reported_count was too high)
+      posts = posts.filter(post => post.user_id);
       return res.status(200).json({
         message: "Posts retrieved successfully.",
         data: formatPosts(posts),
       });
     } else {
-      // Build interest-based query for preferred categories or followed users
+      // If no category filter is applied or "All" is selected,
+      // then use your existing interest-based logic.
       const interestQuery = {
         ...baseQuery,
         $or: [
@@ -121,40 +135,45 @@ const getAllPost = async (req, res) => {
         ],
       };
 
-      // Determine if the user is new (no preferences/following)
       const isNewUser = user.preferred_categories.length === 0 && user.following.length === 0;
-
       if (!isNewUser) {
-        // Split limit: 70% interest-based, 30% general
+        // Split the limit for interest-based and general posts
         const interestLimit = Math.ceil(limit * 0.7);
         const generalLimit = limit - interestLimit;
 
-        // Use pagination for both parts:
-        const interestBasedPosts = await Post.find(interestQuery)
-          .populate("user_id", "name profile_image")
+        let interestBasedPosts = await Post.find(interestQuery)
+          .populate({
+            path: "user_id",
+            select: "name profile_image reported_count",
+            match: { reported_count: { $lt: 4 } },
+          })
           .populate("category_id")
           .sort({ createdAt: -1 })
           .skip((page - 1) * interestLimit)
           .limit(interestLimit);
 
-        // Exclude any posts already returned by interest-based query.
+        interestBasedPosts = interestBasedPosts.filter(post => post.user_id);
+
         const interestPostIds = interestBasedPosts.map(post => post._id);
 
-        // For general posts, exclude posts already fetched in interest-based query.
-        const generalPosts = await Post.find({
+        let generalPosts = await Post.find({
           ...baseQuery,
           _id: { $nin: interestPostIds }
         })
-          .populate("user_id", "name profile_image")
+          .populate({
+            path: "user_id",
+            select: "name profile_image reported_count",
+            match: { reported_count: { $lt: 4 } },
+          })
           .populate("category_id")
           .sort({ createdAt: -1 })
           .skip((page - 1) * generalLimit)
           .limit(generalLimit);
 
-        // Combine the results
-        const combinedPosts = [...interestBasedPosts, ...generalPosts];
+        generalPosts = generalPosts.filter(post => post.user_id);
 
-        // Remove duplicates (if any) based on post._id
+        // Combine and sort the two sets of posts
+        const combinedPosts = [...interestBasedPosts, ...generalPosts];
         const uniquePosts = combinedPosts.filter((post, index, self) =>
           index === self.findIndex(p => p._id.toString() === post._id.toString())
         ).sort((a, b) => b.createdAt - a.createdAt);
@@ -164,25 +183,30 @@ const getAllPost = async (req, res) => {
           data: formatPosts(uniquePosts),
         });
       }
+
+      // Fallback for new users: simply fetch posts with baseQuery.
+      let posts = await Post.find(baseQuery)
+        .populate({
+          path: "user_id",
+          select: "name profile_image reported_count",
+          match: { reported_count: { $lt: 4 } },
+        })
+        .populate("category_id")
+        .sort({ createdAt: -1 })
+        .skip((page - 1) * limit)
+        .limit(limit);
+      posts = posts.filter(post => post.user_id);
+      return res.status(200).json({
+        message: "Posts retrieved successfully.",
+        data: formatPosts(posts),
+      });
     }
-
-    // Fallback for new users: fetch general posts with pagination
-    const posts = await Post.find(baseQuery)
-      .populate("user_id", "name profile_image")
-      .populate("category_id")
-      .sort({ createdAt: -1 })
-      .skip((page - 1) * limit)
-      .limit(limit);
-
-    return res.status(200).json({
-      message: "Posts retrieved successfully.",
-      data: formatPosts(posts),
-    });
   } catch (error) {
     console.error("Error retrieving posts:", error);
     return res.status(500).json({ message: "Failed to retrieve posts." });
   }
 };
+
 
 // Function to format posts
 const formatPosts = (posts) => {

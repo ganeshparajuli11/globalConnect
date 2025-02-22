@@ -35,7 +35,6 @@ const Login = () => {
   useFocusEffect(
     useCallback(() => {
       const onBackPress = () => {
-        // Returning true prevents the default back navigation
         return true;
       };
       BackHandler.addEventListener("hardwareBackPress", onBackPress);
@@ -153,7 +152,7 @@ export default Login;
 const styles = StyleSheet.create({
   backButtonContainer: {
     position: "absolute",
-    top: hp(6), // Offset to avoid overlapping the status bar
+    top: hp(6), 
     left: wp(3),
     zIndex: 10,
   },
@@ -204,7 +203,7 @@ const styles = StyleSheet.create({
     borderColor: theme.colors.gray,
     borderRadius: theme.radius.md,
     paddingHorizontal: wp(3),
-    paddingRight: wp(10), // Extra space for the icon
+    paddingRight: wp(10), 
     height: "100%",
     fontSize: 14,
     color: theme.colors.textDark,
@@ -226,7 +225,7 @@ const styles = StyleSheet.create({
     marginTop: hp(2),
   },
   buttonText: {
-    // Optionally override button text styles here if needed
+    
   },
   footer: {
     flexDirection: "row",

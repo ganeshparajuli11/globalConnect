@@ -1,6 +1,6 @@
 const express = require('express');
 const { checkAuthentication, checkIsUser, bothUser } = require('../middleware/middleware');
-const { getUserProfile, sendOTP, verifyOTP, resetPassword, changePassword, updateProfileImage, getFollowCounts, getUserProfileById, getFollowingOrFollowers, sendProfileUpdateOTP, updateUserProfile, blockUnblockUser, getBlockedUsers } = require('../controller/userSelfController');
+const { getUserProfile, sendOTP, verifyOTP, resetPassword, changePassword, updateProfileImage, getFollowCounts, getUserProfileById, getFollowingOrFollowers, sendProfileUpdateOTP, updateUserProfile, blockUnblockUser, getBlockedUsers, searchUser, getUserProfileForMobile } = require('../controller/userSelfController');
 const { uploadProfileImage } = require('../middleware/uploadMiddleware');
 const router = express.Router();
 
@@ -28,9 +28,13 @@ router.post('/update',checkAuthentication,bothUser, updateUserProfile);
 router.get('/follow-counts', checkAuthentication, checkIsUser, getFollowCounts);
 router.put('/block-unblock', checkAuthentication,checkIsUser, blockUnblockUser);
 router.get('/get-blocked', checkAuthentication,checkIsUser, getBlockedUsers);
+router.get('/search', checkAuthentication,checkIsUser, searchUser);
+
 
 
 router.get('/user-data-admin/:userId', checkAuthentication, getUserProfileById);
+router.get('/user-data-user/:userId', checkAuthentication,checkIsUser,getUserProfileForMobile );
+
 router.get('/user-connections', checkAuthentication, getFollowingOrFollowers);
 
 

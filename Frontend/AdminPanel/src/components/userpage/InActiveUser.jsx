@@ -17,6 +17,10 @@ const InactiveUser = () => {
         }
     }, []);
 
+    const handleUserClick = (userId) => {
+        navigate(`/user/${userId}`);
+      };
+
     // Fetch inactive users when the component mounts
     useEffect(() => {
         if (accessToken) {
@@ -72,7 +76,7 @@ const InactiveUser = () => {
                 <div className="overflow-x-auto bg-white shadow-md rounded-lg">
                     <table className="w-full text-left border-collapse">
                         <thead className="bg-gray-100">
-                            <tr>
+                            <tr  onClick={() => handleUserClick(user.userId)} >
                                 <th className="px-6 py-3 text-gray-600 font-medium">SN</th>
                                 <th className="px-6 py-3 text-gray-600 font-medium">Name</th>
                                 <th className="px-6 py-3 text-gray-600 font-medium">Email</th>
