@@ -5,10 +5,9 @@ import {
   FaBell,
   FaFileAlt,
   FaTags,
-  FaFileContract, // For Terms & Conditions
-  FaUserShield, // For Admin Management
-  FaComments, // Added for Chat option
-  // You can import more icons if needed, e.g., FaCogs for Settings
+  FaFileContract, // Terms & Conditions
+  FaUserShield,   // Admin Management
+  FaComments,     // Chat
 } from "react-icons/fa";
 import { BiLogOut } from "react-icons/bi";
 import { MdPrivacyTip } from "react-icons/md";
@@ -18,7 +17,7 @@ import axios from "axios";
 const Sidebar = ({ setIsAuthenticated }) => {
   const navigate = useNavigate();
   const location = useLocation();
-  const [activeMenu, setActiveMenu] = useState(""); // Keeps menu open
+  const [activeMenu, setActiveMenu] = useState(""); // For sections with toggles
   const [accessToken, setAccessToken] = useState(null);
   const [getUserData, setUserData] = useState({
     name: "",
@@ -27,7 +26,7 @@ const Sidebar = ({ setIsAuthenticated }) => {
   });
   const [showLogoutDialog, setShowLogoutDialog] = useState(false);
 
-  // Function to toggle the active menu
+  // Toggle function for sections with submenus (except Admin Management)
   const toggleMenu = (menu) => {
     setActiveMenu(activeMenu === menu ? "" : menu);
   };
@@ -62,7 +61,7 @@ const Sidebar = ({ setIsAuthenticated }) => {
     }
   }, [accessToken]);
 
-  // Keeps the sidebar open if the current route matches
+  // Keep sidebar toggles open for certain sections
   useEffect(() => {
     if (location.pathname.startsWith("/user")) {
       setActiveMenu("users");
@@ -89,9 +88,7 @@ const Sidebar = ({ setIsAuthenticated }) => {
               to="/dashboard"
               className={({ isActive }) =>
                 `px-6 py-3 flex items-center space-x-3 ${
-                  isActive
-                    ? "bg-blue-100 text-blue-700 font-bold"
-                    : "hover:bg-blue-100 text-gray-700"
+                  isActive ? "bg-blue-100 text-blue-700 font-bold" : "hover:bg-blue-100 text-gray-700"
                 }`
               }
             >
@@ -151,10 +148,7 @@ const Sidebar = ({ setIsAuthenticated }) => {
             <ul className="ml-8 space-y-2">
               {["all", "report"].map((type) => (
                 <li key={type}>
-                  <NavLink
-                    to={`/posts/${type}`}
-                    className="block py-2 text-gray-700"
-                  >
+                  <NavLink to={`/posts/${type}`} className="block py-2 text-gray-700">
                     {type.charAt(0).toUpperCase() + type.slice(1)} Posts
                   </NavLink>
                 </li>
@@ -163,15 +157,10 @@ const Sidebar = ({ setIsAuthenticated }) => {
           )}
 
           {/* Categories Section */}
-          <li
-            onClick={() => toggleMenu("categories")}
-            className="cursor-pointer"
-          >
+          <li onClick={() => toggleMenu("categories")} className="cursor-pointer">
             <div
               className={`px-6 py-3 flex justify-between ${
-                activeMenu === "categories"
-                  ? "bg-blue-100"
-                  : "hover:bg-blue-100"
+                activeMenu === "categories" ? "bg-blue-100" : "hover:bg-blue-100"
               }`}
             >
               <div className="flex items-center space-x-3">
@@ -189,10 +178,7 @@ const Sidebar = ({ setIsAuthenticated }) => {
                 </NavLink>
               </li>
               <li>
-                <NavLink
-                  to="/categories/blocked"
-                  className="block py-2 text-gray-700"
-                >
+                <NavLink to="/categories/blocked" className="block py-2 text-gray-700">
                   Blocked Categories
                 </NavLink>
               </li>
@@ -235,9 +221,7 @@ const Sidebar = ({ setIsAuthenticated }) => {
               to="/privacyPolicy"
               className={({ isActive }) =>
                 `px-6 py-3 flex items-center space-x-3 ${
-                  isActive
-                    ? "bg-blue-100 text-blue-700 font-bold"
-                    : "hover:bg-blue-100 text-gray-700"
+                  isActive ? "bg-blue-100 text-blue-700 font-bold" : "hover:bg-blue-100 text-gray-700"
                 }`
               }
             >
@@ -245,15 +229,12 @@ const Sidebar = ({ setIsAuthenticated }) => {
               <span>Privacy Policy</span>
             </NavLink>
           </li>
-
           <li>
             <NavLink
               to="/termsAndCondition"
               className={({ isActive }) =>
                 `px-6 py-3 flex items-center space-x-3 ${
-                  isActive
-                    ? "bg-blue-100 text-blue-700 font-bold"
-                    : "hover:bg-blue-100 text-gray-700"
+                  isActive ? "bg-blue-100 text-blue-700 font-bold" : "hover:bg-blue-100 text-gray-700"
                 }`
               }
             >
@@ -262,60 +243,20 @@ const Sidebar = ({ setIsAuthenticated }) => {
             </NavLink>
           </li>
 
-          {/* Admin Management Section */}
-          <li onClick={() => toggleMenu("admin")} className="cursor-pointer">
-            <div
-              className={`px-6 py-3 flex justify-between ${
-                activeMenu === "admin" ? "bg-blue-100" : "hover:bg-blue-100"
-              }`}
+          {/* Admin Management Section: now a single link */}
+          <li>
+            <NavLink
+              to="/admin"
+              className={({ isActive }) =>
+                `px-6 py-3 flex items-center space-x-3 ${
+                  isActive ? "bg-blue-100 text-blue-700 font-bold" : "hover:bg-blue-100 text-gray-700"
+                }`
+              }
             >
-              <div className="flex items-center space-x-3">
-                <FaUserShield className="text-lg" />
-                <span>Admin Management</span>
-              </div>
-              <span>{activeMenu === "admin" ? "-" : "+"}</span>
-            </div>
+              <FaUserShield className="text-lg" />
+              <span>Admin Management</span>
+            </NavLink>
           </li>
-          {activeMenu === "admin" && (
-            <ul className="ml-8 space-y-2">
-              <li>
-                <NavLink
-                  to="/admin/roles"
-                  className={({ isActive }) =>
-                    `block py-2 ${
-                      isActive ? "text-blue-700 font-bold" : "text-gray-700"
-                    }`
-                  }
-                >
-                  Roles
-                </NavLink>
-              </li>
-              <li>
-                <NavLink
-                  to="/admin/permissions"
-                  className={({ isActive }) =>
-                    `block py-2 ${
-                      isActive ? "text-blue-700 font-bold" : "text-gray-700"
-                    }`
-                  }
-                >
-                  Permissions
-                </NavLink>
-              </li>
-              <li>
-                <NavLink
-                  to="/admin/audit-logs"
-                  className={({ isActive }) =>
-                    `block py-2 ${
-                      isActive ? "text-blue-700 font-bold" : "text-gray-700"
-                    }`
-                  }
-                >
-                  Audit Logs
-                </NavLink>
-              </li>
-            </ul>
-          )}
         </ul>
       </div>
 

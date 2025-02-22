@@ -19,13 +19,14 @@ export const useFetchChatList = () => {
   const [chatList, setChatList] = useState([]);
   const [loading, setLoading] = useState(false);
 
-  console.log("testing the token at top", authToken)
   const fetchChatList = useCallback(async () => {
     setLoading(true);
     try {
+      console.log("Fetching chat list from:", ALL_MESSAGE_API_URL);
       const response = await axios.get(ALL_MESSAGE_API_URL, {
         headers: { Authorization: `Bearer ${authToken}` },
       });
+      console.log("Chat list response:", response.data);
       if (response.data.success) {
         setChatList(response.data.data);
       } else {
@@ -35,21 +36,20 @@ export const useFetchChatList = () => {
         );
       }
     } catch (error) {
+      console.error("Error in fetchChatList:");
       if (error.response) {
         console.error(
-          "Error fetching chat list: Server responded with status",
+          "Server responded with status",
           error.response.status,
           "and data:",
           error.response.data
         );
       } else if (error.request) {
-        console.error(
-          "Error fetching chat list: No response received",
-          error.request
-        );
+        console.error("No response received:", error.request);
       } else {
-        console.error("Error fetching chat list:", error.message);
+        console.error("Error message:", error.message);
       }
+      console.error("Full error details:", error.toJSON ? error.toJSON() : error);
     } finally {
       setLoading(false);
     }
@@ -62,38 +62,50 @@ export const useFetchChatList = () => {
   return { chatList, loading, fetchChatList };
 };
 
-
+/**
+ * Function to send a message.
+ * Logs detailed error information if sending fails.
+ */
 export const sendMessage = async (messageData, authToken) => {
   try {
     const headers = { Authorization: `Bearer ${authToken}` };
-    // If messageData is FormData (image upload), set the content type accordingly
+    // If messageData is FormData (for image uploads), set the content type accordingly
     if (messageData instanceof FormData) {
       headers["Content-Type"] = "multipart/form-data";
+      // Log FormData entries for debugging:
+      console.log("FormData entries:");
+      for (let [key, value] of messageData.entries()) {
+        console.log(key, value);
+      }
     }
-    const response = await axios.post(SEND_MESSAGE_API_URL, messageData, {
-      headers,
-    });
+    console.log("Sending message to:", SEND_MESSAGE_API_URL);
+    console.log("Message data:", messageData);
+    const response = await axios.post(SEND_MESSAGE_API_URL, messageData, { headers });
+    console.log("Send message response:", response.data);
     return response.data;
   } catch (error) {
+    console.error("Error sending message:");
     if (error.response) {
-      console.error(
-        "Error sending message: Server responded with status",
-        error.response.status,
-        "and data:",
-        error.response.data
-      );
+      console.error("Server responded with status", error.response.status);
+      console.error("Response headers:", error.response.headers);
+      console.error("Response data:", error.response.data);
     } else if (error.request) {
-      console.error("Error sending message: No response received", error.request);
+      console.error("No response received. Request details:", error.request);
     } else {
-      console.error("Error sending message:", error.message);
+      console.error("Error message:", error.message);
     }
+    console.error("Full error details:", error.toJSON ? error.toJSON() : error);
     throw error;
   }
 };
 
-
+/**
+ * Hook to fetch the conversation with a specific sender.
+ * Logs additional error details on failure.
+ */
 export const useFetchConversation = (senderId) => {
   const { authToken } = userAuth();
+  console.log("Using token in conversation fetch:", authToken);
   const [conversation, setConversation] = useState([]);
   const [loading, setLoading] = useState(false);
 
@@ -101,11 +113,18 @@ export const useFetchConversation = (senderId) => {
     if (!senderId) return;
     setLoading(true);
     try {
+      console.log(
+        "Fetching conversation from:",
+        RECEIVE_MESSAGE_API_URL,
+        "with senderId:",
+        senderId
+      );
       const response = await axios.post(
         RECEIVE_MESSAGE_API_URL,
         { senderId },
         { headers: { Authorization: `Bearer ${authToken}` } }
       );
+      console.log("Conversation response:", response.data);
       if (response.data.success) {
         setConversation(response.data.data);
       } else {
@@ -115,21 +134,20 @@ export const useFetchConversation = (senderId) => {
         );
       }
     } catch (error) {
+      console.error("Error fetching conversation:");
       if (error.response) {
         console.error(
-          "Error fetching conversation: Server responded with status",
+          "Server responded with status",
           error.response.status,
           "and data:",
           error.response.data
         );
       } else if (error.request) {
-        console.error(
-          "Error fetching conversation: No response received",
-          error.request
-        );
+        console.error("No response received:", error.request);
       } else {
-        console.error("Error fetching conversation:", error.message);
+        console.error("Error message:", error.message);
       }
+      console.error("Full error details:", error.toJSON ? error.toJSON() : error);
     } finally {
       setLoading(false);
     }
@@ -140,4 +158,14 @@ export const useFetchConversation = (senderId) => {
   }, [fetchConversation]);
 
   return { conversation, loading, fetchConversation };
+};
+
+/**
+ * Helper to build a full media URL from a relative path.
+ */
+export const getFullMediaUrl = (mediaPath) => {
+  if (!mediaPath) return "";
+  // Remove any leading slashes if needed and build the full URL
+  const normalizedPath = mediaPath.startsWith("/") ? mediaPath.slice(1) : mediaPath;
+  return `http://${config.API_IP}:3000/${normalizedPath}`;
 };

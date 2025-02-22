@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import { View, ActivityIndicator, LogBox, Alert } from "react-native";
 import { Stack, useRouter, useNavigationContainerRef } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -6,6 +6,8 @@ import axios from "axios";
 import { AuthProvider, userAuth } from "../contexts/AuthContext";
 import config from "../constants/config";
 import SocketInitializer from "../components/SocketInitializer";
+import { SocketProvider } from "./SocketProvider";
+
 
 const ip = config.API_IP;
 
@@ -24,31 +26,38 @@ const MainLayout = () => {
     const checkToken = async () => {
       try {
         if (!isMounted) return; // Prevent navigation before mount
-  
+
         const token = await AsyncStorage.getItem("authToken");
         console.log("Token from AsyncStorage:", token);
-  
+
         if (token) {
           const endpoint = `http://${ip}:3000/api/dashboard/getUserData`;
           console.log("Attempting to hit API endpoint:", endpoint);
-  
+
           const response = await axios.get(endpoint, {
             headers: { Authorization: `Bearer ${token}` },
           });
-  
+
           console.log("API Response:", response);
-  
+
           if (response.status === 200) {
             const userData = response.data.data;
             setUserData(userData);
-  
-            // 🔥 NEW: Call the `update-status` API (No need to store response)
-            axios.put(`http://${ip}:3000/api/dashboard/update-status`, {}, {
-              headers: { Authorization: `Bearer ${token}` },
-            })
-            .then(() => console.log("User status updated successfully"))
-            .catch((error) => console.error("Error updating user status:", error));
-  
+
+            // 🔥 NEW: Call the `update-status` API
+            axios
+              .put(
+                `http://${ip}:3000/api/dashboard/update-status`,
+                {},
+                { headers: { Authorization: `Bearer ${token}` } }
+              )
+              .then(() =>
+                console.log("User status updated successfully")
+              )
+              .catch((error) =>
+                console.error("Error updating user status:", error)
+              );
+
             if (navigationRef.isReady()) {
               router.replace("/home");
             }
@@ -68,7 +77,7 @@ const MainLayout = () => {
         setIsCheckingAuth(false);
       }
     };
-  
+
     const handleAuthFailure = () => {
       setAuth(null);
       AsyncStorage.removeItem("authToken");
@@ -77,10 +86,9 @@ const MainLayout = () => {
       }
       Alert.alert("Authentication Failed", "Please log in again.");
     };
-  
+
     checkToken();
   }, [isMounted]);
-  
 
   if (isCheckingAuth) {
     return (
@@ -97,7 +105,7 @@ const MainLayout = () => {
         <Stack.Screen
           name="postDetails"
           options={{
-            presentation: 'modal', 
+            presentation: "modal",
           }}
         />
       </Stack>
@@ -116,7 +124,9 @@ LogBox.ignoreLogs([
 const Layout = () => {
   return (
     <AuthProvider>
-      <MainLayout />
+      <SocketProvider>
+        <MainLayout />
+      </SocketProvider>
     </AuthProvider>
   );
 };

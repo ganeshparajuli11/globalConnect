@@ -1,7 +1,15 @@
 const express = require("express");
-const { sendMessage, getMessages, getAllMessages } = require("../controller/userMessaging");
+const { 
+  sendMessage, 
+  getMessages, 
+  getAllMessages, 
+  adminGetMessages, 
+  adminGetAllMessages, 
+  adminSendMessage 
+} = require("../controller/userMessaging");
 const { checkAuthentication } = require("../middleware/middleware");
-const { uploadPostMedia } = require("../middleware/uploadMiddleware");
+const { uploadPostMedia, uploadMessageMedia } = require("../middleware/uploadMiddleware");
+
 
 module.exports = (io) => {
   const router = express.Router();
@@ -9,19 +17,25 @@ module.exports = (io) => {
   router.post(
     "/message",
     checkAuthentication,
-    uploadPostMedia.array("media", 1),
-    (req, res, next) => {
-      // Attach the file URL to content if message type is image
-      if (req.files && req.files.length > 0) {
-        req.body.content = `/uploads/${req.files[0].filename}`;
-      }
-      next();
-    },
-    (req, res) => sendMessage(req, res, io) // Pass io to sendMessage
+    uploadMessageMedia.array("media", 1), // Use the new middleware
+    (req, res, next) => next(),
+    (req, res) => sendMessage(req, res, io)
   );
 
   router.post("/get-message", checkAuthentication, getMessages);
   router.get("/all-message", checkAuthentication, getAllMessages);
+
+  // ----- Admin Messaging Routes -----
+  router.post(
+    "admin/message",
+    checkAuthentication,
+    uploadMessageMedia.array("media", 1), // Use the new middleware
+    (req, res, next) => next(),
+    (req, res) => adminSendMessage(req, res, io)
+  );
+
+  router.post("/admin/get-message", checkAuthentication, adminGetMessages);
+  router.get("/admin/all-message", checkAuthentication, adminGetAllMessages);
 
   return router;
 };

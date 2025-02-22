@@ -17,6 +17,17 @@ const profileStorage = multer.diskStorage({
     }
 });
 
+// New storage for messages
+const messageStorage = multer.diskStorage({
+    destination: "./uploads/messages/",
+    filename: (req, file, cb) => {
+        cb(null, Date.now() + path.extname(file.originalname)); // Unique filename
+    }
+});
+
+
+
+
 // File type filter (only images allowed)
 const fileFilter = (req, file, cb) => {
     const allowedTypes = ["image/jpeg", "image/png", "image/gif"];
@@ -40,8 +51,16 @@ const uploadProfileImage = multer({
     limits: { fileSize: 5 * 1024 * 1024 } // 5MB limit
 });
 
+// New upload middleware for message images
+const uploadMessageMedia = multer({
+    storage: messageStorage,
+    fileFilter,
+    limits: { fileSize: 5 * 1024 * 1024 } // 5MB limit
+});
+
 // Export both upload configurations
 module.exports = {
     uploadPostMedia,
-    uploadProfileImage
+    uploadProfileImage,
+    uploadMessageMedia
 };

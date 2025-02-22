@@ -74,6 +74,72 @@ async function signup(req, res) {
   }
 }
 
+// admin signup
+async function adminSignup(req, res) {
+  // Extract required fields from the request body
+  const { name, email, password, dob } = req.body;
+  
+  // Use the uploaded file information from multer if provided
+  let profileImageUrl = "";
+  if (req.file) {
+    // Construct the file URL based on your storage destination.
+    // For example, if the storage destination is "./uploads/profile/", then:
+    profileImageUrl = `/uploads/profile/${req.file.filename}`;
+  }
+
+  try {
+    // Check if the email is already registered
+    const existingUser = await User.findOne({ email });
+    if (existingUser) {
+      return res.status(400).json({ message: "Email is already registered." });
+    }
+
+    // Ensure date of birth is provided
+    if (!dob) {
+      return res.status(400).json({ message: "Date of birth is required." });
+    }
+
+    // Calculate age and enforce a minimum age of 18 (optional)
+    const currentDate = new Date();
+    const birthDate = new Date(dob);
+    const age = currentDate.getFullYear() - birthDate.getFullYear();
+    const monthDiff = currentDate.getMonth() - birthDate.getMonth();
+    if (age < 18 || (age === 18 && monthDiff < 0)) {
+      return res.status(400).json({ message: "You must be at least 18 years old to register." });
+    }
+
+    // Create a new admin with the required fields and explicitly set role to "admin"
+    const admin = new User({
+      name,
+      email,
+      password, // The pre-save hook in the User model should hash this password.
+      dob,
+      profile_image: profileImageUrl, // Use the URL from the uploaded file
+      role: "admin"
+    });
+
+    await admin.save();
+
+    // Generate a JWT token for the new admin
+    const JWT_SECRET_KEY = process.env.JWT_SECRET_KEY || "default_secret";
+    const token = jwt.sign({ id: admin._id, role: admin.role }, JWT_SECRET_KEY, {
+      expiresIn: "1h",
+    });
+
+    res.status(201).json({
+      message: "Admin signup successful!",
+      token,
+    });
+  } catch (error) {
+    console.error("Error during admin signup:", error);
+    res.status(500).json({
+      message: "An error occurred during admin signup.",
+      error: error.message,
+    });
+  }
+}
+
+
 // Login
 
 async function login(req, res) {
@@ -281,4 +347,4 @@ async function updateDestinationCountry(req, res) {
   }
 }
 
-module.exports = { login, signup, loginAdmin, updateDestinationCountry };
+module.exports = { login, signup, loginAdmin, updateDestinationCountry,adminSignup };

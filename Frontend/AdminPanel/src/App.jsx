@@ -21,6 +21,8 @@ import PostProfile from "./components/post/PostProfile";
 import TermsAndCondition from "./components/terms and Condition/TermsAndCondition";
 import NotificationPage from "./components/notification/NotificationPage";
 import Message from "./components/message/Message";
+import ChatPage from "./components/message/ChatPage";
+import AdminManagement from "./components/admin/AdminManagement";
 
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -103,6 +105,10 @@ function App() {
         <Route path="/allCategory" element={<AllCategory />} />
         <Route path="/user/:userId" element={<UserProfile />} />
         <Route path="/message" element={<Message />} />
+        <Route path="/chat/:id" element={<ChatPage />} />
+        <Route path="/admin" element={<AdminManagement />} />
+
+
 
       </Routes>
     </Router>
