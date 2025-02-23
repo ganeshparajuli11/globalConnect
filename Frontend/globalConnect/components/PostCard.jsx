@@ -88,7 +88,11 @@ const PostCard = ({
 
     try {
       const url = `http://${ip}:3000/api/post/like-unlike/${item.id}`;
-      await axios.put(url, {}, { headers: { Authorization: `Bearer ${authToken}` } });
+      await axios.put(
+        url,
+        {},
+        { headers: { Authorization: `Bearer ${authToken}` } }
+      );
       // Do not override our optimistic state. If needed, you can later sync with server data.
     } catch (error) {
       console.error(
@@ -126,14 +130,22 @@ const PostCard = ({
   return (
     <View style={[styles.container, hasShadow && styles.shadow]} key={item.id}>
       {/* Header with user info and three-dots icon */}
+      {/* Header with user info and three-dots icon */}
       <View style={styles.header}>
-        <View style={styles.userInfo}>
-          <Avator size={hp(4.5)} uri={profileImageURL} rounded={theme.radius.md} />
+        <TouchableOpacity
+          style={styles.userInfo}
+          onPress={() => router.push(`/userProfile?userId=${item.user._id}`)}
+        >
+          <Avator
+            size={hp(4.5)}
+            uri={profileImageURL}
+            rounded={theme.radius.md}
+          />
           <View style={styles.userDetails}>
             <Text style={styles.userName}>{item.user.name}</Text>
             <Text style={styles.postTime}>{createdAt}</Text>
           </View>
-        </View>
+        </TouchableOpacity>
         {showMoreIcon && (
           <TouchableOpacity onPress={handleThreeDotsPress}>
             <Icon
@@ -148,7 +160,10 @@ const PostCard = ({
 
       {/* Post content */}
       <View style={styles.content}>
-        <RenderHtml contentWidth={contentWidth} source={{ html: item.content }} />
+        <RenderHtml
+          contentWidth={contentWidth}
+          source={{ html: item.content }}
+        />
       </View>
 
       {/* Media images */}
@@ -169,7 +184,10 @@ const PostCard = ({
       {/* Fullscreen Modal for images */}
       <Modal visible={fullScreenVisible} transparent={true}>
         <View style={styles.fullScreenContainer}>
-          <Image source={{ uri: selectedImage }} style={styles.fullScreenImage} />
+          <Image
+            source={{ uri: selectedImage }}
+            style={styles.fullScreenImage}
+          />
           <TouchableOpacity style={styles.closeIcon} onPress={closeFullScreen}>
             <Icon name="cross" size={24} color={theme.colors.text} />
           </TouchableOpacity>
@@ -192,7 +210,9 @@ const PostCard = ({
 
         <View style={styles.footerButton}>
           {showMoreIcon ? (
-            <TouchableOpacity onPress={() => router.push(`/postDetails?postId=${item.id}`)}>
+            <TouchableOpacity
+              onPress={() => router.push(`/postDetails?postId=${item.id}`)}
+            >
               <Icon name="comment" size={24} color={theme.colors.textLight} />
             </TouchableOpacity>
           ) : (
@@ -209,7 +229,11 @@ const PostCard = ({
       </View>
 
       {/* Share Modal */}
-      <Modal visible={shareModalVisible} transparent={true} animationType="slide">
+      <Modal
+        visible={shareModalVisible}
+        transparent={true}
+        animationType="slide"
+      >
         <View style={styles.shareModalContainer}>
           <View style={styles.shareModalContent}>
             <Text style={styles.shareModalTitle}>Share Post With</Text>

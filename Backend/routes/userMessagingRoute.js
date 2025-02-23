@@ -8,7 +8,7 @@ const {
   adminSendMessage 
 } = require("../controller/userMessaging");
 const { checkAuthentication } = require("../middleware/middleware");
-const { uploadPostMedia, uploadMessageMedia } = require("../middleware/uploadMiddleware");
+const { uploadMessageMedia } = require("../middleware/uploadMiddleware");
 
 
 module.exports = (io) => {
@@ -17,7 +17,7 @@ module.exports = (io) => {
   router.post(
     "/message",
     checkAuthentication,
-    uploadMessageMedia.array("media", 1), // Use the new middleware
+    uploadMessageMedia.array("media", 1), 
     (req, res, next) => next(),
     (req, res) => sendMessage(req, res, io)
   );
@@ -29,7 +29,7 @@ module.exports = (io) => {
   router.post(
     "admin/message",
     checkAuthentication,
-    uploadMessageMedia.array("media", 1), // Use the new middleware
+    uploadMessageMedia.array("media", 1), 
     (req, res, next) => next(),
     (req, res) => adminSendMessage(req, res, io)
   );

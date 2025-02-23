@@ -309,13 +309,13 @@ const getInactiveUsers = async (req, res) => {
 const getReportedUsers = async (req, res) => {
   try {
     // Aggregate reports
-    const reportData = await Report.aggregate([
+    const reportData = await ReportUser.aggregate([
       {
         $group: {
-          _id: "$reportedTo", // Group by the user who was reported
+          _id: "$user_id", // Group by the user who was reported (reported user)
           reportedCount: { $sum: 1 }, // Count the number of reports for the user
-          reportedReasons: { $push: "$reason" }, // Push all reported reasons for this user
-          reportedPosts: { $push: "$reportedPostId" }, // Push all reported post IDs
+          reportedReasons: { $push: "$report_category" }, // Push all report category references for this user
+          reportedBy: { $push: "$reported_by" }, // Push the users who reported this user
         },
       },
       {
@@ -323,8 +323,8 @@ const getReportedUsers = async (req, res) => {
           _id: 0,
           reportedTo: "$_id", // Rename the _id field to reportedTo
           reportedCount: 1,
-          reportedReasons: 1,
-          reportedPosts: { $size: { $setUnion: ["$reportedPosts", []] } }, // Remove duplicate reported posts
+          reportedReasons: 1, // All report category references
+          reportedBy: 1, // Users who reported
         },
       },
       {
@@ -336,14 +336,64 @@ const getReportedUsers = async (req, res) => {
         },
       },
       {
-        $unwind: "$userDetails",
+        $unwind: "$userDetails", // Unwind userDetails to get the user info
+      },
+      {
+        $lookup: {
+          from: "reportcategories", // Lookup the report categories using the correct field
+          localField: "reportedReasons", // This refers to the report_category field in the report
+          foreignField: "_id", // Reference the _id in ReportCategory
+          as: "reportCategoryDetails", // Store the report category details in this field
+        },
+      },
+      {
+        $lookup: {
+          from: "users", // Lookup the users who reported the reported user
+          localField: "reportedBy", // This will be an array of user IDs
+          foreignField: "_id", // Match to the _id in the users collection
+          as: "reporterDetails", // Store the reporter details in this field
+        },
       },
       {
         $project: {
-          reportedTo: "$userDetails.name", // Replace with the user's name
+          reportedTo: {
+            _id: "$userDetails._id", // User ID
+            name: "$userDetails.name", // User Name
+            email: "$userDetails.email", // User Email
+            profile_image: "$userDetails.profile_image", // Profile Image
+            status: {
+              $cond: {
+                if: "$userDetails.is_blocked", // If the user is blocked
+                then: "Blocked",
+                else: "$userDetails.status", // Otherwise, keep their current status
+              },
+            },
+          },
           reportedCount: 1,
-          reportedReasons: 1,
-          reportedPosts: 1,
+          reportedReasons: 1, // This will hold the raw report reasons (references)
+          reportCategoryDetails: {
+            report_title: 1,
+            description: 1,
+          },
+          reportedBy: { // Map each reporter to their required fields (id, name, email, profile_image, status)
+            $map: {
+              input: "$reporterDetails", // Array of reporters
+              as: "reporter",
+              in: {
+                _id: "$$reporter._id", // Reporter ID
+                name: "$$reporter.name", // Reporter Name
+                email: "$$reporter.email", // Reporter Email
+                profile_image: "$$reporter.profile_image", // Reporter Profile Image
+                status: {
+                  $cond: {
+                    if: "$$reporter.is_blocked", // If the reporter is blocked
+                    then: "Blocked",
+                    else: "$$reporter.status", // Otherwise, keep their current status
+                  },
+                },
+              },
+            },
+          },
         },
       },
       {
@@ -353,19 +403,23 @@ const getReportedUsers = async (req, res) => {
       },
     ]);
 
-    // Process the reportData to remove redundant reports of the same reason
+    // Process the reportData to ensure all reports show reasons correctly
     const finalReport = reportData.map((report) => {
-      // Remove duplicate reasons and count them
+      // Handle cases where there is only one report, and reasons might be missing
       const reasonCount = report.reportedReasons.reduce((acc, reason) => {
         acc[reason] = (acc[reason] || 0) + 1;
         return acc;
       }, {});
 
+      // If no report categories were found, assume the report reason is a string
+      const processedReasons = reasonCount ? reasonCount : { "No reason provided": 1 };
+
       return {
-        reportedTo: report.reportedTo,
+        reportedTo: report.reportedTo, // Now includes ID, name, email, profile_image, status (Reported user)
         reportedCount: report.reportedCount,
-        reportedReasons: reasonCount, // Now contains the count of each reason
-        reportedPostCount: report.reportedPosts, // Count of reported posts
+        reportedReasons: processedReasons, // Handle missing reasons
+        reportCategoryDetails: report.reportCategoryDetails, // All the report categories for each reason
+        reportedBy: report.reportedBy, // Array of reporters with ID, name, email, profile_image, status (Reporter)
       };
     });
 
@@ -374,6 +428,7 @@ const getReportedUsers = async (req, res) => {
       message: "Admin report fetched successfully.",
       data: finalReport,
     });
+
   } catch (error) {
     console.error("Error generating admin report:", error);
     res.status(500).json({
@@ -382,6 +437,13 @@ const getReportedUsers = async (req, res) => {
     });
   }
 };
+
+
+
+
+
+
+
 
 // get blocked users
 getBlockedUsers = async (req, res) => {
@@ -521,6 +583,266 @@ const updateReachedDestination = async (req, res) => {
   }
 };
 
+// manage user status
+// Utility function to send email
+const sendEmail = async (email, subject, message) => {
+  try {
+    const transporter = nodemailer.createTransport({
+      service: 'gmail',
+      auth: {
+        user: process.env.EMAIL,  // Set your email environment variable
+        pass: process.env.EMAIL_PASSWORD,  // Set your email password environment variable
+      },
+    });
+
+    await transporter.sendMail({
+      from: process.env.EMAIL_USER,  // Set the sender's email
+      to: email,
+      subject: subject,
+      text: message,
+    });
+
+    console.log("Email sent successfully to", email);
+  } catch (error) {
+    console.error("Error sending email:", error);
+  }
+};
+
+
+// Controller to block/suspend/delete user
+const manageUserStatus = async (req, res) => {
+  try {
+    const { userId, action, reason, duration } = req.body; // Action (block, suspend, delete), duration, and reason
+    const validActions = ['block', 'suspend', 'delete'];
+    const validDurations = ['1w', '1m', '6m', 'permanent'];
+
+    // Validate action and duration
+    if (!validActions.includes(action)) {
+      return res.status(400).json({ message: "Invalid action." });
+    }
+
+    if (!validDurations.includes(duration)) {
+      return res.status(400).json({ message: "Invalid duration." });
+    }
+
+    // Find the user
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ message: "User not found." });
+    }
+
+    let updatedStatus;
+    let unblockDate = null;
+
+    // Calculate unblock date based on duration
+    if (duration === '1w') {
+      unblockDate = moment().add(1, 'weeks').toDate();
+    } else if (duration === '1m') {
+      unblockDate = moment().add(1, 'months').toDate();
+    } else if (duration === '6m') {
+      unblockDate = moment().add(6, 'months').toDate();
+    } else if (duration === 'permanent') {
+      unblockDate = null; // Permanent suspension means no unblock
+    }
+
+    // Update user status and apply appropriate action
+    if (action === 'block') {
+      updatedStatus = 'Blocked';
+      await User.findByIdAndUpdate(userId, { is_blocked: true, block_reason: reason, unblock_date: unblockDate });
+    } else if (action === 'suspend') {
+      updatedStatus = 'Suspended';
+      await User.findByIdAndUpdate(userId, { status: 'Suspended', suspend_reason: reason, suspended_until: unblockDate });
+    } else if (action === 'delete') {
+      updatedStatus = 'Deleted';
+      await User.findByIdAndUpdate(userId, { status: 'Deleted', delete_reason: reason });
+    }
+
+    // Send email to user with the reason
+    const emailSubject = `Your account has been ${updatedStatus}`;
+    const emailMessage = `
+      <html lang="en">
+      <head>
+          <meta charset="UTF-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <title>Your account status update</title>
+          <style>
+              body {
+                  font-family: Arial, sans-serif;
+                  background-color: #f4f4f9;
+                  margin: 0;
+                  padding: 0;
+              }
+              .email-container {
+                  max-width: 600px;
+                  margin: 20px auto;
+                  background-color: #ffffff;
+                  border-radius: 8px;
+                  box-shadow: 0 0 15px rgba(0, 0, 0, 0.1);
+                  padding: 30px;
+              }
+              h1 {
+                  font-size: 22px;
+                  color: #333333;
+              }
+              p {
+                  font-size: 16px;
+                  color: #555555;
+                  line-height: 1.6;
+              }
+              .email-footer {
+                  margin-top: 40px;
+                  text-align: center;
+              }
+              .footer-logo {
+                  font-size: 24px;
+                  font-weight: bold;
+              }
+              .footer-logo span {
+                  color: #4F46E5; /* Global color */
+              }
+              .footer-logo .black {
+                  color: #000000; /* Connect color */
+              }
+              .email-footer p {
+                  color: #888888;
+                  font-size: 14px;
+              }
+          </style>
+      </head>
+      <body>
+
+          <div class="email-container">
+              <h1>Your account status has been updated</h1>
+
+              <p>Dear <strong>${user.name}</strong>,</p>
+
+              <p>Your account has been <strong>${updatedStatus}</strong> due to the following reason:</p>
+
+              <blockquote style="background-color: #f9f9f9; padding: 10px; border-left: 5px solid #4F46E5; font-style: italic; margin-top: 20px;">
+                  ${reason}
+              </blockquote>
+
+              <p>If you have any questions, please contact support.</p>
+
+              <div class="email-footer">
+                  <div class="footer-logo">
+                      <span>Global</span><span class="black">Connect</span>
+                  </div>
+                  <p>&copy; 2025 GlobalConnect. All rights reserved.</p>
+              </div>
+          </div>
+
+      </body>
+      </html>
+    `;
+
+    await sendEmail(user.email, emailSubject, emailMessage);
+
+    return res.status(200).json({
+      message: `User has been ${updatedStatus} successfully.`,
+      data: user,
+    });
+  } catch (error) {
+    console.error("Error managing user status:", error);
+    return res.status(500).json({ message: "An error occurred while managing user status." });
+  }
+};
+
+const removeSuspensionOrBlock = async (req, res) => {
+  try {
+    const { userId, status } = req.body;  // Get status from the request body
+
+    // Validate status input
+    if (!['Suspended', 'Blocked'].includes(status)) {
+      return res.status(400).json({ message: "Invalid status. It must be 'Suspended' or 'Blocked'." });
+    }
+
+    // Find the user
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ message: "User not found." });
+    }
+
+    let updateData = {};
+
+    // Check if the status is Suspended
+    if (status === 'Suspended') {
+      // Remove suspension and also unblock if necessary
+      updateData = { 
+        status: 'Active', 
+        suspended_until: null, 
+      };
+
+      // If the user is also blocked, unblock them
+      if (user.is_blocked) {
+        updateData.is_blocked = false;
+        updateData.unblock_date = null;
+        updateData.block_reason = null;
+      }
+      
+      // Send email to user
+      const emailSubject = "Your account suspension has been lifted";
+      const emailMessage = `
+        <html lang="en">
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>Your account status update</title>
+        </head>
+        <body>
+            <p>Dear <strong>${user.name}</strong>,</p>
+            <p>Your account suspension has been lifted. You can now access your account.</p>
+            <p>If you have any questions, please contact support.</p>
+        </body>
+        </html>
+      `;
+      await sendEmail(user.email, emailSubject, emailMessage);
+
+    } 
+    // Check if the status is Blocked
+    else if (status === 'Blocked') {
+      // Remove block
+      updateData = { 
+        is_blocked: false, 
+        block_reason: null, 
+        unblock_date: null 
+      };
+
+      // Send email to user
+      const emailSubject = "Your account has been unblocked";
+      const emailMessage = `
+        <html lang="en">
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>Your account status update</title>
+        </head>
+        <body>
+            <p>Dear <strong>${user.name}</strong>,</p>
+            <p>Your account has been unblocked. You can now access your account.</p>
+            <p>If you have any questions, please contact support.</p>
+        </body>
+        </html>
+      `;
+      await sendEmail(user.email, emailSubject, emailMessage);
+    }
+
+    // Update the user's status (suspension or block removal)
+    await User.findByIdAndUpdate(userId, updateData);
+
+    return res.status(200).json({
+      message: `User's ${status.toLowerCase()} has been removed successfully.`,
+      data: user,
+    });
+  } catch (error) {
+    console.error("Error removing suspension or block:", error);
+    return res.status(500).json({ message: "An error occurred while removing suspension or block." });
+  }
+};
+
+
+
+
 module.exports = {
   getUserDashboard,
   getUserStats,
@@ -532,4 +854,6 @@ module.exports = {
   updateLocation,
   updateReachedDestination,
   updateUserActivity,
+  manageUserStatus,
+  removeSuspensionOrBlock
 };

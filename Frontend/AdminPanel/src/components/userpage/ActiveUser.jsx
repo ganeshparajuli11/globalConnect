@@ -1,26 +1,35 @@
-import React, { useState, useEffect } from "react";
-import Sidebar from "../sidebar/Sidebar";
+import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import { reactLocalStorage } from "reactjs-localstorage";
+import Sidebar from "../sidebar/Sidebar";
 
 const ActiveUser = () => {
   const [userData, setUserData] = useState([]);
   const [accessToken, setAccessToken] = useState(null);
-  // Fetch active users data
+  const [loading, setLoading] = useState(true);
+  const navigate = useNavigate();
+
+  // States for modals
+  const [selectedUser, setSelectedUser] = useState(null);
+  const [actionModalVisible, setActionModalVisible] = useState(false);
+  const [durationModalVisible, setDurationModalVisible] = useState(false);
+  const [selectedAction, setSelectedAction] = useState(""); // "block" or "suspend"
+
+  // Fetch token
   useEffect(() => {
-    // Retrieve the token from local storage
     const token = reactLocalStorage.get("access_token");
     if (token) {
-      setAccessToken(token); // Set token to state
+      setAccessToken(token);
     }
+  }, []);
 
-    // If access token is available, fetch the active users
-    if (token) {
+  // Fetch active user data
+  useEffect(() => {
+    if (accessToken) {
       axios
         .get("http://localhost:3000/api/dashboard/get-active-user", {
-          headers: {
-            Authorization: `Bearer ${token}`, // Add token to headers
-          },
+          headers: { Authorization: `Bearer ${accessToken}` },
         })
         .then((response) => {
           if (
@@ -36,17 +45,46 @@ const ActiveUser = () => {
         });
     } else {
       console.error("No access token found!");
-      setLoading(false); // Stop loading if no token found
+      setLoading(false);
     }
-  }, []);
+  }, [accessToken]);
 
-  const handleBlockUser = (userId) => {
-    console.log("Block user clicked for:", userId);
-    // Add logic to block user, such as an API request to block the user
-  };
-
+  // Navigate to user profile page
   const handleUserClick = (userId) => {
     navigate(`/user/${userId}`);
+  };
+
+  // When the three-dot button is clicked
+  const handleActionClick = (e, user) => {
+    e.stopPropagation(); // Prevent triggering row navigation
+    setSelectedUser(user);
+    setActionModalVisible(true);
+  };
+
+  // Direct delete action (replace alert with API call as needed)
+  const handleDelete = () => {
+    setActionModalVisible(false);
+    alert(`Deleting user ${selectedUser.name}`);
+    setSelectedUser(null);
+  };
+
+  // For block and suspend actions, open the duration modal
+  const handleBlockOrSuspend = (actionType) => {
+    setSelectedAction(actionType);
+    setActionModalVisible(false);
+    setDurationModalVisible(true);
+  };
+
+  // When a duration is selected, perform the action
+  const handleDurationSelect = (duration) => {
+    setDurationModalVisible(false);
+    alert(
+      `${selectedAction === "block" ? "Blocking" : "Suspending"} user ${
+        selectedUser.name
+      } for ${duration}.`
+    );
+    setSelectedUser(null);
+    setSelectedAction("");
   };
 
   return (
@@ -58,7 +96,7 @@ const ActiveUser = () => {
 
       {/* Main Content */}
       <div className="flex-1 p-6">
-        {/* Top Summary Cards */}
+        {/* Dashboard Summary Cards */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
           <DashboardCard
             title="Total Users"
@@ -102,50 +140,43 @@ const ActiveUser = () => {
         <div className="overflow-x-auto bg-white shadow-md rounded-lg">
           <table className="w-full text-left border-collapse">
             <thead className="bg-gray-100">
-              <tr >
+              <tr>
                 <th className="px-6 py-3 text-gray-600 font-medium">User No</th>
-                <th className="px-6 py-3 text-gray-600 font-medium">User ID</th>
-                <th className="px-6 py-3 text-gray-600 font-medium">Emails</th>
-                <th className="px-6 py-3 text-gray-600 font-medium">
-                  Last Login
-                </th>
-                <th className="px-6 py-3 text-gray-600 font-medium">Active</th>
+                <th className="px-6 py-3 text-gray-600 font-medium">Profile</th>
+                <th className="px-6 py-3 text-gray-600 font-medium">Name</th>
+                <th className="px-6 py-3 text-gray-600 font-medium">Email</th>
+                <th className="px-6 py-3 text-gray-600 font-medium">Last Login</th>
                 <th className="px-6 py-3 text-gray-600 font-medium">Actions</th>
               </tr>
             </thead>
             <tbody>
               {userData.map((user, index) => (
-                <tr key={index} className="border-b" onClick={() => handleUserClick(user.userId)}>
+                <tr
+                  key={index}
+                  className="border-b cursor-pointer hover:bg-gray-200"
+                  onClick={() => handleUserClick(user.userId)}
+                >
                   <td className="px-6 py-4">{user.s_n}</td>
+                  <td className="px-6 py-4">
+                    <img
+                      src={
+                        user.profile_image
+                          ? `http://localhost:3000/${user.profile_image}`
+                          : "https://via.placeholder.com/80"
+                      }
+                      alt={user.name}
+                      className="w-16 h-16 rounded-full object-cover"
+                    />
+                  </td>
                   <td className="px-6 py-4">{user.name}</td>
                   <td className="px-6 py-4">{user.email}</td>
                   <td className="px-6 py-4">
                     {new Date(user.last_login).toLocaleString()}
                   </td>
                   <td className="px-6 py-4">
-                    <span
-                      className={`px-3 py-1 rounded-full text-white ${
-                        user.status === "Active" ? "bg-green-500" : "bg-red-500"
-                      }`}
-                    >
-                      {user.status}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4">
-                    <button
-                      className="text-blue-600 hover:text-blue-800"
-                      onClick={() => handleBlockUser(user.id)}
-                    >
-                      ...
+                    <button onClick={(e) => handleActionClick(e, user)}>
+                      <span className="text-2xl">&#8942;</span>
                     </button>
-                    <div className="absolute hidden group-hover:block">
-                      <button
-                        className="text-red-600 hover:text-red-800"
-                        onClick={() => handleBlockUser(user.id)}
-                      >
-                        Block User
-                      </button>
-                    </div>
                   </td>
                 </tr>
               ))}
@@ -153,11 +184,79 @@ const ActiveUser = () => {
           </table>
         </div>
       </div>
+
+      {/* Action Modal */}
+      {actionModalVisible && (
+        <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50">
+          <div className="bg-white rounded-lg shadow-lg p-6 w-64">
+            <h2 className="text-lg font-semibold mb-4">Select Action</h2>
+            <button
+              className="w-full text-left px-4 py-2 hover:bg-gray-200"
+              onClick={() => handleBlockOrSuspend("block")}
+            >
+              Block
+            </button>
+            <button
+              className="w-full text-left px-4 py-2 hover:bg-gray-200"
+              onClick={() => handleDelete()}
+            >
+              Delete
+            </button>
+            <button
+              className="w-full text-left px-4 py-2 hover:bg-gray-200"
+              onClick={() => handleBlockOrSuspend("suspend")}
+            >
+              Suspend
+            </button>
+            <button
+              className="mt-4 w-full text-center text-gray-600"
+              onClick={() => setActionModalVisible(false)}
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Duration Modal */}
+      {durationModalVisible && (
+        <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50">
+          <div className="bg-white rounded-lg shadow-lg p-6 w-72">
+            <h2 className="text-lg font-semibold mb-4">
+              {selectedAction === "block" ? "Block" : "Suspend"} User For:
+            </h2>
+            <button
+              className="w-full text-left px-4 py-2 hover:bg-gray-200"
+              onClick={() => handleDurationSelect("1 Week")}
+            >
+              1 Week
+            </button>
+            <button
+              className="w-full text-left px-4 py-2 hover:bg-gray-200"
+              onClick={() => handleDurationSelect("1 Month")}
+            >
+              1 Month
+            </button>
+            <button
+              className="w-full text-left px-4 py-2 hover:bg-gray-200"
+              onClick={() => handleDurationSelect("Permanent")}
+            >
+              Permanent
+            </button>
+            <button
+              className="mt-4 w-full text-center text-gray-600"
+              onClick={() => setDurationModalVisible(false)}
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
 
-// Card Component for Dashboard Summary
+// Dashboard Summary Card Component
 const DashboardCard = ({ title, value, change, bgColor }) => {
   return (
     <div
@@ -165,11 +264,7 @@ const DashboardCard = ({ title, value, change, bgColor }) => {
     >
       <h4 className="text-gray-600 font-medium">{title}</h4>
       <h2 className="text-2xl font-bold">{value}</h2>
-      <p
-        className={`mt-2 ${
-          change.includes("+") ? "text-green-600" : "text-red-600"
-        }`}
-      >
+      <p className={`mt-2 ${change.includes("+") ? "text-green-600" : "text-red-600"}`}>
         {change}
       </p>
     </div>

@@ -1,5 +1,6 @@
 const User = require("../models/userSchema");
 const Post = require("../models/postSchema");
+const Comment = require("../models/commentSchema")
 const nodemailer = require("nodemailer");
 const crypto = require("crypto"); // To generate a random OTP
 const bcrypt = require("bcrypt");
@@ -645,6 +646,111 @@ const getUserProfileForMobile = async (req, res) => {
 };
 
 
+
+const getSelfProfileForMobile = async (req, res) => {
+  try {
+    // Use the authenticated user's ID from req.user
+    const userId = req.user.id;
+    console.log("Fetching self profile for userId:", userId);
+
+    if (!userId) {
+      return res.status(400).json({ message: "Invalid or missing User ID" });
+    }
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
+      return res.status(400).json({ message: "Invalid User ID format" });
+    }
+
+    // Fetch user details and exclude sensitive data
+    const userDetails = await User.findById(userId)
+      .select("-password -reported_by -moderation_history -warnings")
+      .lean();
+
+    if (!userDetails) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    // Fetch posts created by this user
+    const userPosts = await Post.find({ user_id: userId })
+      .sort({ createdAt: -1 })
+      .select("text_content media likes comments createdAt")
+      .lean();
+
+    // Extract post IDs for bulk comment lookup
+    const postIds = userPosts.map((post) => post._id);
+
+    // Fetch comments for these posts and populate commenter info
+    const comments = await Comment.find({ postId: { $in: postIds } })
+      .populate("userId", "name profile_image")
+      .lean();
+
+    // Map each post to include formatted date, counts, and comment details
+    const formattedPosts = userPosts.map((post) => {
+      // Filter comments belonging to the current post
+      const postComments = comments
+        .filter(
+          (comment) =>
+            comment.postId.toString() === post._id.toString()
+        )
+        .map((comment) => ({
+          _id: comment._id,
+          text: comment.text,
+          createdAt: new Date(comment.createdAt).toLocaleDateString(
+            "en-US",
+            { year: "numeric", month: "long", day: "numeric" }
+          ),
+          user: {
+            id: comment.userId._id,
+            name: comment.userId.name,
+            profile_image: comment.userId.profile_image,
+          },
+        }));
+
+      return {
+        ...post,
+        createdAt: new Date(post.createdAt).toLocaleDateString("en-US", {
+          year: "numeric",
+          month: "long",
+          day: "numeric",
+        }),
+        likesCount: post.likes.length,
+        commentsCount: postComments.length,
+        comments: postComments,
+      };
+    });
+
+    res.status(200).json({
+      data: {
+        user: {
+          id: userDetails._id,
+          username: userDetails.username,
+          name: userDetails.name,
+          email: userDetails.email,
+          bio: userDetails.bio,
+          profile_image: userDetails.profile_image,
+          dob: userDetails.dob,
+          gender: userDetails.gender,
+          location: userDetails.current_location,
+          destination: userDetails.destination_country,
+          followersCount: userDetails.followers?.length || 0,
+          followingCount: userDetails.following?.length || 0,
+          postsCount: userDetails.posts_count || 0,
+          likesReceived: userDetails.likes_received || 0,
+          status: userDetails.status,
+          isBlocked: userDetails.is_blocked,
+          isSuspended: userDetails.status === "Suspended",
+        },
+        posts: formattedPosts,
+      },
+    });
+  } catch (error) {
+    console.error("Error fetching self profile:", error);
+    res.status(500).json({ message: "Internal server error" });
+  }
+};
+
+
+
+
 module.exports = {
   getUserProfile,
   searchUser,
@@ -660,5 +766,6 @@ module.exports = {
   sendProfileUpdateOTP,
   getBlockedUsers,
   blockUnblockUser,
-  getUserProfileForMobile
+  getUserProfileForMobile,
+  getSelfProfileForMobile
 };

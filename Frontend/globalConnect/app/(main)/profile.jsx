@@ -134,7 +134,7 @@ const Profile = () => {
                   style={styles.cameraIcon}
                   onPress={handleCameraPress}
                 >
-                  <Icon name="camera" size={20} color={theme.colors.black} />
+                  <Icon name="camera" size={20} color={theme.colors.primary} />
                 </TouchableOpacity>
               </View>
             </TouchableOpacity>

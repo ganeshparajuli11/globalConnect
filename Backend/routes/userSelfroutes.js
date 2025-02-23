@@ -1,12 +1,14 @@
 const express = require('express');
 const { checkAuthentication, checkIsUser, bothUser } = require('../middleware/middleware');
-const { getUserProfile, sendOTP, verifyOTP, resetPassword, changePassword, updateProfileImage, getFollowCounts, getUserProfileById, getFollowingOrFollowers, sendProfileUpdateOTP, updateUserProfile, blockUnblockUser, getBlockedUsers, searchUser, getUserProfileForMobile } = require('../controller/userSelfController');
+const { getUserProfile, sendOTP, verifyOTP, resetPassword, changePassword, updateProfileImage, getFollowCounts, getUserProfileById, getFollowingOrFollowers, sendProfileUpdateOTP, updateUserProfile, blockUnblockUser, getBlockedUsers, searchUser, getUserProfileForMobile, getSelfProfileForMobile } = require('../controller/userSelfController');
 const { uploadProfileImage } = require('../middleware/uploadMiddleware');
 const router = express.Router();
 
 
 // Route to get user details based on the token
 router.get('/getUserProfile',checkAuthentication,checkIsUser,getUserProfile);
+router.get('/getMyProfile',checkAuthentication,checkIsUser,  getSelfProfileForMobile);
+
 
 router.post('/forgot-password', sendOTP);
 router.post('/verify-otp', verifyOTP);

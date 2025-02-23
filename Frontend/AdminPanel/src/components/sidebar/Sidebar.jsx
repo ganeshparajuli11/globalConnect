@@ -113,7 +113,7 @@ const Sidebar = ({ setIsAuthenticated }) => {
           </li>
           {activeMenu === "users" && (
             <ul className="ml-8 space-y-2">
-              {["all", "active", "inActive", "blocked"].map((type) => (
+              {["all", "active", "inActive", "blocked","reported"].map((type) => (
                 <li key={type}>
                   <NavLink
                     to={`/user/${type}`}

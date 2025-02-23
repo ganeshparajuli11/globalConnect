@@ -59,6 +59,7 @@ const userSchema = new mongoose.Schema(
       default: "Active",
     },
     suspended_until: { type: Date, default: null },
+    unblock_date: { type: Date, default: null },
 
     // Interests
     interests: [{ type: String }],
