@@ -83,8 +83,11 @@ export const AuthProvider = ({ children }) => {
     try {
       await AsyncStorage.removeItem("userData");
       await AsyncStorage.removeItem("authToken");
+      // Reset your authentication state
       setUser(null);
       setAuthToken(null);
+      // If there are any pending axios requests that rely on the token,
+      // consider canceling them here using cancellation tokens.
     } catch (error) {
       console.error("Error during logout:", error);
     }

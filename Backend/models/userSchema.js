@@ -51,6 +51,8 @@ const userSchema = new mongoose.Schema(
 
     // Account and moderation status
     is_blocked: { type: Boolean, default: false },
+    is_suspended: { type: Boolean, default: false },
+
     reported_count: { type: Number, default: 0 },
     reported_by: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
     status: {

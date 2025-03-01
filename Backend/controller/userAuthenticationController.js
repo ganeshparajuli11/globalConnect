@@ -304,6 +304,98 @@ async function loginAdmin(req, res) {
   }
 }
 
+// get all admin
+    async function getAllAdmins(req, res) {
+      try {
+        const admins = await User.find({ role: "admin" });
+
+        res.status(200).json({
+          message: "All admins retrieved successfully.",
+          admins: admins.map((admin) => ({
+            id: admin._id,
+            name: admin.name,
+            email: admin.email,
+            role: admin.role,
+            location: admin.location,
+            profile_image: admin.profile_image,
+            verified: admin.verified,
+          })),
+        });
+      } catch (error) {
+        console.error("Error retrieving admins:", error);
+        res.status(500).json({ message: "An error occurred while retrieving admins." });
+      }
+    }
+
+// Remove admin
+async function removeAdmin(req, res) {
+  const user = req.user.role
+  try {
+    // Check if the authenticated user is an admin
+    if (user!== "admin") {
+      return res.status(403).json({ message: "Access denied. Admins only." });
+    }
+
+    // Get the adminId from the URL parameter
+    const adminId = req.params.adminId;
+
+    // Optionally, you could add logic here to prevent deleting the last admin.
+
+    // Delete the admin with the given adminId
+    await User.findByIdAndDelete(adminId);
+
+    res.status(200).json({ message: "Admin deleted successfully." });
+  } catch (error) {
+    console.error("Error deleting admin:", error);
+    res.status(500).json({ message: "An error occurred while deleting admin." });
+  }
+}
+
+// Edit admin details
+async function editAdminDetails(req, res) {
+  const user = req.user.role
+  try {
+    // Check if the authenticated user is an admin
+    if (user!== "admin") {
+      return res.status(403).json({ message: "Access denied. Admins only." });
+    }
+
+    // Get the adminId from the URL parameter
+    const adminId = req.params.adminId;
+    const { name, email, password, profile_image, location } = req.body;
+    const updatedFields = { name, email, location, profile_image };
+
+    // If a new password is provided, include it (ensure that it gets hashed in the model's pre-save hook)
+    if (password) {
+      updatedFields.password = password;
+    }
+
+    // Update the admin's details
+    const updatedUser = await User.findByIdAndUpdate(adminId, updatedFields, { new: true });
+    if (!updatedUser) {
+      return res.status(404).json({ message: "Admin not found." });
+    }
+    res.status(200).json({
+      message: "Admin details updated successfully.",
+      user: {
+        id: updatedUser._id,
+        name: updatedUser.name,
+        email: updatedUser.email,
+        role: updatedUser.role,
+        location: updatedUser.location,
+        profile_image: updatedUser.profile_image,
+        verified: updatedUser.verified,
+      },
+    });
+  } catch (error) {
+    console.error("Error updating admin details:", error);
+    res.status(500).json({ message: "An error occurred while updating admin details." });
+  }
+}
+
+
+
+
 // selecting the destination country:
 async function updateDestinationCountry(req, res) {
   try {
@@ -347,4 +439,4 @@ async function updateDestinationCountry(req, res) {
   }
 }
 
-module.exports = { login, signup, loginAdmin, updateDestinationCountry,adminSignup };
+module.exports = { login, signup, loginAdmin, updateDestinationCountry,adminSignup,getAllAdmins,removeAdmin, editAdminDetails };

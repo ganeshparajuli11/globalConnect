@@ -8,7 +8,7 @@ const {
   getBlockedUsers,
   getReportedUsers,
   updateLocation,
-  updateReachedDestination,
+
   updateUserActivity,
   manageUserStatus,
   removeSuspensionOrBlock,
@@ -52,13 +52,8 @@ router.get(
   checkIsAdmin,
   getReportedUsers
 );
-router.post("/get-location", checkAuthentication, checkIsUser, updateLocation);
-router.put(
-  "/reached",
-  checkAuthentication,
-  checkIsUser,
-  updateReachedDestination
-);
+router.put("/update-location", checkAuthentication, checkIsUser, updateLocation);
+
 router.put(
   "/update-status",
   checkAuthentication,

@@ -20,7 +20,19 @@ import config from "../constants/config";
 import { theme } from "../constants/theme";
 import { hp, wp } from "../helpers/common";
 import { userAuth } from "../contexts/AuthContext";
-import { useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect } from "@react-navigation/native";
+
+// --- Axios interceptor to suppress error popups after logout ---
+axios.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response && error.response.status === 401) {
+      // Log the error for debugging but do not show an alert popup.
+      console.warn("Axios 401 error suppressed:", error);
+    }
+    return Promise.reject(error);
+  }
+);
 
 const Login = () => {
   const ip = config.API_IP;
@@ -31,16 +43,17 @@ const Login = () => {
   const router = useRouter();
   const { setAuth } = userAuth();
 
-  // Disable hardware back button on this screen
+  // Override hardware back button so that it navigates to the Welcome page.
   useFocusEffect(
     useCallback(() => {
       const onBackPress = () => {
-        return true;
+        router.replace("/Welcome");
+        return true; // Prevent default back action
       };
       BackHandler.addEventListener("hardwareBackPress", onBackPress);
       return () =>
         BackHandler.removeEventListener("hardwareBackPress", onBackPress);
-    }, [])
+    }, [router])
   );
 
   const handleLogin = async () => {
@@ -57,7 +70,7 @@ const Login = () => {
       if (response.data?.token) {
         await setAuth(response.data.user, response.data.token);
         Alert.alert("Login Successful!", `Welcome, ${response.data.user.name}`);
-        router.replace('/home');
+        router.replace("/home");
       } else {
         Alert.alert("Error", "Invalid response from server.");
       }
@@ -73,7 +86,7 @@ const Login = () => {
       <StatusBar style="dark" />
 
       <View style={styles.backButtonContainer}>
-        <BackButton onPress={() => router.back("/Welcome")} />
+        <BackButton onPress={() => router.replace("/Welcome")} />
       </View>
 
       <View style={styles.container}>
@@ -152,7 +165,7 @@ export default Login;
 const styles = StyleSheet.create({
   backButtonContainer: {
     position: "absolute",
-    top: hp(6), 
+    top: hp(6),
     left: wp(3),
     zIndex: 10,
   },
@@ -203,7 +216,7 @@ const styles = StyleSheet.create({
     borderColor: theme.colors.gray,
     borderRadius: theme.radius.md,
     paddingHorizontal: wp(3),
-    paddingRight: wp(10), 
+    paddingRight: wp(10),
     height: "100%",
     fontSize: 14,
     color: theme.colors.textDark,
@@ -224,9 +237,7 @@ const styles = StyleSheet.create({
   button: {
     marginTop: hp(2),
   },
-  buttonText: {
-    
-  },
+  buttonText: {},
   footer: {
     flexDirection: "row",
     justifyContent: "center",

@@ -555,18 +555,31 @@ const sendProfileUpdateOTP = async (req, res) => {
 };
 
 const searchUser = async (req, res) => {
-
   try {
     const { query } = req.query;
-    // Search for users by name, username, etc.
-    // This is just an example. You can use regex or text search based on your needs.
-    const users = await User.find({ name: { $regex: query, $options: "i" } }).limit(10);
-    res.status(200).json({ data: users });
+    const userId = req.user.id; // Get the logged-in user’s ID
+
+    // Search for users based on name (case-insensitive regex)
+    const users = await User.find({ name: { $regex: query, $options: "i" } })
+      .limit(10)
+      .lean(); // Use .lean() to return plain objects instead of Mongoose documents
+
+    // Fetch the authenticated user's following list
+    const authUser = await User.findById(userId).select("following").lean();
+    const followingSet = new Set(authUser.following.map(id => id.toString())); // Convert to a Set for fast lookup
+
+    // Add isFollowing field to each user in the response
+    const usersWithFollowStatus = users.map(user => ({
+      ...user,
+      isFollowing: followingSet.has(user._id.toString()),
+    }));
+
+    res.status(200).json({ data: usersWithFollowStatus });
   } catch (error) {
     console.error("Error searching users:", error);
     res.status(500).json({ message: "Search failed" });
   }
-}
+};
 
 
 const getUserProfileForMobile = async (req, res) => {
@@ -642,6 +655,43 @@ const getUserProfileForMobile = async (req, res) => {
   } catch (error) {
     console.error("Error fetching user profile:", error);
     res.status(500).json({ message: "Internal server error" });
+  }
+};
+
+// update dob.
+const updateDOB = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { dob } = req.body; // Expecting a date string in a valid format
+
+    if (!dob) {
+      return res.status(400).json({ message: "Date of birth is required." });
+    }
+
+    // Find the user by ID
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ message: "User not found." });
+    }
+
+    // If the DOB is already set, prevent updating again
+    if (user.dob) {
+      return res
+        .status(400)
+        .json({ message: "Date of birth has already been updated." });
+    }
+
+    // Update the user's DOB
+    user.dob = dob;
+    await user.save();
+
+    res.status(200).json({
+      message: "Date of birth updated successfully.",
+      dob: user.dob,
+    });
+  } catch (error) {
+    console.error("Error updating DOB:", error);
+    res.status(500).json({ message: "Internal server error." });
   }
 };
 
@@ -767,5 +817,6 @@ module.exports = {
   getBlockedUsers,
   blockUnblockUser,
   getUserProfileForMobile,
-  getSelfProfileForMobile
+  getSelfProfileForMobile,
+  updateDOB
 };

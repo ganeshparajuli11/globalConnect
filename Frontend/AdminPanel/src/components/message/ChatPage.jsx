@@ -5,11 +5,11 @@ import io from "socket.io-client";
 import Sidebar from "../sidebar/Sidebar";
 
 const GET_MESSAGES_URL = "http://localhost:3000/api/admin/get-message/";
-const SEND_MESSAGE_URL = "http://localhost:3000/api/admin/message/";
+const SEND_MESSAGE_URL = "http://localhost:3000/api/admin/message";
 const SOCKET_SERVER_URL = "http://localhost:3000";
 
 const ChatPage = () => {
-  const { id: userId } = useParams(); // target user id from route /chat/:id
+  const { id: userId } = useParams(); 
   const [messages, setMessages] = useState([]);
   const [targetUser, setTargetUser] = useState(null);
   const [newMessage, setNewMessage] = useState("");

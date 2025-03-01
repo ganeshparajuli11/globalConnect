@@ -207,6 +207,77 @@ const getAllPost = async (req, res) => {
   }
 };
 
+// function to search for posts
+
+const searchPosts = async (req, res) => {
+  try {
+    const { query } = req.query;
+    if (!query || query.trim() === "") {
+      return res.status(400).json({ message: "Search query is required." });
+    }
+
+    // Optional pagination parameters
+    let { page = 1, limit = 10 } = req.query;
+    page = parseInt(page);
+    limit = parseInt(limit);
+
+    // Aggregation pipeline to join posts with users and match on text_content or user name.
+    const posts = await Post.aggregate([
+      {
+        $lookup: {
+          from: "users", // collection name in MongoDB (make sure it's correct)
+          localField: "user_id",
+          foreignField: "_id",
+          as: "user"
+        }
+      },
+      { $unwind: "$user" },
+      {
+        $match: {
+          $or: [
+            { text_content: { $regex: query, $options: "i" } },
+            { "user.name": { $regex: query, $options: "i" } }
+          ]
+        }
+      },
+      { $sort: { createdAt: -1 } },
+      { $skip: (page - 1) * limit },
+      { $limit: limit }
+    ]);
+
+    // Format posts to match your existing structure
+    const formattedPosts = posts.map((post) => ({
+      id: post._id,
+      user: {
+        _id: post.user._id,
+        name: post.user.name,
+        profile_image: post.user.profile_image
+          ? `http://${req.headers.host}/${post.user.profile_image}`
+          : "https://via.placeholder.com/40"
+      },
+      type: post.category_id ? post.category_id.name : "Unknown Category",
+      time: post.createdAt,
+      content: post.text_content || "No content available",
+      media:
+        post.media && post.media.length > 0
+          ? post.media.map((m) => `${m.media_path}`)
+          : [],
+      liked: post.likes && post.likes.includes(req.user.id),
+      likeCount: post.likes ? post.likes.length : 0,
+      commentCount: post.comments ? post.comments.length : 0,
+      shareCount: post.shares ? post.shares.length : 0,
+      comments: post.comments // Format further if needed
+    }));
+
+    return res.status(200).json({
+      message: "Posts retrieved successfully.",
+      data: formattedPosts
+    });
+  } catch (error) {
+    console.error("Error searching posts:", error);
+    return res.status(500).json({ message: "Search failed", error: error.message });
+  }
+};
 
 // Function to format posts
 const formatPosts = (posts) => {
@@ -571,4 +642,5 @@ module.exports = {
   getReportedPosts,
   getAllPostAdmin,
   getPostStatsAdmin,
+  searchPosts
 };

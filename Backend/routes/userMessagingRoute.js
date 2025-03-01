@@ -27,7 +27,7 @@ module.exports = (io) => {
 
   // ----- Admin Messaging Routes -----
   router.post(
-    "admin/message",
+    "/admin/message",
     checkAuthentication,
     uploadMessageMedia.array("media", 1), 
     (req, res, next) => next(),

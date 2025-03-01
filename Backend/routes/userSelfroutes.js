@@ -1,6 +1,6 @@
 const express = require('express');
-const { checkAuthentication, checkIsUser, bothUser } = require('../middleware/middleware');
-const { getUserProfile, sendOTP, verifyOTP, resetPassword, changePassword, updateProfileImage, getFollowCounts, getUserProfileById, getFollowingOrFollowers, sendProfileUpdateOTP, updateUserProfile, blockUnblockUser, getBlockedUsers, searchUser, getUserProfileForMobile, getSelfProfileForMobile } = require('../controller/userSelfController');
+const { checkAuthentication, checkIsUser, bothUser, checkDOBUpdated } = require('../middleware/middleware');
+const { getUserProfile, sendOTP, verifyOTP, resetPassword, changePassword, updateProfileImage, getFollowCounts, getUserProfileById, getFollowingOrFollowers, sendProfileUpdateOTP, updateUserProfile, blockUnblockUser, getBlockedUsers, searchUser, getUserProfileForMobile, getSelfProfileForMobile, updateDOB } = require('../controller/userSelfController');
 const { uploadProfileImage } = require('../middleware/uploadMiddleware');
 const router = express.Router();
 
@@ -32,7 +32,11 @@ router.put('/block-unblock', checkAuthentication,checkIsUser, blockUnblockUser);
 router.get('/get-blocked', checkAuthentication,checkIsUser, getBlockedUsers);
 router.get('/search', checkAuthentication,checkIsUser, searchUser);
 
-
+router.put("/update-dob", checkAuthentication, updateDOB);
+// Endpoint to check if DOB is updated
+router.get("/check-dob", checkAuthentication, checkDOBUpdated, (req, res) => {
+  res.status(200).json({ dobUpdated: req.dobUpdated });
+});
 
 router.get('/user-data-admin/:userId', checkAuthentication, getUserProfileById);
 router.get('/user-data-user/:userId', checkAuthentication,checkIsUser,getUserProfileForMobile );

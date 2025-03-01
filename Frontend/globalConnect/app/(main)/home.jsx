@@ -1,5 +1,12 @@
 import React, { useState, useEffect } from "react";
-import { StyleSheet, Text, View, FlatList, ActivityIndicator } from "react-native";
+import { 
+  StyleSheet, 
+  Text, 
+  View, 
+  FlatList, 
+  ActivityIndicator, 
+  TouchableOpacity 
+} from "react-native";
 import BottomNav from "../../components/bottomNav";
 import { theme } from "../../constants/theme";
 import ScreenWrapper from "../../components/ScreenWrapper";
@@ -12,29 +19,109 @@ import SearchBar from "../../components/SearchBar";
 import SortCategory from "../../components/SortCategory";
 import UserCard from "../../components/UserCard";
 import { useSearchUsers } from "../../services/useSearchUsers";
+import { useSearchPosts } from "../../services/useSearchPosts";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { updateUserLocation } from "../../services/getLocationService";
+import DobCard from "../../components/DobCard";
+import { checkDOB, updateDOB } from "../../services/dobService";
+import { userAuth } from "../../contexts/AuthContext";
+
 
 const Home = () => {
   const router = useRouter();
+  const {authToken} = userAuth()
+
+// if(!authToken){
+//   router.replace("/login")
+// }
+
   const [searchQuery, setSearchQuery] = useState("");
-  // Default to "All" so all posts are fetched initially.
   const [selectedCategory, setSelectedCategory] = useState("All");
+  const [searchType, setSearchType] = useState("users");
+  // State to control display of DOB modal popup
+  const [showDobModal, setShowDobModal] = useState(false);
 
-  // Hook for posts
+  // Hooks for posts & search
   const { posts, fetchPosts, loading, hasMore, page, resetPosts } = useFetchPosts(selectedCategory);
+  const { users, loading: searchUserLoading } = useSearchUsers(searchQuery);
+  const { posts: searchPosts, loading: searchPostLoading } = useSearchPosts(searchQuery);
 
-  // Hook for searching users (people)
-  const { users, loading: searchLoading } = useSearchUsers(searchQuery);
-
-  // When the selected category changes, reset and fetch fresh posts.
+  // When category changes, reset posts and fetch fresh data
   useEffect(() => {
     resetPosts();
     fetchPosts(1, true);
   }, [selectedCategory]);
 
-  // Decide which content to show:
-  // If there's a search query, we'll show search results (people)
-  // Otherwise, we show the normal posts (with category sort)
   const isSearching = searchQuery.trim().length > 0;
+  const searchLoading = searchType === "users" ? searchUserLoading : searchPostLoading;
+
+  const renderSearchToggle = () => {
+    return (
+      <View style={styles.toggleContainer}>
+        <TouchableOpacity
+          style={[styles.toggleButton, searchType === "users" && styles.activeToggle]}
+          onPress={() => setSearchType("users")}
+        >
+          <Text style={[styles.toggleText, searchType === "users" && styles.activeToggleText]}>
+            Users
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.toggleButton, searchType === "posts" && styles.activeToggle]}
+          onPress={() => setSearchType("posts")}
+        >
+          <Text style={[styles.toggleText, searchType === "posts" && styles.activeToggleText]}>
+            Posts
+          </Text>
+        </TouchableOpacity>
+      </View>
+    );
+  };
+
+  // Location update: run once on mount (if not updated today)
+  useEffect(() => {
+    const updateLocationOnce = async () => {
+      try {
+        const token = await AsyncStorage.getItem("authToken");
+        if (token) {
+          await updateUserLocation(token);
+        }
+      } catch (error) {
+        console.error("Error updating location:", error);
+      }
+    };
+    updateLocationOnce();
+  }, []);
+
+  // Check if the user's DOB is set; if not, show the DOB popup.
+  useEffect(() => {
+    const checkUserDOB = async () => {
+      try {
+        if (authToken) {
+          const response = await checkDOB(authToken);
+          if (response && response.dobUpdated === false) {
+            setShowDobModal(true);
+          }
+        }
+      } catch (error) {
+        console.error("Error checking DOB:", error);
+      }
+    };
+    checkUserDOB();
+  }, []);
+
+  // Handler to update the DOB when submitted from the DobCard.
+  const handleDobSubmit = async (selectedDate) => {
+    try {
+
+      if (authToken) {
+        await updateDOB(authToken, selectedDate.toISOString());
+        setShowDobModal(false);
+      }
+    } catch (error) {
+      console.error("Error updating DOB:", error);
+    }
+  };
 
   return (
     <ScreenWrapper>
@@ -51,29 +138,48 @@ const Home = () => {
         {/* Search Bar */}
         <SearchBar searchQuery={searchQuery} setSearchQuery={setSearchQuery} />
 
+        {/* Render segmented control when searching */}
+        {isSearching && renderSearchToggle()}
+
         {isSearching ? (
-          // Render search results for people
-          <FlatList
-            data={users}
-            showsVerticalScrollIndicator={false}
-            contentContainerStyle={styles.listStyle}
-            keyExtractor={(item) => item._id}
-            renderItem={({ item }) => (
-              <UserCard user={item} isFollowing={false} onFollowToggle={() => {}} router = {router} />
-            )}
-            ListEmptyComponent={
-              !searchLoading && (
-                <View style={styles.emptyContainer}>
-                  <Text style={styles.emptyText}>No users found</Text>
-                </View>
-              )
-            }
-            ListFooterComponent={
-              searchLoading && <ActivityIndicator style={{ marginVertical: 30 }} size="large" />
-            }
-          />
+          searchType === "users" ? (
+            <FlatList
+              data={users}
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={styles.listStyle}
+              keyExtractor={(item) => item._id}
+              renderItem={({ item }) => <UserCard user={item} onFollowToggle={() => {}} />}
+              ListEmptyComponent={
+                !searchLoading && (
+                  <View style={styles.emptyContainer}>
+                    <Text style={styles.emptyText}>No users found</Text>
+                  </View>
+                )
+              }
+              ListFooterComponent={
+                searchLoading && <ActivityIndicator style={{ marginVertical: 30 }} size="large" />
+              }
+            />
+          ) : (
+            <FlatList
+              data={searchPosts}
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={styles.listStyle}
+              keyExtractor={(item) => item.id}
+              renderItem={({ item }) => <PostCard item={item} router={router} />}
+              ListEmptyComponent={
+                !searchLoading && (
+                  <View style={styles.emptyContainer}>
+                    <Text style={styles.emptyText}>No posts found</Text>
+                  </View>
+                )
+              }
+              ListFooterComponent={
+                searchLoading && <ActivityIndicator style={{ marginVertical: 30 }} size="large" />
+              }
+            />
+          )
         ) : (
-          // Otherwise, show posts & sorting
           <>
             <SortCategory selectedCategory={selectedCategory} setSelectedCategory={setSelectedCategory} />
             <FlatList
@@ -112,9 +218,13 @@ const Home = () => {
           </>
         )}
       </View>
-
-      {/* Bottom Navigation */}
       <BottomNav />
+      {/* DOB Modal */}
+      <DobCard
+        visible={showDobModal}
+        onSubmit={handleDobSubmit}
+        onClose={() => setShowDobModal(false)}
+      />
     </ScreenWrapper>
   );
 };
@@ -162,5 +272,31 @@ const styles = StyleSheet.create({
   footerText: {
     fontSize: 16,
     color: theme.colors.gray,
+  },
+  toggleContainer: {
+    flexDirection: "row",
+    justifyContent: "center",
+    marginHorizontal: wp(4),
+    marginBottom: hp(1.5),
+  },
+  toggleButton: {
+    flex: 1,
+    paddingVertical: hp(1),
+    alignItems: "center",
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: theme.colors.primary,
+    marginHorizontal: 5,
+  },
+  activeToggle: {
+    backgroundColor: theme.colors.primary,
+  },
+  toggleText: {
+    fontSize: 16,
+    color: theme.colors.primary,
+    fontWeight: "bold",
+  },
+  activeToggleText: {
+    color: theme.colors.white,
   },
 });

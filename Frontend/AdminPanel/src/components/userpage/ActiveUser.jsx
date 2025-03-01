@@ -10,11 +10,16 @@ const ActiveUser = () => {
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
 
-  // States for modals
+  // Modal states
   const [selectedUser, setSelectedUser] = useState(null);
   const [actionModalVisible, setActionModalVisible] = useState(false);
   const [durationModalVisible, setDurationModalVisible] = useState(false);
   const [selectedAction, setSelectedAction] = useState(""); // "block" or "suspend"
+  const [actionReason, setActionReason] = useState("");
+  const [selectedDuration, setSelectedDuration] = useState("");
+  const [confirmationModalVisible, setConfirmationModalVisible] = useState(false);
+  const [confirmationMessage, setConfirmationMessage] = useState("");
+  const [onConfirm, setOnConfirm] = useState(() => () => {});
 
   // Fetch token
   useEffect(() => {
@@ -24,8 +29,8 @@ const ActiveUser = () => {
     }
   }, []);
 
-  // Fetch active user data
-  useEffect(() => {
+  // Function to fetch active users
+  const fetchActiveUsers = () => {
     if (accessToken) {
       axios
         .get("http://localhost:3000/api/dashboard/get-active-user", {
@@ -43,48 +48,89 @@ const ActiveUser = () => {
           console.error("Error fetching active users:", error);
           setLoading(false);
         });
-    } else {
-      console.error("No access token found!");
-      setLoading(false);
     }
-  }, [accessToken]);
-
-  // Navigate to user profile page
-  const handleUserClick = (userId) => {
-    navigate(`/user/${userId}`);
   };
 
-  // When the three-dot button is clicked
+  // Fetch active user data
+  useEffect(() => {
+    fetchActiveUsers();
+  }, [accessToken]);
+
+  // Navigate to user profile page using the "id" field
+  const handleUserClick = (user) => {
+    navigate(`/user/${user.id}`);
+  };
+
+  // When the three-dot button is clicked, open the Action Modal
   const handleActionClick = (e, user) => {
-    e.stopPropagation(); // Prevent triggering row navigation
+    e.stopPropagation();
     setSelectedUser(user);
     setActionModalVisible(true);
   };
 
-  // Direct delete action (replace alert with API call as needed)
+  // Delete action – shows a confirmation modal
   const handleDelete = () => {
-    setActionModalVisible(false);
-    alert(`Deleting user ${selectedUser.name}`);
-    setSelectedUser(null);
+    setConfirmationMessage(`Are you sure you want to delete user ${selectedUser.name}?`);
+    setOnConfirm(() => () => {
+      // Replace this alert with an API call if needed
+      setConfirmationModalVisible(false);
+      setActionModalVisible(false);
+      setSelectedUser(null);
+    });
+    setConfirmationModalVisible(true);
   };
 
-  // For block and suspend actions, open the duration modal
+  // For block or suspend actions, open the Duration/Reason Modal
   const handleBlockOrSuspend = (actionType) => {
     setSelectedAction(actionType);
     setActionModalVisible(false);
     setDurationModalVisible(true);
   };
 
-  // When a duration is selected, perform the action
-  const handleDurationSelect = (duration) => {
-    setDurationModalVisible(false);
-    alert(
-      `${selectedAction === "block" ? "Blocking" : "Suspending"} user ${
-        selectedUser.name
-      } for ${duration}.`
+  // Handle submit from Duration/Reason Modal
+  const handleSubmitAction = () => {
+    if (!selectedDuration || !actionReason.trim()) {
+      alert("Please select a duration and enter a reason.");
+      return;
+    }
+    const durationText =
+      selectedDuration === "1w"
+        ? "1 Week"
+        : selectedDuration === "1m"
+        ? "1 Month"
+        : selectedDuration === "6m"
+        ? "6 Months"
+        : "Permanent";
+    setConfirmationMessage(
+      `Are you sure you want to ${selectedAction} user ${selectedUser.name} for ${durationText} with the reason:\n"${actionReason}"?`
     );
-    setSelectedUser(null);
-    setSelectedAction("");
+    setOnConfirm(() => () => {
+      const payload = {
+        userId: selectedUser.id,
+        action: selectedAction,
+        reason: actionReason,
+        duration: selectedDuration,
+      };
+      axios
+        .put("http://localhost:3000/api/dashboard/admin-update-user-status", payload, {
+          headers: { Authorization: `Bearer ${accessToken}` },
+        })
+        .then((response) => {
+          setConfirmationModalVisible(false);
+          setDurationModalVisible(false);
+          setSelectedUser(null);
+          setSelectedAction("");
+          setActionReason("");
+          setSelectedDuration("");
+          fetchActiveUsers();
+        })
+        .catch((error) => {
+          console.error("Error updating user status:", error);
+          setConfirmationModalVisible(false);
+          alert("Error updating user status.");
+        });
+    });
+    setConfirmationModalVisible(true);
   };
 
   return (
@@ -141,12 +187,20 @@ const ActiveUser = () => {
           <table className="w-full text-left border-collapse">
             <thead className="bg-gray-100">
               <tr>
-                <th className="px-6 py-3 text-gray-600 font-medium">User No</th>
-                <th className="px-6 py-3 text-gray-600 font-medium">Profile</th>
+                <th className="px-6 py-3 text-gray-600 font-medium">
+                  User No
+                </th>
+                <th className="px-6 py-3 text-gray-600 font-medium">
+                  Profile
+                </th>
                 <th className="px-6 py-3 text-gray-600 font-medium">Name</th>
                 <th className="px-6 py-3 text-gray-600 font-medium">Email</th>
-                <th className="px-6 py-3 text-gray-600 font-medium">Last Login</th>
-                <th className="px-6 py-3 text-gray-600 font-medium">Actions</th>
+                <th className="px-6 py-3 text-gray-600 font-medium">
+                  Last Activity
+                </th>
+                <th className="px-6 py-3 text-gray-600 font-medium">
+                  Actions
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -154,7 +208,7 @@ const ActiveUser = () => {
                 <tr
                   key={index}
                   className="border-b cursor-pointer hover:bg-gray-200"
-                  onClick={() => handleUserClick(user.userId)}
+                  onClick={() => handleUserClick(user)}
                 >
                   <td className="px-6 py-4">{user.s_n}</td>
                   <td className="px-6 py-4">
@@ -171,7 +225,9 @@ const ActiveUser = () => {
                   <td className="px-6 py-4">{user.name}</td>
                   <td className="px-6 py-4">{user.email}</td>
                   <td className="px-6 py-4">
-                    {new Date(user.last_login).toLocaleString()}
+                    {user.last_activity
+                      ? new Date(user.last_activity).toLocaleString()
+                      : "N/A"}
                   </td>
                   <td className="px-6 py-4">
                     <button onClick={(e) => handleActionClick(e, user)}>
@@ -218,37 +274,108 @@ const ActiveUser = () => {
         </div>
       )}
 
-      {/* Duration Modal */}
+      {/* Duration/Reason Modal for Block/Suspend */}
       {durationModalVisible && (
         <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50">
           <div className="bg-white rounded-lg shadow-lg p-6 w-72">
             <h2 className="text-lg font-semibold mb-4">
-              {selectedAction === "block" ? "Block" : "Suspend"} User For:
+              {selectedAction === "block" ? "Block" : "Suspend"} User
             </h2>
+            <div className="mb-4">
+              <textarea
+                placeholder="Enter reason for action"
+                value={actionReason}
+                onChange={(e) => setActionReason(e.target.value)}
+                className="w-full p-2 border border-gray-300 rounded-md focus:outline-none"
+              />
+            </div>
+            <div className="mb-4">
+              <label className="block mb-2 font-semibold">
+                Select Duration:
+              </label>
+              <div className="flex flex-col space-y-2">
+                <label className="cursor-pointer">
+                  <input
+                    type="radio"
+                    value="1w"
+                    checked={selectedDuration === "1w"}
+                    onChange={(e) => setSelectedDuration(e.target.value)}
+                    className="mr-2"
+                  />
+                  1 Week
+                </label>
+                <label className="cursor-pointer">
+                  <input
+                    type="radio"
+                    value="1m"
+                    checked={selectedDuration === "1m"}
+                    onChange={(e) => setSelectedDuration(e.target.value)}
+                    className="mr-2"
+                  />
+                  1 Month
+                </label>
+                <label className="cursor-pointer">
+                  <input
+                    type="radio"
+                    value="6m"
+                    checked={selectedDuration === "6m"}
+                    onChange={(e) => setSelectedDuration(e.target.value)}
+                    className="mr-2"
+                  />
+                  6 Months
+                </label>
+                <label className="cursor-pointer">
+                  <input
+                    type="radio"
+                    value="permanent"
+                    checked={selectedDuration === "permanent"}
+                    onChange={(e) => setSelectedDuration(e.target.value)}
+                    className="mr-2"
+                  />
+                  Permanent
+                </label>
+              </div>
+            </div>
             <button
-              className="w-full text-left px-4 py-2 hover:bg-gray-200"
-              onClick={() => handleDurationSelect("1 Week")}
+              className="w-full py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+              onClick={handleSubmitAction}
             >
-              1 Week
-            </button>
-            <button
-              className="w-full text-left px-4 py-2 hover:bg-gray-200"
-              onClick={() => handleDurationSelect("1 Month")}
-            >
-              1 Month
-            </button>
-            <button
-              className="w-full text-left px-4 py-2 hover:bg-gray-200"
-              onClick={() => handleDurationSelect("Permanent")}
-            >
-              Permanent
+              Submit
             </button>
             <button
               className="mt-4 w-full text-center text-gray-600"
-              onClick={() => setDurationModalVisible(false)}
+              onClick={() => {
+                setDurationModalVisible(false);
+                setActionReason("");
+                setSelectedDuration("");
+              }}
             >
               Cancel
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Confirmation Modal */}
+      {confirmationModalVisible && (
+        <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 z-50">
+          <div className="bg-white rounded-lg shadow-lg p-6 w-80">
+            <h2 className="text-lg font-semibold mb-4">Confirm Action</h2>
+            <p className="mb-6 whitespace-pre-line">{confirmationMessage}</p>
+            <div className="flex justify-end space-x-4">
+              <button
+                className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700"
+                onClick={() => onConfirm()}
+              >
+                Confirm
+              </button>
+              <button
+                className="px-4 py-2 bg-gray-300 text-gray-700 rounded-md hover:bg-gray-400"
+                onClick={() => setConfirmationModalVisible(false)}
+              >
+                Cancel
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -264,7 +391,11 @@ const DashboardCard = ({ title, value, change, bgColor }) => {
     >
       <h4 className="text-gray-600 font-medium">{title}</h4>
       <h2 className="text-2xl font-bold">{value}</h2>
-      <p className={`mt-2 ${change.includes("+") ? "text-green-600" : "text-red-600"}`}>
+      <p
+        className={`mt-2 ${
+          change.includes("+") ? "text-green-600" : "text-red-600"
+        }`}
+      >
         {change}
       </p>
     </div>

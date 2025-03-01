@@ -5,9 +5,9 @@ import {
   FaBell,
   FaFileAlt,
   FaTags,
-  FaFileContract, // Terms & Conditions
-  FaUserShield,   // Admin Management
-  FaComments,     // Chat
+  FaFileContract,
+  FaUserShield,
+  FaComments,
 } from "react-icons/fa";
 import { BiLogOut } from "react-icons/bi";
 import { MdPrivacyTip } from "react-icons/md";
@@ -75,7 +75,7 @@ const Sidebar = ({ setIsAuthenticated }) => {
   }, [location.pathname]);
 
   return (
-    <div className="h-screen w-64 bg-white shadow-md flex flex-col">
+    <div className="h-screen w-64 bg-white shadow-md flex flex-col overflow-y-auto">
       <div className="py-4 px-6 bg-blue-700 text-white text-center font-bold text-lg">
         Admin Panel
       </div>
@@ -112,8 +112,8 @@ const Sidebar = ({ setIsAuthenticated }) => {
             </div>
           </li>
           {activeMenu === "users" && (
-            <ul className="ml-8 space-y-2">
-              {["all", "active", "inActive", "blocked","reported"].map((type) => (
+            <ul className="ml-8 space-y-2 transition-all duration-300">
+              {["all", "active", "inActive", "blocked", "reported"].map((type) => (
                 <li key={type}>
                   <NavLink
                     to={`/user/${type}`}
@@ -145,7 +145,7 @@ const Sidebar = ({ setIsAuthenticated }) => {
             </div>
           </li>
           {activeMenu === "posts" && (
-            <ul className="ml-8 space-y-2">
+            <ul className="ml-8 space-y-2 transition-all duration-300">
               {["all", "report"].map((type) => (
                 <li key={type}>
                   <NavLink to={`/posts/${type}`} className="block py-2 text-gray-700">
@@ -171,7 +171,7 @@ const Sidebar = ({ setIsAuthenticated }) => {
             </div>
           </li>
           {activeMenu === "categories" && (
-            <ul className="ml-8 space-y-2">
+            <ul className="ml-8 space-y-2 transition-all duration-300">
               <li>
                 <NavLink to="/allCategory" className="block py-2 text-gray-700">
                   All Categories
@@ -243,7 +243,7 @@ const Sidebar = ({ setIsAuthenticated }) => {
             </NavLink>
           </li>
 
-          {/* Admin Management Section: now a single link */}
+          {/* Admin Management Section */}
           <li>
             <NavLink
               to="/admin"

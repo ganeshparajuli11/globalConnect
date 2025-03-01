@@ -2,6 +2,7 @@ import axios from "axios";
 import { useCallback, useState, useEffect } from "react";
 import config from "../constants/config";
 import { userAuth } from "../contexts/AuthContext";
+import { useRoute } from "@react-navigation/native";
 
 const ip = config.API_IP;
 const API_URL = `http://${ip}:3000/api/post/all`;

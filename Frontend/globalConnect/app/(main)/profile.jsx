@@ -18,6 +18,7 @@ import { theme } from "../../constants/theme";
 import Icon from "../../assets/icons";
 import { useRouter } from "expo-router";
 import * as ImagePicker from "expo-image-picker";
+import UserPostCardDetails from "../../components/UserPostCardDetails";
 import axios from "axios";
 
 const Profile = () => {
@@ -108,6 +109,7 @@ const Profile = () => {
     }
   };
 
+  console.log("user", user)
   return (
     <ScreenWrapper>
       <StatusBar style="dark" />

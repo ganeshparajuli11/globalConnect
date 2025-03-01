@@ -18,7 +18,7 @@ const InactiveUser = () => {
 
   // Retrieve the access token from localStorage
   useEffect(() => {
-    const token = reactLocalStorage.get("access_token");
+    const token = localStorage.getItem("access_token");
     if (token) {
       setAccessToken(token);
     }
@@ -50,9 +50,10 @@ const InactiveUser = () => {
     }
   }, [accessToken]);
 
-  // Navigate to user profile page
-  const handleUserClick = (userId) => {
-    navigate(`/user/${userId}`);
+  // Navigate to user profile page using user.userId or fallback to user.id
+  const handleUserClick = (user) => {
+    const id = user.userId || user.id;
+    navigate(`/user/${id}`);
   };
 
   // When the three-dot button is clicked
@@ -164,7 +165,7 @@ const InactiveUser = () => {
                   <tr
                     key={index}
                     className="border-b cursor-pointer hover:bg-gray-200"
-                    onClick={() => handleUserClick(user.userId)}
+                    onClick={() => handleUserClick(user)}
                   >
                     <td className="px-6 py-4">{user.s_n}</td>
                     <td className="px-6 py-4">
@@ -181,7 +182,7 @@ const InactiveUser = () => {
                     <td className="px-6 py-4">{user.name}</td>
                     <td className="px-6 py-4">{user.email}</td>
                     <td className="px-6 py-4">
-                      {new Date(user.last_logged_in).toLocaleString()}
+                      {new Date(user.last_active).toLocaleString()}
                     </td>
                     <td className="px-6 py-4">
                       <button onClick={(e) => handleActionClick(e, user)}>
@@ -275,7 +276,11 @@ const DashboardCard = ({ title, value, change, bgColor }) => {
     >
       <h4 className="text-gray-600 font-medium">{title}</h4>
       <h2 className="text-2xl font-bold">{value}</h2>
-      <p className={`mt-2 ${change.includes("+") ? "text-green-600" : "text-red-600"}`}>
+      <p
+        className={`mt-2 ${
+          change.includes("+") ? "text-green-600" : "text-red-600"
+        }`}
+      >
         {change}
       </p>
     </div>
