@@ -12,18 +12,15 @@ import {
 import ScreenWrapper from "../components/ScreenWrapper";
 import BackButton from "../components/BackButton";
 import Button from "../components/Button";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useRouter } from "expo-router";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import config from "../constants/config";
-
-// Import theme and responsive helpers
+import axios from "axios";
 import { theme } from "../constants/theme";
 import { hp, wp } from "../helpers/common";
-
-// Import vector icons for password toggle
 import { Ionicons } from "@expo/vector-icons";
 import { StatusBar } from "expo-status-bar";
+import { userAuth } from "../contexts/AuthContext";
 
 const SignUp = () => {
   const ip = config.API_IP;
@@ -38,6 +35,7 @@ const SignUp = () => {
   const [isConfirmPasswordVisible, setIsConfirmPasswordVisible] = useState(false);
 
   const router = useRouter();
+  const { setAuth } = userAuth();
 
   const formatDate = (date) => {
     let day = date.getDate();
@@ -60,30 +58,30 @@ const SignUp = () => {
 
     setLoading(true);
     try {
-      const response = await fetch(`http://${ip}:3000/api/users/signup`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          name,
-          email,
-          password,
-          dob: dob.toISOString(),
-        }),
+      const response = await axios.post(`http://${ip}:3000/api/users/signup`, {
+        name,
+        email,
+        password,
+        dob: dob.toISOString(),
       });
 
-      const data = await response.json();
+      console.log("Signup response:", response.data);
 
-      if (response.ok) {
-        Alert.alert("Success", "Signup successful!");
-        await AsyncStorage.setItem("authToken", data.token);
+      // Check for the authToken key as returned from the backend.
+      if (response.data?.authToken) {
+        // Use the authContext to store user data and token.
+        await setAuth(response.data.data.user, response.data.authToken);
+        Alert.alert("Success", `Welcome, ${response.data.data.user.name}! Signup successful!`);
         router.replace("/destination");
       } else {
-        Alert.alert("Error", data.message || "Something went wrong!");
+        Alert.alert("Error", "Invalid response from server.");
       }
     } catch (error) {
-      Alert.alert("Error", "Failed to connect to the server.");
+      console.error("Signup error:", error.response?.data || error.message);
+      Alert.alert(
+        "Error",
+        error.response?.data?.message || "Something went wrong!"
+      );
     } finally {
       setLoading(false);
     }
@@ -92,7 +90,6 @@ const SignUp = () => {
   return (
     <ScreenWrapper>
       <StatusBar style="dark" />
-      {/* Back button container now uses the same top offset as Login */}
       <View style={styles.backButtonContainer}>
         <BackButton />
       </View>
@@ -128,7 +125,9 @@ const SignUp = () => {
             value={password}
             onChangeText={setPassword}
           />
-          <TouchableOpacity onPress={() => setIsPasswordVisible(!isPasswordVisible)}>
+          <TouchableOpacity
+            onPress={() => setIsPasswordVisible(!isPasswordVisible)}
+          >
             <Ionicons
               name={isPasswordVisible ? "eye-off" : "eye"}
               size={hp(2.5)}
@@ -148,7 +147,9 @@ const SignUp = () => {
             onChangeText={setConfirmPassword}
           />
           <TouchableOpacity
-            onPress={() => setIsConfirmPasswordVisible(!isConfirmPasswordVisible)}
+            onPress={() =>
+              setIsConfirmPasswordVisible(!isConfirmPasswordVisible)
+            }
           >
             <Ionicons
               name={isConfirmPasswordVisible ? "eye-off" : "eye"}
@@ -159,7 +160,10 @@ const SignUp = () => {
         </View>
 
         {/* Date of Birth Picker */}
-        <Pressable style={styles.datePickerButton} onPress={() => setShowDatePicker(true)}>
+        <Pressable
+          style={styles.datePickerButton}
+          onPress={() => setShowDatePicker(true)}
+        >
           <Text style={[styles.dateText, { color: theme.colors.textDark }]}>
             {dob ? formatDate(dob) : "Date of Birth"}
           </Text>
@@ -203,7 +207,7 @@ export default SignUp;
 const styles = StyleSheet.create({
   backButtonContainer: {
     position: "absolute",
-    top: hp(6), // Updated to match Login's back button position so it doesn't cover the status bar
+    top: hp(6),
     left: wp(3),
     zIndex: 10,
   },
@@ -264,9 +268,7 @@ const styles = StyleSheet.create({
   button: {
     marginTop: hp(2),
   },
-  buttonText: {
-    // Optionally override button text styles here if needed
-  },
+  buttonText: {},
   loginText: {
     textAlign: "center",
     marginTop: hp(2),

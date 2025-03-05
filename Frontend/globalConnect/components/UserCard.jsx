@@ -13,11 +13,11 @@ const UserCard = ({ user, onFollowToggle }) => {
   const { authToken, refreshUserProfile } = userAuth();
   const ip = config.API_IP;
 
-  // Initialize local state with user.isFollowing
-  const [following, setFollowing] = useState(user.isFollowing);
+  // Initialize local state with user.isFollowing (default to false if undefined)
+  const [following, setFollowing] = useState(user.isFollowing || false);
 
   useEffect(() => {
-    setFollowing(user.isFollowing);
+    setFollowing(user.isFollowing || false);
   }, [user.isFollowing]);
 
   // Build the correct URL for the user's profile image

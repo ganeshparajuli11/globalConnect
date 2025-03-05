@@ -29,7 +29,7 @@ import { userAuth } from "../../contexts/AuthContext";
 
 const Home = () => {
   const router = useRouter();
-  const {authToken} = userAuth()
+  const {authToken, refreshUserProfile} = userAuth()
 
 // if(!authToken){
 //   router.replace("/login")
@@ -50,6 +50,7 @@ const Home = () => {
   useEffect(() => {
     resetPosts();
     fetchPosts(1, true);
+
   }, [selectedCategory]);
 
   const isSearching = searchQuery.trim().length > 0;

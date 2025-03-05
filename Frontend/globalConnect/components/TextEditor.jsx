@@ -1,9 +1,15 @@
 import { StyleSheet, Text, View } from "react-native";
-import React from "react";
+import React, { useEffect } from "react";
 import { actions, RichEditor, RichToolbar } from "react-native-pell-rich-editor";
 import { theme } from "../constants/theme";
 
-const TextEditor = ({ editorRef, onChange }) => {
+const TextEditor = ({ editorRef, onChange, initialContent }) => {
+  useEffect(() => {
+    if (initialContent && editorRef.current) {
+      editorRef.current.setContentHTML(initialContent);
+    }
+  }, [initialContent]);
+
   return (
     <View style={{ minHeight: 285 }}>
       <RichToolbar
@@ -24,7 +30,7 @@ const TextEditor = ({ editorRef, onChange }) => {
         ]}
         style={styles.richBar}
         flatContainerStyle={styles.flatStyle}
-        selectedIconTint ={theme.colors.primary}
+        selectedIconTint={theme.colors.primary}
         editor={editorRef}
         disabled={false}
         iconMap={{
@@ -43,7 +49,7 @@ const TextEditor = ({ editorRef, onChange }) => {
         editorStyle={styles.contentStyle}
         placeholder={"Share your knowledge..."}
         onChange={onChange}
-        
+        initialContentHTML={initialContent}
       />
     </View>
   );

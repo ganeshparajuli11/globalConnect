@@ -13,9 +13,12 @@ const {
   updatePostStatus, 
   getAllPostAdmin, 
   getPostStatsAdmin,
-  searchPosts // <-- added searchPosts controller
+  searchPosts,
+  editPost,
+  deletePost
 } = require("../controller/userPostController");
-const { uploadPostMedia } = require("../middleware/uploadMiddleware"); // Correct import
+const { uploadPostMedia } = require("../middleware/uploadMiddleware");
+const { sharePost } = require("../controller/userShareController");
 
 // Define a POST route for creating posts with file upload
 router.post(
@@ -30,6 +33,25 @@ router.post(
 router.get("/all", checkAuthentication, getAllPost);
 router.get("/admin/all", checkAuthentication, checkIsAdmin, getAllPostAdmin);
 router.get("/admin/stats", checkAuthentication, checkIsAdmin, getPostStatsAdmin);
+router.post("/share", checkAuthentication,  sharePost);
+
+
+// Edit post route - must be placed before /:postId to avoid route conflicts
+router.put(
+  "/edit/:postId",
+  checkAuthentication,
+  checkIsUser,
+  uploadPostMedia.array("media", 4),
+  editPost
+);
+
+// Delete post route
+router.delete(
+  "/:postId",
+  checkAuthentication,
+  checkIsUser,
+  deletePost
+);
 
 router.get("/:postId", checkAuthentication, getPostById);
 router.put("/status/:postId", checkAuthentication, checkIsAdmin, updatePostStatus);

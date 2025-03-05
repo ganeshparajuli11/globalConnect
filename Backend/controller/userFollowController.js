@@ -92,11 +92,28 @@ const unfollowUser = async (req, res) => {
 const getFollowers = async (req, res) => {
   try {
     const userId = req.user.id;
-    const user = await User.findById(userId).populate('followers', 'name email profile_image');
+    // Get the user with both followers and following populated
+    const user = await User.findById(userId)
+      .populate('followers', 'name email profile_image')
+      .populate('following', '_id'); // We only need IDs of following to check
+    
     if (!user) {
       return res.status(404).json({ error: 'User not found.' });
     }
-    return res.status(200).json({ success: true, followers: user.followers });
+
+    // Get array of IDs that the user is following
+    const followingIds = user.following.map(f => f._id.toString());
+
+    // Map through followers and check if user follows them back
+    const followersWithStatus = user.followers.map(follower => ({
+      _id: follower._id,
+      name: follower.name,
+      email: follower.email,
+      profile_image: follower.profile_image,
+      isFollowing: followingIds.includes(follower._id.toString()) // true if user follows them back
+    }));
+
+    return res.status(200).json({ success: true, followers: followersWithStatus });
   } catch (error) {
     console.error('Error fetching followers:', error);
     return res.status(500).json({ error: 'An error occurred while fetching followers.' });
@@ -109,11 +126,28 @@ const getFollowers = async (req, res) => {
 const getFollowing = async (req, res) => {
   try {
     const userId = req.user.id;
-    const user = await User.findById(userId).populate('following', 'name email profile_image');
+    const user = await User.findById(userId).populate({
+      path: 'following',
+      select: 'name email profile_image followers'
+    });
+    
     if (!user) {
       return res.status(404).json({ error: 'User not found.' });
     }
-    return res.status(200).json({ success: true, following: user.following });
+
+    // Map through following users and add isFollowing field
+    const followingWithStatus = user.following.map(followedUser => {
+      const isFollowing = followedUser.followers.includes(userId);
+      return {
+        _id: followedUser._id,
+        name: followedUser.name,
+        email: followedUser.email,
+        profile_image: followedUser.profile_image,
+        isFollowing: isFollowing
+      };
+    });
+
+    return res.status(200).json({ success: true, following: followingWithStatus });
   } catch (error) {
     console.error('Error fetching following list:', error);
     return res.status(500).json({ error: 'An error occurred while fetching following list.' });

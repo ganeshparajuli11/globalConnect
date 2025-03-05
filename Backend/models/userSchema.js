@@ -57,8 +57,8 @@ const userSchema = new mongoose.Schema(
     reported_by: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
     status: {
       type: String,
-      enum: ["Active", "Inactive", "Under Review", "Suspended", "Banned"],
-      default: "Active",
+      enum: ["Active", "Inactive", "Under Review", "Suspended", "Banned", "Long-term Inactive"],
+      default: "Active"
     },
     suspended_until: { type: Date, default: null },
     unblock_date: { type: Date, default: null },

@@ -4,9 +4,37 @@ const moment = require("moment");
 const Report = require("../models/reportCategorySchema");
 const nodemailer = require("nodemailer");
 const ReportUser = require("../models/reportUserSchema");
+const ReportPost = require("../models/reportPostSchema");
+
+// Add cleanup job for long-term inactive users
+const initializeInactiveUsersCleanup = () => {
+  setInterval(async () => {
+    try {
+      const thirtyDaysAgo = moment().subtract(30, "days").toDate();
+      
+      await User.updateMany(
+        {
+          last_activity: { $lt: thirtyDaysAgo },
+          status: { $ne: "Banned" },
+          is_blocked: false,
+          is_deleted: false
+        },
+        {
+          $set: { status: "Long-term Inactive" }
+        }
+      );
+      
+      console.log("✅ Updated long-term inactive users status");
+    } catch (error) {
+      console.error("❌ Error in inactive users cleanup job:", error);
+    }
+  }, 3600000); // Run every hour
+};
+
+// Initialize the cleanup job
+initializeInactiveUsersCleanup();
 
 const getUserStats = async (req, res) => {
-
   try {
     // Get current timestamps
     const now = moment().toDate();
@@ -15,82 +43,319 @@ const getUserStats = async (req, res) => {
     const sevenDaysAgo = moment().subtract(7, "days").toDate();
     const thirtyDaysAgo = moment().subtract(30, "days").toDate();
 
-    // 🟢 Total Users
-    const totalUsers = await User.countDocuments();
+    // 1. User Statistics
+    const userStats = {
+      totalUsers: await User.countDocuments({ role: { $ne: 'admin' } }),
+      activeUsers: await User.countDocuments({
+        last_activity: { $gte: thirtyMinutesAgo },
+        status: "Active",
+        role: { $ne: 'admin' }
+      }),
+      inactiveUsers: await User.countDocuments({
+        last_activity: { $lt: thirtyMinutesAgo },
+        status: "Active",
+        role: { $ne: 'admin' }
+      }),
+      blockedUsers: await User.countDocuments({ is_blocked: true }),
+      reportedUsers: await User.countDocuments({ reported_count: { $gt: 0 } }),
+      newUsers: await User.countDocuments({
+        createdAt: { $gte: oneDayAgo },
+        role: { $ne: 'admin' }
+      }),
+      recentlyActiveUsers: await User.countDocuments({
+        last_activity: { $gte: sevenDaysAgo },
+        role: { $ne: 'admin' }
+      }),
+      longInactiveUsers: await User.countDocuments({
+        last_activity: { $lt: thirtyDaysAgo },
+        status: "Active",
+        role: { $ne: 'admin' }
+      })
+    };
 
-    // ✅ Active Users (Used the app in the last 30 mins & Active)
-    const activeUsers = await User.countDocuments({
-      last_activity: { $gte: thirtyMinutesAgo },
+    // 2. Post Statistics
+    const postStats = {
+      totalPosts: await Post.countDocuments({ status: { $ne: "Deleted" } }),
+      activePosts: await Post.countDocuments({ status: "Active" }),
+      reportedPosts: await Post.countDocuments({ 
+        'reports.0': { $exists: true },
+        status: { $ne: "Deleted" }
+      }),
+      deletedPosts: await Post.countDocuments({ status: "Deleted" }),
+      todayPosts: await Post.countDocuments({
+        createdAt: { $gte: oneDayAgo },
+        status: { $ne: "Deleted" }
+      })
+    };
+
+    // 3. Engagement Metrics
+    const posts = await Post.find({ 
       status: "Active",
+      createdAt: { $gte: thirtyDaysAgo }
     });
 
-    // ⚪ Inactive Users (No activity in last 30 mins but still Active)
-    const inactiveUsers = await User.countDocuments({
-      last_activity: { $lt: thirtyMinutesAgo },
-      status: "Active",
+    let totalLikes = 0;
+    let totalComments = 0;
+    let totalShares = 0;
+    let totalViews = 0;
+
+    posts.forEach(post => {
+      totalLikes += post.likes?.length || 0;
+      totalComments += post.comments?.length || 0;
+      totalShares += post.shares || 0;
+      totalViews += post.views || 0;
     });
 
-    // 🔴 Blocked Users
-    const blockedUsers = await User.countDocuments({ is_blocked: true });
+    const postAnalytics = {
+      engagement: posts.length ? 
+        Math.round(((totalLikes + totalComments + totalShares) / (posts.length * Math.max(totalViews, 1))) * 100) : 0,
+      avgLikes: posts.length ? Math.round(totalLikes / posts.length) : 0,
+      avgComments: posts.length ? Math.round(totalComments / posts.length) : 0,
+      avgShares: posts.length ? Math.round(totalShares / posts.length) : 0
+    };
 
-    // 🟠 Reported Users
-    const reportedUsers = await User.countDocuments({
-      reported_count: { $gt: 0 },
-    });
-
-    // 🔥 Blocked/Reported Users
-    const blockedAndReportedUsers = await User.countDocuments({
-      $or: [{ is_blocked: true }, { reported_count: { $gt: 0 } }],
-    });
-
-    // 🆕 New Users (Registered in the last 24 hours)
-    const newUsers = await User.countDocuments({
-      createdAt: { $gte: oneDayAgo },
-    });
-
-    // 🔄 Recently Active Users (Used the app in the last 7 days)
-    const recentlyActiveUsers = await User.countDocuments({
-      last_activity: { $gte: sevenDaysAgo },
-    });
-
-    // 📆 Users who haven't opened the app for 30+ days
-    const longInactiveUsers = await User.countDocuments({
-      last_activity: { $lt: thirtyDaysAgo },
-      status: "Active",
-    });
-
-    // 🛑 Users Under Review
-    const underReviewUsers = await User.countDocuments({
-      status: "Under Review",
-    });
-
-    // ⚠️ Suspended Users
-    const suspendedUsers = await User.countDocuments({ status: "Suspended" });
-
-    // 🚨 Banned Users
-    const bannedUsers = await User.countDocuments({ status: "Banned" });
-
-    // ✅ Return response
-    return res.json({
-      message: "User dashboard data retrieved successfully.",
-      data: {
-        totalUsers,
-        activeUsers,
-        inactiveUsers,
-        blockedUsers,
-        reportedUsers,
-        blockedAndReportedUsers,
-        newUsers, // 🆕
-        recentlyActiveUsers, // 🔄
-        longInactiveUsers, // 📆
-        underReviewUsers, // 🛑
-        suspendedUsers, // ⚠️
-        bannedUsers, // 🚨
+    // 4. Trending Posts
+    const trendingPosts = await Post.aggregate([
+      {
+        $match: {
+          createdAt: { $gte: sevenDaysAgo },
+          status: "Active"
+        }
       },
+      {
+        $addFields: {
+          totalEngagement: {
+            $add: [
+              { $size: { $ifNull: ["$likes", []] } },
+              { $size: { $ifNull: ["$comments", []] } },
+              { $ifNull: ["$shares", 0] }
+            ]
+          }
+        }
+      },
+      {
+        $sort: { totalEngagement: -1 }
+      },
+      {
+        $limit: 5
+      },
+      {
+        $lookup: {
+          from: "users",
+          localField: "user_id",
+          foreignField: "_id",
+          as: "author"
+        }
+      },
+      {
+        $unwind: "$author"
+      },
+      {
+        $project: {
+          _id: 1,
+          title: { $ifNull: ["$text_content", ""] },
+          thumbnail: { $cond: {
+            if: { $gt: [{ $size: "$media" }, 0] },
+            then: { $arrayElemAt: ["$media.media_path", 0] },
+            else: null
+          }},
+          likes: { $size: { $ifNull: ["$likes", []] } },
+          comments: { $size: { $ifNull: ["$comments", []] } },
+          shares: { $ifNull: ["$shares", 0] },
+          views: { $ifNull: ["$views", 0] },
+          author: {
+            name: "$author.name",
+            profile_image: "$author.profile_image"
+          },
+          engagement: {
+            $multiply: [
+              {
+                $divide: [
+                  "$totalEngagement",
+                  { $cond: [{ $eq: ["$views", 0] }, 1, "$views"] }
+                ]
+              },
+              100
+            ]
+          }
+        }
+      }
+    ]);
+
+    // 5. Content Distribution
+    const contentTypes = await Post.aggregate([
+      {
+        $match: { status: { $ne: "Deleted" } }
+      },
+      {
+        $project: {
+          type: {
+            $cond: [
+              { $gt: [{ $size: "$media" }, 0] },
+              {
+                $cond: [
+                  { $eq: [{ $arrayElemAt: ["$media.media_type", 0] }, "video"] },
+                  "video",
+                  "image"
+                ]
+              },
+              {
+                $cond: [
+                  { $gt: [{ $strLenCP: { $ifNull: ["$text_content", ""] } }, 0] },
+                  "text",
+                  "link"
+                ]
+              }
+            ]
+          }
+        }
+      },
+      {
+        $group: {
+          _id: "$type",
+          count: { $sum: 1 }
+        }
+      }
+    ]);
+
+    const contentDistribution = {
+      text: 0,
+      image: 0,
+      video: 0,
+      link: 0
+    };
+
+    const totalContentPosts = contentTypes.reduce((acc, type) => acc + type.count, 0);
+    contentTypes.forEach(type => {
+      if (contentDistribution.hasOwnProperty(type._id)) {
+        contentDistribution[type._id] = Math.round((type.count / totalContentPosts) * 100);
+      }
     });
+
+    // 6. Popular Tags
+    const popularTags = await Post.aggregate([
+      {
+        $match: { 
+          status: { $ne: "Deleted" },
+          tags: { $exists: true, $ne: [] }
+        }
+      },
+      {
+        $unwind: "$tags"
+      },
+      {
+        $group: {
+          _id: "$tags",
+          count: { $sum: 1 }
+        }
+      },
+      {
+        $sort: { count: -1 }
+      },
+      {
+        $limit: 10
+      },
+      {
+        $project: {
+          name: "$_id",
+          count: 1,
+          _id: 0
+        }
+      }
+    ]);
+
+    // 7. Recent Reported Users
+    const reportedUsersData = await User.aggregate([
+      {
+        $match: {
+          reported_count: { $gt: 0 }
+        }
+      },
+      {
+        $project: {
+          _id: 1,
+          name: 1,
+          email: 1,
+          profile_image: 1,
+          reportCount: "$reported_count",
+          status: 1
+        }
+      },
+      {
+        $sort: { reportCount: -1 }
+      },
+      {
+        $limit: 10
+      }
+    ]);
+
+    // 8. Recent Reported Posts
+    const reportedPostsData = await Post.aggregate([
+      {
+        $match: {
+          'reports.0': { $exists: true },
+          status: { $ne: "Deleted" }
+        }
+      },
+      {
+        $lookup: {
+          from: "users",
+          localField: "user_id",
+          foreignField: "_id",
+          as: "author"
+        }
+      },
+      {
+        $unwind: "$author"
+      },
+      {
+        $project: {
+          _id: 1,
+          title: { $ifNull: ["$text_content", ""] },
+          content: "$text_content",
+          thumbnail: { 
+            $cond: {
+              if: { $gt: [{ $size: "$media" }, 0] },
+              then: { $arrayElemAt: ["$media.media_path", 0] },
+              else: null
+            }
+          },
+          reportCount: { $size: "$reports" },
+          author: {
+            name: "$author.name",
+            profile_image: "$author.profile_image"
+          },
+          status: 1
+        }
+      },
+      {
+        $sort: { reportCount: -1 }
+      },
+      {
+        $limit: 10
+      }
+    ]);
+
+    return res.status(200).json({
+      message: "Dashboard statistics retrieved successfully",
+      data: {
+        userStats,
+        postStats,
+        postAnalytics,
+        trendingPosts,
+        contentDistribution,
+        popularTags,
+        reportedUsers: reportedUsersData,
+        reportedPosts: reportedPostsData
+      }
+    });
+
   } catch (error) {
-    console.error("Error retrieving user stats:", error);
-    return res.status(500).json({ message: "Error retrieving user stats" });
+    console.error("Error retrieving dashboard statistics:", error);
+    return res.status(500).json({ 
+      message: "Error retrieving dashboard statistics",
+      error: error.message 
+    });
   }
 };
 
@@ -102,16 +367,17 @@ const updateUserActivity = async (req, res) => {
       return res.status(400).json({ message: "User ID missing from request" });
     }
 
-    // Update last_activity timestamp
+    // Update both last_activity and status
     const updatedUser = await User.findByIdAndUpdate(
       user,
       {
         last_activity: new Date(),
+        status: "Active", // Ensure status is set to Active when user shows activity
         $push: {
           login_history: {
             date: new Date(),
-            ip_address: req.ip, // Capture user IP
-            device: req.headers["user-agent"], // Capture device info
+            ip_address: req.ip,
+            device: req.headers["user-agent"],
           },
         },
       },
@@ -122,7 +388,13 @@ const updateUserActivity = async (req, res) => {
       return res.status(404).json({ message: "User not found" });
     }
 
-    return res.status(200).json({ message: "User activity updated" });
+    return res.status(200).json({
+      message: "User activity updated",
+      data: {
+        last_activity: updatedUser.last_activity,
+        status: updatedUser.status
+      }
+    });
   } catch (error) {
     console.error("Error updating user activity:", error);
     return res.status(500).json({ message: "Internal server error" });
@@ -218,38 +490,40 @@ const getUserDashboard = async (req, res) => {
 
 const getActiveUsers = async (req, res) => {
   try {
-    // Define "active" threshold (last 30 minutes)
     const thirtyMinutesAgo = moment().subtract(30, "minutes").toDate();
 
-    // Fetch users who have been active in the last 30 minutes
     const activeUsers = await User.find({
-      last_activity: { $gte: thirtyMinutesAgo }, // 🔥 Using last_activity
+      last_activity: { $gte: thirtyMinutesAgo },
       status: "Active",
-      role: { $ne: "admin" }, // Exclude admins
+      role: { $ne: "admin" },
+      is_blocked: false,
+      is_deleted: false
     })
-      .sort({ last_activity: -1 }) // Sort by most recent activity
-      .lean(); // Convert to plain objects
+    .select('_id name email last_activity status profile_image')
+    .sort({ last_activity: -1 })
+    .lean();
 
-    // Prepare response data including id and profile_image
     const activeUserData = activeUsers.map((user, index) => ({
-      id: user._id, // Added id field
+      id: user._id,
       s_n: index + 1,
       name: user.name,
       email: user.email,
-      last_activity: user.last_activity, // 🔥 Last app interaction
-      status: user.status,
-      profile_image: user.profile_image, // Added profile image to the response
+      last_activity: moment(user.last_activity).fromNow(),
+      status: "Active",
+      profile_image: user.profile_image,
+      last_active: moment(user.last_activity).format("YYYY-MM-DD HH:mm:ss")
     }));
 
     res.status(200).json({
       message: "Active users retrieved successfully.",
-      data: activeUserData,
+      count: activeUserData.length,
+      data: activeUserData
     });
   } catch (error) {
     console.error("Error fetching active users:", error);
     res.status(500).json({
       message: "An error occurred while fetching active users.",
-      error: error.message,
+      error: error.message
     });
   }
 };
@@ -257,56 +531,54 @@ const getActiveUsers = async (req, res) => {
 
 const getInactiveUsers = async (req, res) => {
   try {
-    // Define "inactive" threshold (30+ minutes ago)
     const thirtyMinutesAgo = moment().subtract(30, "minutes").toDate();
+    const thirtyDaysAgo = moment().subtract(30, "days").toDate();
 
     console.log("🔹 Checking inactive users since:", thirtyMinutesAgo);
 
-    // Find users inactive for 30+ mins
     const inactiveUsers = await User.find({
-      last_activity: { $exists: true, $lte: thirtyMinutesAgo },
+      $or: [
+        { last_activity: { $lt: thirtyMinutesAgo } },
+        { last_activity: null }
+      ],
       is_blocked: false,
-      role: { $ne: "admin" },
+      is_deleted: false,
+      role: { $ne: "admin" }
     })
-      .sort({ last_activity: 1 })
-      .lean();
+    .select('_id name email last_activity status profile_image createdAt')
+    .sort({ last_activity: -1 })
+    .lean();
 
     console.log("✅ Found Inactive Users:", inactiveUsers.length);
 
-    if (inactiveUsers.length === 0) {
-      return res.status(200).json({
-        message: "No inactive users found.",
-        data: [],
-      });
-    }
-
-    // Prepare response data including profile_image and id
     const inactiveUserData = inactiveUsers.map((user, index) => ({
-      id: user._id, // Added id field
+      id: user._id,
       s_n: index + 1,
       name: user.name,
       email: user.email,
-      last_active: user.last_activity,
-      joined: user.createdAt, // Account creation date
-      status: "Inactive",
-      profile_image: user.profile_image, // Added profile image to the response
+      last_active: user.last_activity ? moment(user.last_activity).format("YYYY-MM-DD HH:mm:ss") : "Never",
+      inactivity_duration: user.last_activity ? moment(user.last_activity).fromNow() : "Never active",
+      status: user.last_activity && moment(user.last_activity).isAfter(thirtyDaysAgo) ? "Inactive" : "Long-term Inactive",
+      profile_image: user.profile_image,
+      joined: moment(user.createdAt).format("YYYY-MM-DD")
     }));
 
-    // Update inactive users' status to "Inactive"
+    // Update status for inactive users
     await User.updateMany(
-      { _id: { $in: inactiveUsers.map((user) => user._id) } },
+      { _id: { $in: inactiveUsers.map(user => user._id) } },
       { $set: { status: "Inactive" } }
     );
 
     res.status(200).json({
       message: "Inactive users retrieved and status updated successfully.",
-      data: inactiveUserData,
+      count: inactiveUserData.length,
+      data: inactiveUserData
     });
   } catch (error) {
     console.error("❌ Error fetching inactive users:", error);
     res.status(500).json({
       message: "An error occurred while fetching inactive users.",
-      error: error.message,
+      error: error.message
     });
   }
 };
@@ -344,7 +616,7 @@ const getReportedUsers = async (req, res) => {
         },
       },
       {
-        $unwind: "$userDetails", // Unwind userDetails to get the user info
+        $unwind: "$userDetails"
       },
       {
         $lookup: {
@@ -850,7 +1122,580 @@ const removeSuspensionOrBlock = async (req, res) => {
   }
 };
 
+// Get post statistics for admin dashboard
+const getPostStats = async (req, res) => {
+  try {
+    const now = moment();
+    const todayStart = moment().startOf('day');
+    const weekAgo = moment().subtract(7, 'days');
+    const monthAgo = moment().subtract(30, 'days');
 
+    // Basic post counts
+    const totalPosts = await Post.countDocuments({ is_deleted: false });
+    const activePosts = await Post.countDocuments({ 
+      is_deleted: false, 
+      is_blocked: false 
+    });
+    const reportedPosts = await Post.countDocuments({ 
+      reported_count: { $gt: 0 },
+      is_deleted: false 
+    });
+    const deletedPosts = await Post.countDocuments({ is_deleted: true });
+    const todayPosts = await Post.countDocuments({
+      createdAt: { $gte: todayStart.toDate() },
+      is_deleted: false
+    });
+
+    // Get engagement metrics
+    const posts = await Post.find({ 
+      is_deleted: false,
+      createdAt: { $gte: monthAgo.toDate() }
+    });
+
+    let totalLikes = 0;
+    let totalComments = 0;
+    let totalShares = 0;
+    let totalViews = 0;
+
+    posts.forEach(post => {
+      totalLikes += post.likes?.length || 0;
+      totalComments += post.comments?.length || 0;
+      totalShares += post.shares || 0;
+      totalViews += post.views || 0;
+    });
+
+    // Calculate averages
+    const avgLikes = posts.length ? Math.round(totalLikes / posts.length) : 0;
+    const avgComments = posts.length ? Math.round(totalComments / posts.length) : 0;
+    const avgShares = posts.length ? Math.round(totalShares / posts.length) : 0;
+    const avgViews = posts.length ? Math.round(totalViews / posts.length) : 0;
+
+    // Calculate engagement rate
+    const engagement = posts.length ? 
+      Math.round(((totalLikes + totalComments + totalShares) / (posts.length * totalViews)) * 100) : 0;
+
+    // Get trending posts (last 7 days, sorted by engagement)
+    const trendingPosts = await Post.aggregate([
+      {
+        $match: {
+          createdAt: { $gte: weekAgo.toDate() },
+          is_deleted: false
+        }
+      },
+      {
+        $addFields: {
+          totalEngagement: {
+            $add: [
+              { $size: { $ifNull: ["$likes", []] } },
+              { $size: { $ifNull: ["$comments", []] } },
+              { $ifNull: ["$shares", 0] }
+            ]
+          }
+        }
+      },
+      {
+        $sort: { totalEngagement: -1 }
+      },
+      {
+        $limit: 5
+      },
+      {
+        $project: {
+          _id: 1,
+          title: 1,
+          thumbnail: 1,
+          likes: { $size: { $ifNull: ["$likes", []] } },
+          comments: { $size: { $ifNull: ["$comments", []] } },
+          shares: { $ifNull: ["$shares", 0] },
+          views: { $ifNull: ["$views", 0] },
+          engagement: {
+            $multiply: [
+              {
+                $divide: [
+                  "$totalEngagement",
+                  { $cond: [{ $eq: ["$views", 0] }, 1, "$views"] }
+                ]
+              },
+              100
+            ]
+          }
+        }
+      }
+    ]);
+
+    // Get content distribution
+    const contentTypes = await Post.aggregate([
+      {
+        $match: { is_deleted: false }
+      },
+      {
+        $group: {
+          _id: "$content_type",
+          count: { $sum: 1 }
+        }
+      }
+    ]);
+
+    const contentDistribution = {
+      text: 0,
+      image: 0,
+      video: 0,
+      link: 0
+    };
+
+    contentTypes.forEach(type => {
+      if (contentDistribution.hasOwnProperty(type._id)) {
+        contentDistribution[type._id] = Math.round((type.count / totalPosts) * 100);
+      }
+    });
+
+    // Get popular tags
+    const popularTags = await Post.aggregate([
+      {
+        $match: { 
+          is_deleted: false,
+          tags: { $exists: true, $ne: [] }
+        }
+      },
+      {
+        $unwind: "$tags"
+      },
+      {
+        $group: {
+          _id: "$tags",
+          count: { $sum: 1 }
+        }
+      },
+      {
+        $sort: { count: -1 }
+      },
+      {
+        $limit: 10
+      },
+      {
+        $project: {
+          name: "$_id",
+          count: 1,
+          _id: 0
+        }
+      }
+    ]);
+
+    res.status(200).json({
+      message: "Post statistics retrieved successfully",
+      data: {
+        totalPosts,
+        activePosts,
+        reportedPosts,
+        deletedPosts,
+        todayPosts,
+        trendingPosts,
+        postAnalytics: {
+          engagement,
+          avgLikes,
+          avgComments,
+          avgShares,
+          avgViews
+        },
+        popularTags,
+        contentDistribution
+      }
+    });
+
+  } catch (error) {
+    console.error("Error fetching post stats:", error);
+    res.status(500).json({
+      message: "Error retrieving post statistics",
+      error: error.message
+    });
+  }
+};
+
+// Get reported posts with details
+const getReportedPosts = async (req, res) => {
+  try {
+    const { timeFilter } = req.query;
+    let timeQuery = {};
+
+    // Apply time filter if specified
+    if (timeFilter && timeFilter !== 'all') {
+      const filterDate = {
+        'today': moment().startOf('day'),
+        'week': moment().subtract(7, 'days'),
+        'month': moment().subtract(30, 'days')
+      }[timeFilter];
+
+      if (filterDate) {
+        timeQuery = { createdAt: { $gte: filterDate.toDate() } };
+      }
+    }
+
+    // Aggregate reported posts with detailed information
+    const reportedPosts = await ReportPost.aggregate([
+      {
+        $match: timeQuery
+      },
+      {
+        $group: {
+          _id: "$post_id",
+          reportCount: { $sum: 1 },
+          reports: {
+            $push: {
+              category: "$report_category",
+              reportedBy: "$reported_by",
+              createdAt: "$createdAt"
+            }
+          }
+        }
+      },
+      {
+        $lookup: {
+          from: "posts",
+          localField: "_id",
+          foreignField: "_id",
+          as: "postDetails"
+        }
+      },
+      {
+        $unwind: "$postDetails"
+      },
+      {
+        $lookup: {
+          from: "users",
+          localField: "postDetails.user_id",
+          foreignField: "_id",
+          as: "authorDetails"
+        }
+      },
+      {
+        $unwind: "$authorDetails"
+      },
+      {
+        $lookup: {
+          from: "reportcategories",
+          localField: "reports.category",
+          foreignField: "_id",
+          as: "reportCategories"
+        }
+      },
+      {
+        $project: {
+          _id: 1,
+          title: "$postDetails.title",
+          content: "$postDetails.content",
+          thumbnail: "$postDetails.thumbnail",
+          reportCount: 1,
+          author: {
+            _id: "$authorDetails._id",
+            name: "$authorDetails.name",
+            profile_image: "$authorDetails.profile_image"
+          },
+          status: "$postDetails.status",
+          is_blocked: "$postDetails.is_blocked",
+          created_at: "$postDetails.createdAt",
+          reports: {
+            $map: {
+              input: "$reports",
+              as: "report",
+              in: {
+                category: {
+                  $arrayElemAt: [
+                    "$reportCategories",
+                    {
+                      $indexOfArray: ["$reportCategories._id", "$$report.category"]
+                    }
+                  ]
+                },
+                reportedBy: "$$report.reportedBy",
+                createdAt: "$$report.createdAt"
+              }
+            }
+          }
+        }
+      },
+      {
+        $sort: { reportCount: -1 }
+      }
+    ]);
+
+    // Enhance the report data with reporter details
+    const enhancedReportedPosts = await Promise.all(reportedPosts.map(async (post) => {
+      // Get reporter details for each report
+      const reportsWithUserDetails = await Promise.all(post.reports.map(async (report) => {
+        const reporter = await User.findById(report.reportedBy).select('name profile_image');
+        return {
+          ...report,
+          reportedBy: {
+            _id: reporter._id,
+            name: reporter.name,
+            profile_image: reporter.profile_image
+          }
+        };
+      }));
+
+      return {
+        ...post,
+        reports: reportsWithUserDetails
+      };
+    }));
+
+    res.status(200).json({
+      message: "Reported posts retrieved successfully",
+      data: enhancedReportedPosts
+    });
+
+  } catch (error) {
+    console.error("Error fetching reported posts:", error);
+    res.status(500).json({
+      message: "Error retrieving reported posts",
+      error: error.message
+    });
+  }
+};
+
+// Handle post moderation actions
+const moderatePost = async (req, res) => {
+  try {
+    const { postId, action, reason } = req.body;
+    
+    if (!['approve', 'block', 'delete'].includes(action)) {
+      return res.status(400).json({ message: "Invalid action specified" });
+    }
+
+    const post = await Post.findById(postId);
+    if (!post) {
+      return res.status(404).json({ message: "Post not found" });
+    }
+
+    let updateData = {};
+    let emailSubject = "";
+    let emailMessage = "";
+
+    switch (action) {
+      case 'approve':
+        updateData = {
+          is_blocked: false,
+          status: 'Active',
+          moderation_notes: [...(post.moderation_notes || []), {
+            action: 'approved',
+            reason,
+            moderator: req.user.id,
+            date: new Date()
+          }]
+        };
+        emailSubject = "Your post has been approved";
+        emailMessage = `Your post "${post.title}" has been reviewed and approved.`;
+        break;
+
+      case 'block':
+        updateData = {
+          is_blocked: true,
+          status: 'Blocked',
+          moderation_notes: [...(post.moderation_notes || []), {
+            action: 'blocked',
+            reason,
+            moderator: req.user.id,
+            date: new Date()
+          }]
+        };
+        emailSubject = "Your post has been blocked";
+        emailMessage = `Your post "${post.title}" has been blocked due to: ${reason}`;
+        break;
+
+      case 'delete':
+        updateData = {
+          is_deleted: true,
+          status: 'Deleted',
+          moderation_notes: [...(post.moderation_notes || []), {
+            action: 'deleted',
+            reason,
+            moderator: req.user.id,
+            date: new Date()
+          }]
+        };
+        emailSubject = "Your post has been deleted";
+        emailMessage = `Your post "${post.title}" has been deleted due to: ${reason}`;
+        break;
+    }
+
+    // Update the post
+    const updatedPost = await Post.findByIdAndUpdate(
+      postId,
+      updateData,
+      { new: true }
+    );
+
+    // Get post author details
+    const author = await User.findById(post.user_id);
+    if (author && author.email) {
+      // Send email notification
+      await sendEmail(author.email, emailSubject, emailMessage);
+    }
+
+    res.status(200).json({
+      message: `Post has been ${action}ed successfully`,
+      data: updatedPost
+    });
+
+  } catch (error) {
+    console.error(`Error moderating post:`, error);
+    res.status(500).json({
+      message: "Error moderating post",
+      error: error.message
+    });
+  }
+};
+
+// send email to user
+const sendEmailToUsers = async (req, res) => {
+  try {
+    const { subject, message, sendToAll, specificEmails } = req.body;
+
+    // Configure nodemailer transporter
+    const transporter = nodemailer.createTransport({
+      service: "Gmail",
+      auth: {
+        user: process.env.EMAIL,
+        pass: process.env.EMAIL_PASSWORD,
+      },
+    });
+
+    // HTML email template
+    const emailTemplate = (content) => `
+      <html>
+        <head>
+          <meta charset="UTF-8">
+          <title>${subject}</title>
+          <style>
+            body { margin: 0; padding: 0; font-family: 'Arial', sans-serif; line-height: 1.6; }
+            .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+            .header { background: linear-gradient(135deg, #4F46E5, #3B82F6); padding: 30px 20px; text-align: center; border-radius: 10px 10px 0 0; }
+            .header h1 { color: white; margin: 0; font-size: 28px; }
+            .content { background: #ffffff; padding: 30px; border-radius: 0 0 10px 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+            .message { color: #333; font-size: 16px; margin-bottom: 30px; }
+            .footer { text-align: center; margin-top: 30px; padding-top: 20px; border-top: 1px solid #eee; }
+            .logo { font-size: 24px; font-weight: bold; margin-bottom: 10px; }
+            .logo span.global { color: #4F46E5; }
+            .logo span.connect { color: #000; }
+            .contact { color: #666; font-size: 14px; margin-top: 15px; }
+            .social-links { margin-top: 20px; }
+            .social-links a { color: #4F46E5; text-decoration: none; margin: 0 10px; }
+          </style>
+        </head>
+        <body>
+          <div class="container">
+            <div class="header">
+              <h1>GlobalConnect</h1>
+            </div>
+            <div class="content">
+              <div class="message">
+                ${content}
+              </div>
+              <div class="footer">
+                <div class="logo">
+                  <span class="global">Global</span><span class="connect">Connect</span>
+                </div>
+                <div class="contact">
+                  <p>Need assistance? Contact us:</p>
+                  <p>Email: support@globalconnect.com</p>
+                  <p>Phone: +1 (555) 123-4567</p>
+                </div>
+                <div class="social-links">
+                  <a href="#">Facebook</a>
+                  <a href="#">Twitter</a>
+                  <a href="#">LinkedIn</a>
+                </div>
+              </div>
+            </div>
+          </div>
+        </body>
+      </html>
+    `;
+
+    let recipients = [];
+
+    if (sendToAll) {
+      // Get all user emails if sending to everyone
+      const users = await User.find({ role: { $ne: 'admin' } }).select('email');
+      recipients = users.map(user => user.email);
+    } else {
+      // Use specific emails provided
+      recipients = specificEmails.split(',').map(email => email.trim());
+    }
+
+    // Validate recipients
+    if (recipients.length === 0) {
+      return res.status(400).json({ message: "No valid recipients found" });
+    }
+
+    // Send emails
+    const mailOptions = {
+      from: process.env.EMAIL,
+      bcc: recipients, // Use BCC for privacy
+      subject: subject,
+      html: emailTemplate(message)
+    };
+
+    await transporter.sendMail(mailOptions);
+
+    res.status(200).json({
+      message: `Email sent successfully to ${recipients.length} recipient(s)`,
+      recipientCount: recipients.length
+    });
+
+  } catch (error) {
+    console.error("Error sending email:", error);
+    res.status(500).json({
+      message: "Failed to send email",
+      error: error.message
+    });
+  }
+};
+
+// Search users by name or email
+const searchUsers = async (req, res) => {
+  try {
+    const { query } = req.query;
+
+    if (!query) {
+      return res.status(200).json({
+        message: "Please provide a search query",
+        data: []
+      });
+    }
+
+    // Search users by name or email, excluding admins
+    const users = await User.find({
+      role: { $ne: 'admin' },
+      $or: [
+        { name: { $regex: query, $options: 'i' } },
+        { email: { $regex: query, $options: 'i' } }
+      ]
+    })
+    .select('name email profile_image')
+    .limit(10) // Limit results for better performance
+    .lean();
+
+    res.status(200).json({
+      message: "Users found successfully",
+      data: users.map(user => ({
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        profile_image: user.profile_image || null
+      }))
+    });
+
+  } catch (error) {
+    console.error("Error searching users:", error);
+    res.status(500).json({
+      message: "Failed to search users",
+      error: error.message
+    });
+  }
+};
+
+// http://localhost:3000/api/dashboard/users/all
 
 
 module.exports = {
@@ -864,5 +1709,10 @@ module.exports = {
   updateLocation,
   updateUserActivity,
   manageUserStatus,
-  removeSuspensionOrBlock
+  removeSuspensionOrBlock,
+  getPostStats,
+  getReportedPosts,
+  moderatePost,
+  sendEmailToUsers,
+  searchUsers
 };

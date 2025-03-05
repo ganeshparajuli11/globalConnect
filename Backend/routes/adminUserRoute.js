@@ -12,6 +12,8 @@ const {
   updateUserActivity,
   manageUserStatus,
   removeSuspensionOrBlock,
+  sendEmailToUsers,
+  searchUsers,
 } = require("../controller/adminUserController");
 const {
   checkAuthentication,
@@ -78,4 +80,8 @@ router.put(
 
 router.get("/userStats", checkAuthentication, getUserStats);
 
+router.post("/send-email-to-users", checkAuthentication, checkIsAdmin, sendEmailToUsers);
+
+// search users by name or email
+router.get("/search-users", checkAuthentication, checkIsAdmin, searchUsers);
 module.exports = router;

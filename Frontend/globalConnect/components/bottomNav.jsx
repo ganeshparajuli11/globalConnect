@@ -21,9 +21,12 @@ const BottomNav = () => {
   const pathname = usePathname();
   const { user } = userAuth();
 
-  // console.log('user: ',user)
+  // console.log('user in bottom nav : ',user)
   // Check if user has a profile image
-  const profileImageURL = user?.profile_image ? `http://${ip}:3000/${user.profile_image}` : null;
+  const profileImageURL = user?.user?.profile_image
+    ? `http://${ip}:3000/${user.user.profile_image}`
+    : null;
+
   // console.log('checking profile image', profileImageURL);
 
   return (

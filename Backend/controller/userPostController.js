@@ -3,6 +3,8 @@ const Post = require("../models/postSchema");
 const { comment } = require("../models/commentSchema");
 const Category = require("../models/categorySchema");
 const User = require("../models/userSchema");
+const fs = require('fs');
+const path = require('path');
 
 async function createPost(req, res) {
   try {
@@ -27,17 +29,16 @@ async function createPost(req, res) {
       ? req.files.map((file) => ({
           media_path: `/uploads/posts/${file.filename}`,
           media_type: file.mimetype,
-          description: "", // Optionally, you can extend this to accept a description per media file
+          description: "", 
         }))
       : [];
 
-    // Process tags: if tags are provided as a comma-separated string, convert them to an array.
     let postTags = tags;
     if (typeof tags === "string") {
       postTags = tags.split(",").map((tag) => tag.trim());
     }
 
-    // Create and save the post (other fields like status, views, shares, etc. use default values from the schema)
+
     const post = await Post.create({
       user_id,
       category_id,
@@ -629,7 +630,147 @@ const updatePostStatus = async (req, res) => {
   }
 };
 
-module.exports = { updatePostStatus };
+/**
+ * Controller: Edit an existing post
+ */
+const editPost = async (req, res) => {
+  try {
+    const { postId } = req.params;
+    const userId = req.user.id;
+    const { category_id, text_content, removed_media } = req.body;
+
+    // Find the post and verify ownership
+    const post = await Post.findById(postId);
+    if (!post) {
+      return res.status(404).json({ message: "Post not found." });
+    }
+
+    // Verify post ownership
+    if (post.user_id.toString() !== userId) {
+      return res.status(403).json({ message: "You can only edit your own posts." });
+    }
+
+    // Validate category if provided
+    if (category_id) {
+      const categoryExists = await Category.findById(category_id);
+      if (!categoryExists) {
+        return res.status(400).json({ message: "Invalid category ID." });
+      }
+      post.category_id = category_id;
+    }
+
+    // Update text content if provided
+    if (text_content !== undefined) {
+      post.text_content = text_content;
+    }
+
+    // Handle media removal if specified
+    if (removed_media) {
+      const removedMediaIds = JSON.parse(removed_media);
+      if (Array.isArray(removedMediaIds) && removedMediaIds.length > 0) {
+        // Filter out the media that should be removed
+        const remainingMedia = post.media.filter(media => {
+          const shouldRemove = removedMediaIds.includes(media._id.toString());
+          if (shouldRemove) {
+            // Delete the file from the server
+            try {
+              const filePath = path.join(__dirname, '..', 'public', media.media_path);
+              if (fs.existsSync(filePath)) {
+                fs.unlinkSync(filePath);
+                console.log(`Deleted file: ${filePath}`);
+              }
+            } catch (err) {
+              console.error(`Error deleting file: ${err.message}`);
+            }
+          }
+          return !shouldRemove;
+        });
+        post.media = remainingMedia;
+      }
+    }
+
+    // Handle new media files
+    if (req.files && req.files.length > 0) {
+      // Process new media files
+      const newMedia = req.files.map(file => ({
+        media_path: `/uploads/posts/${file.filename}`,
+        media_type: file.mimetype,
+        description: ""
+      }));
+
+      // Combine with remaining media
+      post.media = [...post.media, ...newMedia];
+    }
+
+    // Update timestamp
+    post.updatedAt = new Date();
+
+    // Save the updated post
+    await post.save();
+
+    // Return the updated post with populated fields
+    const updatedPost = await Post.findById(postId)
+      .populate("user_id", "name profile_image")
+      .populate("category_id");
+
+    return res.status(200).json({
+      message: "Post updated successfully.",
+      data: formatPosts([updatedPost])[0]
+    });
+
+  } catch (error) {
+    console.error("Error updating post:", error);
+    return res.status(500).json({
+      message: "An error occurred while updating the post.",
+      error: error.message
+    });
+  }
+};
+
+/**
+ * Controller: Delete a post by ID (only by post owner)
+ */
+const deletePost = async (req, res) => {
+  try {
+    const { postId } = req.params;
+    const userId = req.user.id;
+
+    // Find the post
+    const post = await Post.findById(postId);
+    
+    // Check if post exists
+    if (!post) {
+      return res.status(404).json({ 
+        success: false,
+        message: "Post not found." 
+      });
+    }
+
+    // Verify post ownership
+    if (post.user_id.toString() !== userId) {
+      return res.status(403).json({ 
+        success: false,
+        message: "You can only delete your own posts." 
+      });
+    }
+
+    // Delete the post
+    await Post.findByIdAndDelete(postId);
+
+    return res.status(200).json({
+      success: true,
+      message: "Post deleted successfully."
+    });
+
+  } catch (error) {
+    console.error("Error deleting post:", error);
+    return res.status(500).json({
+      success: false,
+      message: "An error occurred while deleting the post.",
+      error: error.message
+    });
+  }
+};
 
 module.exports = {
   createPost,
@@ -642,5 +783,7 @@ module.exports = {
   getReportedPosts,
   getAllPostAdmin,
   getPostStatsAdmin,
-  searchPosts
+  searchPosts,
+  editPost,
+  deletePost
 };

@@ -28,9 +28,11 @@ const UserPostCardDetails = ({
   hasShadow = true,
   showMoreIcon = false,
 }) => {
-  const { authToken } = userAuth();
+  const { authToken, refreshUserProfile } = userAuth();
   const ip = config.API_IP;
 
+  console.log("checking post at user post details", item);
+  
   // State for likes
   const [liked, setLiked] = useState(item.liked);
   const [likeCount, setLikeCount] = useState(item.likeCount);
@@ -42,7 +44,7 @@ const UserPostCardDetails = ({
   // State for share modal
   const [shareModalVisible, setShareModalVisible] = useState(false);
 
-  // **New**: state for “User Options” modal (edit/delete post)
+  // **New**: state for "User Options" modal (edit/delete post)
   const [optionsModalVisible, setOptionsModalVisible] = useState(false);
 
   // Following list (for sharing)
@@ -123,9 +125,8 @@ const UserPostCardDetails = ({
     setShareModalVisible(false);
   };
 
-  // **New**: Handle editing the post
+  // Handle editing the post
   const handleEditPost = () => {
-    // For example, navigate to an edit screen with the post id
     router.push(`/editPost?postId=${item.id}`);
     setOptionsModalVisible(false);
   };
@@ -138,6 +139,7 @@ const UserPostCardDetails = ({
         headers: { Authorization: `Bearer ${authToken}` },
       });
       console.log("Post deleted successfully");
+      refreshUserProfile()
       // Optionally, refresh your posts list or navigate away
     } catch (error) {
       console.error(

@@ -11,7 +11,7 @@ import {
   Modal,
   Alert,
 } from "react-native";
-import { useLocalSearchParams } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import * as ImagePicker from "expo-image-picker";
 import * as MediaLibrary from "expo-media-library";
 import { Ionicons } from "@expo/vector-icons";
@@ -21,10 +21,11 @@ import BottomNav from "../../components/bottomNav";
 import config from "../../constants/config";
 import { userAuth } from "../../contexts/AuthContext";
 import { useFetchConversation, sendMessage, getFullMediaUrl } from "../../services/messageSerive";
-import socket from "../../socketManager/socket";
+import socket, { cleanup } from "../../socketManager/socket";
 
 const Chat = () => {
   const ip = config.API_IP;
+  const router = useRouter();
   // Extract conversation partner id and name from route params
   const { userId, name } = useLocalSearchParams();
   const { authToken, user } = userAuth();
@@ -33,26 +34,95 @@ const Chat = () => {
   const [sending, setSending] = useState(false);
   const [selectedImage, setSelectedImage] = useState(null);
   const [isPreviewModalVisible, setIsPreviewModalVisible] = useState(false);
+  const [messages, setMessages] = useState([]);
 
   // Reference for the ScrollView to auto-scroll
   const scrollViewRef = useRef(null);
 
   // Socket listener for incoming messages
   useEffect(() => {
-    const handleReceiveMessage = (data) => {
-      if (data.senderId === userId || data.receiverId === user?._id) {
-        fetchConversation();
-        setTimeout(() => {
-          scrollToBottom();
-        }, 200);
+    if (!user?._id || !userId) {
+      console.log("Missing user ID or recipient ID", { userId, currentUserId: user?._id });
+      return;
+    }
+
+    console.log("Initializing chat with:", { currentUserId: user._id, recipientId: userId });
+
+    // Initialize socket connection
+    const initializeSocket = async () => {
+      try {
+        if (!socket.connected) {
+          await connectSocket(user._id);
+          console.log("Socket connected successfully");
+        }
+        
+        // Explicitly join the room
+        socket.emit("join", user._id);
+        console.log("Joined socket room with user ID:", user._id);
+      } catch (error) {
+        console.error("Socket connection error:", error);
       }
     };
 
-    socket.on("receiveMessage", handleReceiveMessage);
-    return () => {
-      socket.off("receiveMessage", handleReceiveMessage);
+    initializeSocket();
+
+    const handleReceiveMessage = (data) => {
+      console.log("Received message data:", data);
+      if (data.senderId === userId || data.receiverId === user._id) {
+        // Update messages immediately instead of fetching
+        const newMessage = {
+          _id: data._id || Date.now().toString(),
+          sender: { 
+            _id: data.senderId, 
+            name: data.senderId === user._id ? "You" : name 
+          },
+          content: data.content,
+          messageType: data.messageType,
+          media: data.media,
+          image: data.image,
+          timestamp: data.timestamp
+        };
+        
+        setMessages(prev => [...prev, newMessage]);
+        scrollToBottom();
+      }
     };
-  }, [userId, user, fetchConversation]);
+
+    // Set up socket message handler
+    setMessageHandler(handleReceiveMessage);
+    socket.on("receiveMessage", handleReceiveMessage);
+
+    // Socket connection status handlers
+    socket.on("connect", () => {
+      console.log("Socket connected, joining room...");
+      socket.emit("join", user._id);
+    });
+
+    socket.on("connect_error", (error) => {
+      console.error("Socket connection error:", error);
+    });
+
+    socket.on("disconnect", (reason) => {
+      console.log("Socket disconnected:", reason);
+      // Attempt to reconnect if disconnected
+      if (reason === "io server disconnect" || reason === "transport close") {
+        initializeSocket();
+      }
+    });
+
+    // Initial fetch of conversation
+    fetchConversation().then(msgs => {
+      if (msgs) {
+        setMessages(msgs);
+        setTimeout(scrollToBottom, 100);
+      }
+    });
+
+    return () => {
+      console.log("Cleaning up chat component");
+      cleanup(); // This will clear the heartbeat interval and disconnect the socket
+    };
+  }, [userId, user?._id, name]);
 
   // Function to send a text-only message
   const handleSendText = async () => {
@@ -60,44 +130,60 @@ const Chat = () => {
     try {
       setSending(true);
       const messageData = {
+        senderId: user._id,
         receiverId: userId,
         messageType: "text",
         content: messageText,
       };
+
+      // Update UI immediately for better UX
+      const optimisticMessage = {
+        _id: Date.now().toString(),
+        sender: { _id: user._id, name: "You" },
+        content: messageText,
+        messageType: "text",
+        timestamp: Date.now()
+      };
+      setMessages(prev => [...prev, optimisticMessage]);
+      setMessageText("");
+      scrollToBottom();
+
+      // Send through socket first for real-time delivery
+      try {
+        await sendSocketMessage(messageData);
+      } catch (socketError) {
+        console.warn("Socket delivery failed, falling back to HTTP:", socketError);
+      }
+
+      // Then persist through HTTP API
       const response = await sendMessage(messageData, authToken);
-      if (response.success) {
-        socket.emit("sendMessage", {
-          senderId: user._id,
-          receiverId: userId,
-          content: messageText,
-          messageType: "text",
-        });
-        await fetchConversation();
-        setMessageText("");
-        setTimeout(() => {
-          scrollToBottom();
-        }, 200);
-      } else {
-        console.error("Error sending message:", response.message);
+      if (!response.success) {
+        // If HTTP fails, remove the optimistic message
+        setMessages(prev => prev.filter(msg => msg._id !== optimisticMessage._id));
+        Alert.alert("Error", "Failed to send message");
       }
     } catch (error) {
       console.error("Failed to send message:", error);
+      Alert.alert("Error", "Failed to send message. Please try again.");
     } finally {
       setSending(false);
     }
   };
 
-  // Function to send an image message (with optional caption)
+  // Function to send an image message
   const handleSendImage = async () => {
     if (!selectedImage) return;
     try {
       setSending(true);
       const formData = new FormData();
+      formData.append("senderId", user._id);
       formData.append("receiverId", userId);
       formData.append("messageType", "image");
       if (messageText.trim()) {
         formData.append("content", messageText);
       }
+      
+      // Prepare image data
       const uriParts = selectedImage.split("/");
       const fileName = uriParts[uriParts.length - 1];
       const fileTypeMatch = /\.(\w+)$/.exec(fileName);
@@ -107,25 +193,45 @@ const Chat = () => {
         name: fileName,
         type: fileType,
       });
+
+      // Send through HTTP API first
       const response = await sendMessage(formData, authToken);
+      
       if (response.success) {
-        socket.emit("sendMessage", {
-          senderId: user._id,
-          receiverId: userId,
-          messageType: "image",
-          localUri: selectedImage,
-        });
-        await fetchConversation();
-        setSelectedImage(null);
-        setMessageText("");
-        setTimeout(() => {
+        try {
+          // Emit through socket
+          await sendSocketMessage({
+            senderId: user._id,
+            receiverId: userId,
+            messageType: "image",
+            media: response.data.media,
+            content: messageText,
+            timestamp: Date.now()
+          });
+          
+          // Update UI immediately
+          const newMessage = {
+            _id: response.data._id || Date.now().toString(),
+            sender: { _id: user._id, name: "You" },
+            messageType: "image",
+            image: response.data.image,
+            content: messageText,
+            timestamp: Date.now()
+          };
+          setMessages(prev => [...prev, newMessage]);
+          
+          setSelectedImage(null);
+          setMessageText("");
           scrollToBottom();
-        }, 200);
+        } catch (socketError) {
+          console.warn("Socket delivery failed, but image was saved:", socketError);
+        }
       } else {
-        console.error("Error sending image:", response.message);
+        Alert.alert("Error", "Failed to send image");
       }
     } catch (error) {
       console.error("Failed to send image:", error);
+      Alert.alert("Error", "Failed to send image. Please try again.");
     } finally {
       setSending(false);
     }
@@ -224,6 +330,7 @@ const Chat = () => {
         ) : (
           conversation.map((msg) => {
             const isSender = msg.sender.name === "You";
+            
             if (msg.messageType === "text") {
               return (
                 <View
@@ -236,7 +343,6 @@ const Chat = () => {
                 </View>
               );
             } else if (msg.messageType === "image") {
-              // Build the full image URL from the backend "image" field
               const imageUrl = msg.image ? getFullMediaUrl(msg.image) : null;
               return (
                 <View
@@ -254,6 +360,56 @@ const Chat = () => {
                     </Text>
                   ) : null}
                 </View>
+              );
+            } else if (msg.messageType === "post" && msg.post) {
+              // Handle shared post messages
+              const postMedia = msg.post.media && msg.post.media.length > 0 
+                ? getFullMediaUrl(msg.post.media[0].media_path) 
+                : null;
+              
+              return (
+                <TouchableOpacity
+                  key={msg._id}
+                  onPress={() => router.push(`/post/${msg.post._id}`)}
+                  style={[
+                    styles.messageContainer,
+                    isSender ? styles.sender : styles.receiver,
+                    styles.sharedPostContainer
+                  ]}
+                >
+                  <Text style={[
+                    isSender ? styles.senderText : styles.receiverText,
+                    styles.sharedPostLabel
+                  ]}>
+                    Shared Post
+                  </Text>
+                  
+                  {postMedia && (
+                    <Image 
+                      source={{ uri: postMedia }} 
+                      style={styles.sharedPostImage}
+                    />
+                  )}
+                  
+                  <Text 
+                    style={[
+                      isSender ? styles.senderText : styles.receiverText,
+                      styles.sharedPostContent
+                    ]}
+                    numberOfLines={2}
+                  >
+                    {msg.post.text_content}
+                  </Text>
+                  
+                  {msg.post.author && (
+                    <Text style={[
+                      isSender ? styles.senderText : styles.receiverText,
+                      styles.sharedPostAuthor
+                    ]}>
+                      By {msg.post.author.name}
+                    </Text>
+                  )}
+                </TouchableOpacity>
               );
             }
             return null;
@@ -417,6 +573,30 @@ const styles = StyleSheet.create({
     position: "absolute",
     top: 40,
     right: 20,
+  },
+  sharedPostContainer: {
+    padding: 15,
+    width: 250,
+  },
+  sharedPostLabel: {
+    fontWeight: 'bold',
+    marginBottom: 5,
+    fontSize: 14,
+  },
+  sharedPostImage: {
+    width: '100%',
+    height: 150,
+    borderRadius: 8,
+    marginVertical: 8,
+  },
+  sharedPostContent: {
+    fontSize: 14,
+    marginVertical: 5,
+  },
+  sharedPostAuthor: {
+    fontSize: 12,
+    fontStyle: 'italic',
+    marginTop: 5,
   },
 });
 

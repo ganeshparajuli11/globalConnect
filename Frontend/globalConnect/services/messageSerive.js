@@ -126,7 +126,23 @@ export const useFetchConversation = (senderId) => {
       );
       console.log("Conversation response:", response.data);
       if (response.data.success) {
-        setConversation(response.data.data);
+        // Transform messages to include populated post data
+        const transformedMessages = response.data.data.map(message => {
+          if (message.messageType === "post" && message.post) {
+            return {
+              ...message,
+              post: {
+                _id: message.post._id,
+                text_content: message.post.text_content,
+                media: message.post.media,
+                author: message.post.author,
+                createdAt: message.post.createdAt
+              }
+            };
+          }
+          return message;
+        });
+        setConversation(transformedMessages);
       } else {
         console.error(
           "Error fetching conversation: API responded with success=false",

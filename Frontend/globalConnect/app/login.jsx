@@ -67,19 +67,28 @@ const Login = () => {
         `http://${ip}:3000/api/users/login`,
         { email, password }
       );
-      if (response.data?.token) {
-        await setAuth(response.data.user, response.data.token);
-        Alert.alert("Login Successful!", `Welcome, ${response.data.user.name}`);
+      if (response.data?.authToken) {
+        // Use the authContext to store user data and token
+        await setAuth(response.data.data.user, response.data.authToken);
+  
+        Alert.alert(
+          "Login Successful!",
+          `Welcome, ${response.data.data.user.name}`
+        );
         router.replace("/home");
       } else {
         Alert.alert("Error", "Invalid response from server.");
       }
     } catch (error) {
-      Alert.alert("Login Failed", "Invalid email or password.");
+      Alert.alert(
+        "Login Failed",
+        error.response?.data?.message || "Invalid email or password."
+      );
     } finally {
       setLoading(false);
     }
   };
+  
 
   return (
     <ScreenWrapper>

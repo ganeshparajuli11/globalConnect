@@ -35,11 +35,15 @@ const AddPost = () => {
   const [categories, setCategories] = useState([]);
   const [selectedCategory, setSelectedCategory] = useState("");
   const [showCategoryDropdown, setShowCategoryDropdown] = useState(false);
-  const [tags, setTags] = useState("");
+  const [tags, setTags] = useState([]);
+  const [tagInput, setTagInput] = useState('');
 
   const ip = config.API_IP;
-  const profileImageURL = user?.profile_image
-    ? `http://${ip}:3000/${user.profile_image}`
+  // Safely extract the profile image path from the nested user object.
+  const profileImagePath =
+    user?.user?.profile_image?.uri || user?.user?.profile_image || "";
+  const profileImageURL = profileImagePath
+    ? `http://${ip}:3000/${profileImagePath}`
     : "https://via.placeholder.com/100";
 
   // Fetch categories on component mount
@@ -99,21 +103,39 @@ const AddPost = () => {
     return null;
   };
 
-  // Submission logic: sends FormData if images exist, else sends JSON
-  const onSubmit = async () => {
-    console.log("on pressed");
-    const tagsArray = tags
-      .split(",")
-      .map((tag) => tag.trim())
-      .filter(Boolean);
+  // Add this function to handle tag input
+  const handleTagInput = (text) => {
+    setTagInput(text);
+    
+    // If user types a space or comma after text, create a new tag
+    if (text.endsWith(' ') || text.endsWith(',')) {
+      const newTag = text.slice(0, -1).trim();
+      if (newTag && !tags.includes(newTag)) {
+        // Add # if it doesn't start with one
+        const formattedTag = newTag.startsWith('#') ? newTag : `#${newTag}`;
+        setTags([...tags, formattedTag]);
+      }
+      setTagInput('');
+    }
+  };
 
+  // Add this function to remove tags
+  const removeTag = (indexToRemove) => {
+    setTags(tags.filter((_, index) => index !== indexToRemove));
+  };
+
+  // Modify the onSubmit function to include tags
+  const onSubmit = async () => {
     try {
       let response;
       if (files.length > 0) {
         const data = new FormData();
         data.append("category_id", selectedCategory);
         data.append("text_content", bodyRef.current);
-        tagsArray.forEach((tag) => data.append("tags", tag));
+        // Add tags to FormData
+        tags.forEach(tag => {
+          data.append("tags", tag.replace('#', '')); // Remove # before sending
+        });
         files.forEach((file) => {
           let filename = file.uri.split("/").pop();
           let match = /\.(\w+)$/.exec(filename);
@@ -131,7 +153,7 @@ const AddPost = () => {
         const payload = {
           category_id: selectedCategory,
           text_content: bodyRef.current,
-          tags: tagsArray,
+          tags: tags.map(tag => tag.replace('#', '')), // Remove # before sending
         };
 
         response = await axios.post(
@@ -167,106 +189,126 @@ const AddPost = () => {
   };
 
   return (
-    <ScreenWrapper>
-      <Header title="Create Post" showBackButton={true} />
-
-      <ScrollView contentContainerStyle={styles.contentContainer}>
-        {/* User Info */}
-        <View style={styles.userRow}>
-          {user && user.profile_image ? (
-            <Image source={{ uri: profileImageURL }} style={styles.avatar} />
-          ) : (
-            <Icon name="user" color={theme.colors.textDark} size={32} />
-          )}
-          <Text style={styles.username}>
-            {user && user.name ? user.name : "Username"}
-          </Text>
-        </View>
-
-        {/* Rich Text Editor */}
-        <View style={styles.richTextEditor}>
-          <TextEditor
-            editorRef={editorRef}
-            onChange={(body) => (bodyRef.current = body)}
-          />
-        </View>
-
-        {/* Display Selected Images with Remove Icon */}
-        {files.length > 0 && (
-          <View style={styles.filesContainer}>
-            {files.map((file, index) => (
-              <View key={index} style={styles.fileWrapper}>
-                <Image
-                  source={{ uri: getFileUri(file) }}
-                  style={styles.previewImage}
-                />
-                <TouchableOpacity
-                  style={styles.removeIcon}
-                  onPress={() => removeImage(index)}
-                >
-                  <Icon name="cross" color={theme.colors.textDark} size={20} />
-                </TouchableOpacity>
-              </View>
-            ))}
-          </View>
-        )}
-
-        {/* Media Options */}
-        <View style={styles.mediaContainer}>
-          <TouchableOpacity style={styles.mediaButton} onPress={onPick}>
-            <Icon name="image" color={theme.colors.textDark} size={24} />
-            <Text style={styles.mediaText}>Add Image</Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* Category Selection Dropdown */}
-        <View style={styles.categoryContainer}>
-          <Text style={styles.label}>Category</Text>
-          <TouchableOpacity
-            style={styles.categorySelect}
-            onPress={() => setShowCategoryDropdown(!showCategoryDropdown)}
-          >
-            <Text style={styles.categorySelectText}>
-              {categories.find((cat) => cat._id === selectedCategory)?.name ||
-                "Select Category"}
+    <ScreenWrapper bg={theme.colors.white}>
+      <View style={styles.container}>
+        <Header title="Create Post" showBackButton={true} />
+        
+        <ScrollView 
+          style={styles.scrollView}
+          contentContainerStyle={styles.contentContainer}
+          showsVerticalScrollIndicator={false}
+        >
+          {/* User Info */}
+          <View style={styles.userRow}>
+            {user && user.user && user.user.profile_image ? (
+              <Image source={{ uri: profileImageURL }} style={styles.avatar} />
+            ) : (
+              <Icon name="user" color={theme.colors.textDark} size={32} />
+            )}
+            <Text style={styles.username}>
+              {user && user.user && user.user.name ? user.user.name : "Username"}
             </Text>
-          </TouchableOpacity>
-          {showCategoryDropdown && (
-            <View style={styles.categoryDropdown}>
-              {categories.map((category) => (
-                <TouchableOpacity
-                  key={category._id}
-                  onPress={() => {
-                    setSelectedCategory(category._id);
-                    setShowCategoryDropdown(false);
-                  }}
-                  style={styles.categoryItem}
-                >
-                  <Text style={styles.categoryItemText}>{category.name}</Text>
-                </TouchableOpacity>
+          </View>
+
+          {/* Rich Text Editor */}
+          <View style={styles.richTextEditor}>
+            <TextEditor
+              editorRef={editorRef}
+              onChange={(body) => (bodyRef.current = body)}
+            />
+          </View>
+
+          {/* Display Selected Images with Remove Icon */}
+          {files.length > 0 && (
+            <View style={styles.filesContainer}>
+              {files.map((file, index) => (
+                <View key={index} style={styles.fileWrapper}>
+                  <Image
+                    source={{ uri: getFileUri(file) }}
+                    style={styles.previewImage}
+                  />
+                  <TouchableOpacity
+                    style={styles.removeIcon}
+                    onPress={() => removeImage(index)}
+                  >
+                    <Icon name="cross" color={theme.colors.textDark} size={20} />
+                  </TouchableOpacity>
+                </View>
               ))}
             </View>
           )}
-        </View>
 
-        {/* Tags Input */}
-        {/* <View style={styles.tagsContainer}>
-          <Text style={styles.label}>Tags (comma separated)</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="Enter tags, separated by commas"
-            value={tags}
-            onChangeText={setTags}
-          />
-        </View> */}
+          {/* Media Options */}
+          <View style={styles.mediaContainer}>
+            <TouchableOpacity style={styles.mediaButton} onPress={onPick}>
+              <Icon name="image" color={theme.colors.textDark} size={24} />
+              <Text style={styles.mediaText}>Add Image</Text>
+            </TouchableOpacity>
+          </View>
 
-        {/* Post Button */}
-        <TouchableOpacity style={styles.postButton} onPress={onSubmit}>
-          <Text style={styles.postButtonText}>Post</Text>
-        </TouchableOpacity>
-      </ScrollView>
+          {/* Category Selection Dropdown */}
+          <View style={styles.categoryContainer}>
+            <Text style={styles.label}>Category</Text>
+            <TouchableOpacity
+              style={styles.categorySelect}
+              onPress={() => setShowCategoryDropdown(!showCategoryDropdown)}
+            >
+              <Text style={styles.categorySelectText}>
+                {categories.find((cat) => cat._id === selectedCategory)?.name ||
+                  "Select Category"}
+              </Text>
+            </TouchableOpacity>
+            {showCategoryDropdown && (
+              <View style={styles.categoryDropdown}>
+                {categories.map((category) => (
+                  <TouchableOpacity
+                    key={category._id}
+                    onPress={() => {
+                      setSelectedCategory(category._id);
+                      setShowCategoryDropdown(false);
+                    }}
+                    style={styles.categoryItem}
+                  >
+                    <Text style={styles.categoryItemText}>{category.name}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
+          </View>
 
-      <BottomNav />
+          {/* Tags Input Section */}
+          <View style={styles.tagsContainer}>
+            <Text style={styles.label}>Tags</Text>
+            <TextInput
+              style={styles.tagInput}
+              value={tagInput}
+              onChangeText={handleTagInput}
+              placeholder="Add tags (e.g., #travel)"
+              placeholderTextColor="#999"
+            />
+            {/* Display Tags */}
+            <View style={styles.tagsWrapper}>
+              {tags.map((tag, index) => (
+                <TouchableOpacity
+                  key={index}
+                  style={styles.tag}
+                  onPress={() => removeTag(index)}
+                >
+                  <Text style={styles.tagText}>{tag}</Text>
+                  <Text style={styles.tagRemove}>×</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+
+          {/* Post Button */}
+          <TouchableOpacity style={styles.postButton} onPress={onSubmit}>
+            <Text style={styles.postButtonText}>Post</Text>
+          </TouchableOpacity>
+        </ScrollView>
+
+        <BottomNav />
+      </View>
     </ScreenWrapper>
   );
 };
@@ -274,9 +316,16 @@ const AddPost = () => {
 export default AddPost;
 
 const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: theme.colors.white,
+  },
+  scrollView: {
+    flex: 1,
+  },
   contentContainer: {
     padding: 16,
-    backgroundColor: theme.colors.white,
+    paddingBottom: 100, // Add extra padding at bottom for content
   },
   userRow: {
     flexDirection: "row",
@@ -394,16 +443,47 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: theme.colors.textDark,
   },
-  // Tags input style (reusing input style) in tags container
+  // Tags input style (if needed)
   tagsContainer: {
     marginBottom: 20,
   },
-  input: {
+  label: {
+    fontSize: 16,
+    color: theme.colors.textDark,
+    marginBottom: 8,
+    fontWeight: '500',
+  },
+  tagInput: {
     backgroundColor: theme.colors.lightGray,
     borderRadius: 8,
     padding: 12,
     fontSize: 16,
     color: theme.colors.textDark,
-    marginTop: 5,
+    marginBottom: 8,
+  },
+  tagsWrapper: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  tag: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: theme.colors.primary,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 16,
+    marginRight: 8,
+    marginBottom: 8,
+  },
+  tagText: {
+    color: theme.colors.white,
+    fontSize: 14,
+    marginRight: 4,
+  },
+  tagRemove: {
+    color: theme.colors.white,
+    fontSize: 18,
+    fontWeight: 'bold',
   },
 });

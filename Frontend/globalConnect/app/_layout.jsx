@@ -1,13 +1,13 @@
-import React, { useEffect, useState, useRef } from "react";
-import { View, ActivityIndicator, LogBox, Alert } from "react-native";
+import React, { useEffect, useState } from "react";
+import { View, ActivityIndicator, LogBox } from "react-native";
 import { Stack, useRouter, useNavigationContainerRef } from "expo-router";
+import { SafeAreaProvider } from "react-native-safe-area-context";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import axios from "axios";
 import { AuthProvider, userAuth } from "../contexts/AuthContext";
 import config from "../constants/config";
 import SocketInitializer from "../components/SocketInitializer";
 import { SocketProvider } from "./SocketProvider";
-
 
 const ip = config.API_IP;
 
@@ -25,39 +25,23 @@ const MainLayout = () => {
   useEffect(() => {
     const checkToken = async () => {
       try {
-        if (!isMounted) return; // Prevent navigation before mount
+        if (!isMounted) return;
 
         const token = await AsyncStorage.getItem("authToken");
-        console.log("Token from AsyncStorage:", token);
-
         if (token) {
           const endpoint = `http://${ip}:3000/api/dashboard/getUserData`;
-          console.log("Attempting to hit API endpoint:", endpoint);
-
           const response = await axios.get(endpoint, {
             headers: { Authorization: `Bearer ${token}` },
           });
 
-          console.log("API Response:", response);
-
           if (response.status === 200) {
             const userData = response.data.data;
             setUserData(userData);
-
-            // 🔥 NEW: Call the `update-status` API
-            axios
-              .put(
-                `http://${ip}:3000/api/dashboard/update-status`,
-                {},
-                { headers: { Authorization: `Bearer ${token}` } }
-              )
-              .then(() =>
-                console.log("User status updated successfully")
-              )
-              .catch((error) =>
-                console.error("Error updating user status:", error)
-              );
-
+            await axios.put(
+              `http://${ip}:3000/api/dashboard/update-status`,
+              {},
+              { headers: { Authorization: `Bearer ${token}` } }
+            );
             if (navigationRef.isReady()) {
               router.replace("/home");
             }
@@ -65,7 +49,6 @@ const MainLayout = () => {
             handleAuthFailure();
           }
         } else {
-          console.log("No token found, redirecting to Welcome");
           if (navigationRef.isReady()) {
             router.replace("/Welcome");
           }
@@ -84,7 +67,6 @@ const MainLayout = () => {
       if (navigationRef.isReady()) {
         router.replace("/login");
       }
-      Alert.alert("Authentication Failed", "Please log in again.");
     };
 
     checkToken();
@@ -99,20 +81,48 @@ const MainLayout = () => {
   }
 
   return (
-    <>
-      {user && <SocketInitializer />}
-      <Stack screenOptions={{ headerShown: false }}>
-        <Stack.Screen
-          name="postDetails"
-          options={{
-            presentation: "modal",
-          }}
-        />
-      </Stack>
-    </>
+    <Stack
+      screenOptions={{
+        headerShown: false,
+        contentStyle: { backgroundColor: 'white' },
+        animation: 'none',
+        presentation: 'transparentModal',
+      }}
+    >
+      <Stack.Screen 
+        name="(main)" 
+        options={{ 
+          headerShown: false,
+          animation: 'none'
+        }} 
+      />
+      <Stack.Screen 
+        name="(auth)" 
+        options={{ 
+          headerShown: false,
+          animation: 'none'
+        }} 
+      />
+      <Stack.Screen 
+        name="(setting)" 
+        options={{ 
+          headerShown: false,
+          animation: 'none'
+        }} 
+      />
+      <Stack.Screen
+        name="postDetails"
+        options={{
+          presentation: "modal",
+          animation: "fade",
+        }}
+      />
+    </Stack>
   );
 };
 
+
+// Ignore specific LogBox warnings
 LogBox.ignoreLogs([
   "Warning: TNodeChildrenRenderer",
   "Warning: bound renderChildren",
@@ -123,11 +133,13 @@ LogBox.ignoreLogs([
 
 const Layout = () => {
   return (
-    <AuthProvider>
-      <SocketProvider>
-        <MainLayout />
-      </SocketProvider>
-    </AuthProvider>
+    <SafeAreaProvider>
+      <AuthProvider>
+        <SocketProvider>
+          <MainLayout />
+        </SocketProvider>
+      </AuthProvider>
+    </SafeAreaProvider>
   );
 };
 

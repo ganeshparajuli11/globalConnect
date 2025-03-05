@@ -23,6 +23,7 @@ import NotificationPage from "./components/notification/NotificationPage";
 import Message from "./components/message/Message";
 import ChatPage from "./components/message/ChatPage";
 import AdminManagement from "./components/admin/AdminManagement";
+import SendEmail from "./components/email/SendEmail";
 
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -101,7 +102,7 @@ function App() {
         <Route path="/privacyPolicy" element={<PrivacyPolicy />} />
         <Route path="/termsAndCondition" element={<TermsAndCondition />} />
         <Route path="/notification" element={<NotificationPage />} />
-
+        <Route path="/send-email" element={<SendEmail />} />
         <Route path="/allCategory" element={<AllCategory />} />
         <Route path="/user/:userId" element={<UserProfile />} />
         <Route path="/message" element={<Message />} />

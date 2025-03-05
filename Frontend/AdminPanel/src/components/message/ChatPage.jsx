@@ -16,11 +16,69 @@ const ChatPage = () => {
   const [loading, setLoading] = useState(false);
   const socketRef = useRef(null);
   const messagesEndRef = useRef(null);
+  const [socketConnected, setSocketConnected] = useState(false);
 
   const token = localStorage.getItem("access_token");
   const adminId = localStorage.getItem("adminId");
 
-  // Fetch conversation: send userId in request body
+  // Setup Socket.IO connection for real-time updates
+  useEffect(() => {
+    // Initialize socket with auth token
+    socketRef.current = io(SOCKET_SERVER_URL, { 
+      query: { token },
+      transports: ["websocket"],
+      reconnection: true,
+      reconnectionAttempts: 10,
+      reconnectionDelay: 3000,
+      timeout: 10000
+    });
+
+    // Handle connection events
+    socketRef.current.on("connect", () => {
+      console.log("✅ Socket Connected");
+      setSocketConnected(true);
+      socketRef.current.emit("join", adminId);
+    });
+
+    socketRef.current.on("connect_error", (error) => {
+      console.error("⚠️ Socket Connection Error:", error.message);
+      setSocketConnected(false);
+    });
+
+    // Listen for incoming messages
+    socketRef.current.on("receiveMessage", (message) => {
+      console.log("📩 Received message:", message);
+      if (
+        (message.senderId === adminId && message.receiverId === userId) ||
+        (message.senderId === userId && message.receiverId === adminId)
+      ) {
+        setMessages((prev) => [...prev, {
+          _id: message._id || Date.now().toString(),
+          sender: { 
+            _id: message.senderId, 
+            name: message.senderId === adminId ? "You" : targetUser?.name 
+          },
+          content: message.content,
+          messageType: message.messageType,
+          timestamp: message.timestamp,
+          isAdmin: message.isAdmin
+        }]);
+        scrollToBottom();
+      }
+    });
+
+    // Cleanup on unmount
+    return () => {
+      if (socketRef.current) {
+        socketRef.current.off("connect");
+        socketRef.current.off("connect_error");
+        socketRef.current.off("receiveMessage");
+        socketRef.current.disconnect();
+      }
+    };
+  }, [userId, token, adminId, targetUser]);
+
+  // Fetch conversation
   const fetchConversation = async () => {
     setLoading(true);
     try {
@@ -33,7 +91,6 @@ const ChatPage = () => {
         setMessages(response.data.data);
         if (response.data.data.length > 0) {
           const firstMsg = response.data.data[0];
-          // In the admin conversation, if firstMsg.sender.name is "You", then target is receiver; otherwise, target is sender.
           const partner =
             firstMsg.sender.name === "You" ? firstMsg.receiver : firstMsg.sender;
           setTargetUser(partner);
@@ -49,42 +106,53 @@ const ChatPage = () => {
     }
   };
 
-  // Send new message: override API response with our plain text so that UI shows correct content immediately.
+  // Send new message with socket emission
   const sendMessageFunc = async () => {
-    if (!newMessage.trim()) return;
+    if (!newMessage.trim() || !socketConnected) return;
+    
     try {
       const messageData = {
         receiverId: userId,
         content: newMessage,
         messageType: "text",
       };
+
+      // Send through HTTP API first
       const response = await axios.post(
         SEND_MESSAGE_URL,
         messageData,
         { headers: { Authorization: `Bearer ${token}` } }
       );
+
       if (response.data.success) {
-        // Create a new message object with plain text
+        // Create local message object
         const sentMessage = {
           _id: response.data.data._id,
-          sender: { _id: adminId, name: "You", avatar: "https://example.com/profile_image.jpg" },
+          sender: { _id: adminId, name: "You" },
           receiver: targetUser || { _id: userId },
           messageType: "text",
           content: newMessage,
           timestamp: new Date(),
           isAdmin: true,
         };
+
+        // Update UI immediately
         setMessages((prev) => [...prev, sentMessage]);
         setNewMessage("");
         scrollToBottom();
-        // Emit the socket event so that other clients update in real time.
+
+        // Emit through socket for real-time delivery
         socketRef.current.emit("sendMessage", {
           senderId: adminId,
           receiverId: userId,
           content: newMessage,
           messageType: "text",
-          timestamp: new Date(),
+          timestamp: Date.now(),
           isAdmin: true,
+        }, (response) => {
+          if (response.status === "error") {
+            console.error("Socket message delivery failed:", response.error);
+          }
         });
       }
     } catch (error) {
@@ -92,29 +160,10 @@ const ChatPage = () => {
     }
   };
 
-  // Setup Socket.IO connection for real-time updates
-  useEffect(() => {
-    socketRef.current = io(SOCKET_SERVER_URL, { query: { token } });
-    // Listen for incoming messages; only add those that belong to this conversation.
-    socketRef.current.on("receiveMessage", (message) => {
-      if (
-        (message.senderId === adminId && message.receiverId === userId) ||
-        (message.senderId === userId && message.receiverId === adminId)
-      ) {
-        setMessages((prev) => [...prev, message]);
-        scrollToBottom();
-      }
-    });
-    return () => {
-      socketRef.current.disconnect();
-    };
-  }, [userId, token, adminId]);
-
   useEffect(() => {
     fetchConversation();
   }, [userId]);
 
-  // Scroll to bottom by using the ref's scrollIntoView method.
   const scrollToBottom = () => {
     if (messagesEndRef.current) {
       messagesEndRef.current.scrollIntoView({ behavior: "smooth" });
@@ -125,7 +174,6 @@ const ChatPage = () => {
     scrollToBottom();
   }, [messages]);
 
-  // Helper: convert a relative avatar URL to a full URL.
   const getProfilePicUrl = (avatar) => {
     if (!avatar) return "";
     return avatar.startsWith("http") ? avatar : `http://localhost:3000/${avatar}`;

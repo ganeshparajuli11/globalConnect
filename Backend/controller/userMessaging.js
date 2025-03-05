@@ -220,18 +220,44 @@ const getMessages = async (req, res) => {
 const getAllMessages = async (req, res) => {
   try {
     const currentUserId = req.user.id;
+    const { searchQuery } = req.query;
+
+    // Get the current user's data with following/followers
+    const currentUser = await User.findById(currentUserId)
+      .populate('following', 'name avatar profile_image')
+      .populate('followers', 'name avatar profile_image');
+
+    // Get mutual followers (users who follow each other)
+    const mutualFollowers = currentUser.followers.filter(follower =>
+      currentUser.following.some(following => following._id.toString() === follower._id.toString())
+    );
+    const mutualFollowerIds = new Set(mutualFollowers.map(user => user._id.toString()));
+
+    // Get admin users and extract their IDs
+    const adminUsers = await User.find({ role: "admin" }).select("_id name avatar profile_image");
+    const adminIds = adminUsers.map(admin => admin._id.toString());
+
+    // Combine mutual follower IDs and admin IDs into one set
+    const conversationParticipants = Array.from(new Set([...mutualFollowerIds, ...adminIds]));
+
+    // Query messages with conversation participants (either as sender or receiver)
     const messages = await Message.find({
-      $or: [{ sender: currentUserId }, { receiver: currentUserId }],
+      $or: [
+        { sender: currentUserId, receiver: { $in: conversationParticipants } },
+        { receiver: currentUserId, sender: { $in: conversationParticipants } }
+      ]
     })
       .sort({ timestamp: -1 })
       .populate("sender receiver", "name avatar profile_image");
 
-    if (!messages.length) {
-      return res.status(200).json({ success: true, message: "No messages found.", data: [] });
-    }
+    // Build a conversation map: one conversation per other user
+    const conversationMap = {};
 
-    const conversationMap = messages.reduce((acc, msg) => {
+    messages.forEach(msg => {
       const otherUser = msg.sender._id.toString() === currentUserId.toString() ? msg.receiver : msg.sender;
+      const otherUserId = otherUser._id.toString();
+
+      // Prepare a preview of the last message
       let lastMessagePreview = "";
       if (msg.messageType === "text" && msg.content) {
         try {
@@ -245,28 +271,69 @@ const getAllMessages = async (req, res) => {
       } else if (msg.messageType === "post") {
         lastMessagePreview = "Post";
       }
-      if (!acc[otherUser._id]) {
-        acc[otherUser._id] = {
+
+      // Keep the most recent message per conversation
+      if (!conversationMap[otherUserId] || conversationMap[otherUserId].timestamp < msg.timestamp) {
+        conversationMap[otherUserId] = {
           userId: otherUser._id,
           name: otherUser.name,
           avatar: otherUser.avatar || otherUser.profile_image,
           lastMessage: lastMessagePreview,
           timestamp: msg.timestamp,
+          hasMessages: true
         };
       }
-      return acc;
-    }, {});
+    });
+
+    // Ensure that all conversation participants are included,
+    // even if there are no messages yet.
+    conversationParticipants.forEach(participantId => {
+      if (!conversationMap[participantId]) {
+        // Try to find the participant in mutual followers or adminUsers.
+        let foundUser =
+          mutualFollowers.find(u => u._id.toString() === participantId) ||
+          adminUsers.find(u => u._id.toString() === participantId);
+        if (foundUser) {
+          conversationMap[participantId] = {
+            userId: foundUser._id,
+            name: foundUser.name,
+            avatar: foundUser.avatar || foundUser.profile_image,
+            lastMessage: "",
+            timestamp: null,
+            hasMessages: false
+          };
+        }
+      }
+    });
+
+    let results = Object.values(conversationMap);
+    if (searchQuery) {
+      const query = searchQuery.toLowerCase();
+      results = results.filter(conv =>
+        conv.name.toLowerCase().includes(query)
+      );
+    }
+
+    // Sort the results: conversations with messages (by timestamp) first,
+    // then the rest alphabetically.
+    results.sort((a, b) => {
+      if (a.timestamp && b.timestamp) return b.timestamp - a.timestamp;
+      if (a.timestamp) return -1;
+      if (b.timestamp) return 1;
+      return a.name.localeCompare(b.name);
+    });
 
     res.status(200).json({
       success: true,
-      message: "Messages fetched successfully.",
-      data: Object.values(conversationMap),
+      message: "Mutual followers and admin messages fetched successfully.",
+      data: results
     });
   } catch (error) {
     console.error("Error fetching messages:", error);
-    res.status(500).json({ success: false, message: "Failed to fetch messages" });
+    res.status(500).json({ success: false, message: "Failed to fetch messages." });
   }
 };
+
 
 /**
  * Controller: Admin sends a message to any user.
@@ -373,19 +440,40 @@ const adminGetAllMessages = async (req, res) => {
     if (!req.user || req.user.role !== "admin") {
       return res.status(403).json({ error: "Only admin can use this endpoint." });
     }
+
     const adminId = req.user.id;
+    const { searchQuery } = req.query;
+
+    // Get all messages where admin is either sender or receiver
     const messages = await Message.find({
       $or: [{ sender: adminId }, { receiver: adminId }],
     })
       .sort({ timestamp: -1 })
-      .populate("sender receiver", "name avatar profile_image");
+      .populate({
+        path: "sender",
+        select: "name email avatar profile_image"
+      })
+      .populate({
+        path: "receiver",
+        select: "name email avatar profile_image"
+      });
 
     if (!messages.length) {
-      return res.status(200).json({ success: true, message: "No messages found.", data: [] });
+      return res.status(200).json({ 
+        success: true, 
+        message: "No messages found.", 
+        data: [] 
+      });
     }
 
-    const conversationMap = messages.reduce((acc, msg) => {
+    // Create a map to store unique conversations with latest message
+    const conversationMap = new Map();
+
+    // Process messages to create conversation map
+    messages.forEach(msg => {
       const otherUser = msg.sender._id.toString() === adminId.toString() ? msg.receiver : msg.sender;
+      const userId = otherUser._id.toString();
+
       let lastMessagePreview = "";
       if (msg.messageType === "text" && msg.content) {
         try {
@@ -399,26 +487,54 @@ const adminGetAllMessages = async (req, res) => {
       } else if (msg.messageType === "post") {
         lastMessagePreview = "Post";
       }
-      if (!acc[otherUser._id]) {
-        acc[otherUser._id] = {
+
+      // Only update if this is a more recent message for this user
+      if (!conversationMap.has(userId) || 
+          conversationMap.get(userId).timestamp < msg.timestamp) {
+        conversationMap.set(userId, {
           userId: otherUser._id,
           name: otherUser.name,
+          email: otherUser.email,
           avatar: otherUser.avatar || otherUser.profile_image,
           lastMessage: lastMessagePreview,
           timestamp: msg.timestamp,
-        };
+          unreadCount: 0 // You can implement unread count logic here
+        });
       }
-      return acc;
-    }, {});
+    });
+
+    // Convert map to array
+    let conversations = Array.from(conversationMap.values());
+
+    // Apply search filter if query exists
+    if (searchQuery) {
+      const query = searchQuery.toLowerCase();
+      conversations = conversations.filter(conv => 
+        conv.name.toLowerCase().includes(query) || 
+        conv.email.toLowerCase().includes(query)
+      );
+    }
+
+    // Sort conversations by timestamp (most recent first)
+    conversations.sort((a, b) => b.timestamp - a.timestamp);
 
     res.status(200).json({
       success: true,
       message: "Admin conversations fetched successfully.",
-      data: Object.values(conversationMap),
+      data: {
+        conversations,
+        total: conversations.length,
+        hasSearch: !!searchQuery
+      }
     });
+
   } catch (error) {
     console.error("Error fetching admin conversations:", error);
-    res.status(500).json({ success: false, message: "Failed to fetch admin conversations." });
+    res.status(500).json({ 
+      success: false, 
+      message: "Failed to fetch admin conversations.",
+      error: error.message 
+    });
   }
 };
 

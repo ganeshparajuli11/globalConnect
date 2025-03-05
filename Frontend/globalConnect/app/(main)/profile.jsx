@@ -1,13 +1,13 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   StyleSheet,
   Text,
   View,
-  Image,
   TouchableOpacity,
   ScrollView,
   Modal,
   Alert,
+  Image,
 } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import ScreenWrapper from "../../components/ScreenWrapper";
@@ -20,14 +20,27 @@ import { useRouter } from "expo-router";
 import * as ImagePicker from "expo-image-picker";
 import UserPostCardDetails from "../../components/UserPostCardDetails";
 import axios from "axios";
+import Animated from "react-native-reanimated";
 
 const Profile = () => {
   const router = useRouter();
-  const { user, authToken, setUserData, refreshUserProfile } = userAuth(); // Make sure user contains your token (e.g. user.token)
+  const { user, authToken, setUserData, refreshUserProfile } = userAuth();
   const ip = config.API_IP;
-  const profileImageURL = user?.profile_image
-    ? `http://${ip}:3000/${user.profile_image}`
+
+  const profileImagePath =
+    user?.user?.profile_image?.uri || user?.user?.profile_image || "";
+
+  const profileImageURL = profileImagePath
+    ? `http://${ip}:3000/${profileImagePath}`
     : "https://via.placeholder.com/100";
+
+  useEffect(() => {
+    refreshUserProfile();
+  }, []);
+
+  if (!user) {
+    return null; // Return null while loading
+  }
 
   // State to show the full-screen profile image modal
   const [fullImageModalVisible, setFullImageModalVisible] = useState(false);
@@ -82,9 +95,7 @@ const Profile = () => {
           Alert.alert("Success", "Profile updated successfully");
 
           const fullImageUrl = response.data.profileImage;
-
-          await refreshUserProfile()
-
+          await refreshUserProfile();
           console.log("User data updated:", fullImageUrl);
         } else {
           Alert.alert(
@@ -94,7 +105,6 @@ const Profile = () => {
         }
       } catch (error) {
         console.error("Update Error:", error);
-
         if (error.response) {
           console.error("Backend Response:", error.response.data);
           Alert.alert(
@@ -109,7 +119,7 @@ const Profile = () => {
     }
   };
 
-  console.log("user", user)
+  console.log("user", user);
   return (
     <ScreenWrapper>
       <StatusBar style="dark" />
@@ -131,6 +141,7 @@ const Profile = () => {
                   source={{ uri: profileImageURL }}
                   style={styles.profileImage}
                 />
+
                 {/* Camera Icon overlay */}
                 <TouchableOpacity
                   style={styles.cameraIcon}
@@ -141,29 +152,39 @@ const Profile = () => {
               </View>
             </TouchableOpacity>
             {/* User Information */}
-            <Text style={styles.userName}>{user?.name || "John Doe"}</Text>
-            <Text style={styles.userEmail}>{user?.email}</Text>
+            <Text style={styles.userName}>
+              {user?.user?.name || "John Doe"}
+            </Text>
+            <Text style={styles.userEmail}>{user?.user?.email}</Text>
             <Text style={styles.userLocation}>
-              destination: {user?.destination_country}
+              destination: {user?.user?.destination || "Not specified"}
             </Text>
           </View>
 
           {/* Stats Section */}
           <View style={styles.statsSection}>
-            <View style={styles.statsContainer}>
+            <TouchableOpacity
+              style={styles.statsContainer}
+              onPress={() => router.push("/follower")}
+            >
               <Text style={styles.statsCount}>
-                {user?.followers?.length || 0}
+                {user?.user?.followersCount || 0}
               </Text>
               <Text style={styles.statsLabel}>Followers</Text>
-            </View>
-            <View style={styles.statsContainer}>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.statsContainer}
+              onPress={() => router.push("/follower")}
+            >
               <Text style={styles.statsCount}>
-                {user?.following?.length || 0}
+                {user?.user?.followingCount || 0}
               </Text>
               <Text style={styles.statsLabel}>Following</Text>
-            </View>
+            </TouchableOpacity>
             <View style={styles.statsContainer}>
-              <Text style={styles.statsCount}>{user?.posts_count || 0}</Text>
+              <Text style={styles.statsCount}>
+                {user?.posts?.length || 0}
+              </Text>
               <Text style={styles.statsLabel}>Posts</Text>
             </View>
           </View>
@@ -172,8 +193,42 @@ const Profile = () => {
           <View style={styles.bioSection}>
             <Text style={styles.bioTitle}>Bio</Text>
             <Text style={styles.bioText}>
-              {user?.bio || "No bio available"}
+              {user?.user?.bio || "No bio available"}
             </Text>
+          </View>
+
+          {/* Posts Section */}
+          <View style={styles.postsSection}>
+            <Text style={styles.postsTitle}>Posts</Text>
+            {user?.posts && user.posts.length > 0 ? (
+              user.posts.map((post) => {
+                // Transform the post data to match the expected structure
+                const transformedPost = {
+                  ...post,
+                  time: post.createdAt,
+                  commentCount: post.commentsCount,
+                  likeCount: post.likesCount,
+                  media: post.media?.map(m => `http://${ip}:3000${m.media_path}`) || [],
+                  user: {
+                    ...post.user,
+                    profile_image: post.user.profile_image
+                  }
+                };
+                
+                return (
+                  <UserPostCardDetails
+                    key={post.id}
+                    item={transformedPost}
+                    currentUser={user?.user}
+                    router={router}
+                    hasShadow={true}
+                    showMoreIcon={true}
+                  />
+                );
+              })
+            ) : (
+              <Text style={styles.noPostsText}>No posts yet</Text>
+            )}
           </View>
 
           {/* Interests Section */}
@@ -345,6 +400,15 @@ const styles = StyleSheet.create({
     color: theme.colors.black,
     marginTop: 5,
   },
+  postsSection: {
+    marginBottom: 15,
+  },
+  postsTitle: {
+    fontSize: 18,
+    fontWeight: "bold",
+    color: theme.colors.black,
+    marginBottom: 10,
+  },
   interestsSection: {
     marginBottom: 15,
   },
@@ -415,5 +479,10 @@ const styles = StyleSheet.create({
   fullScreenImage: {
     width: "90%",
     height: "80%",
+  },
+  noPostsText: {
+    fontSize: 16,
+    color: theme.colors.gray,
+    textAlign: "center",
   },
 });
