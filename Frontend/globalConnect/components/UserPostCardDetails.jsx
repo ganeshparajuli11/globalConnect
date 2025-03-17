@@ -31,8 +31,6 @@ const UserPostCardDetails = ({
   const { authToken, refreshUserProfile } = userAuth();
   const ip = config.API_IP;
 
-  console.log("checking post at user post details", item);
-  
   // State for likes
   const [liked, setLiked] = useState(item.liked);
   const [likeCount, setLikeCount] = useState(item.likeCount);
@@ -44,7 +42,7 @@ const UserPostCardDetails = ({
   // State for share modal
   const [shareModalVisible, setShareModalVisible] = useState(false);
 
-  // **New**: state for "User Options" modal (edit/delete post)
+  // State for "User Options" modal (edit/delete post)
   const [optionsModalVisible, setOptionsModalVisible] = useState(false);
 
   // Following list (for sharing)
@@ -54,8 +52,8 @@ const UserPostCardDetails = ({
     ? `http://${ip}:3000/${item.user.profile_image}`
     : "https://via.placeholder.com/100";
 
-  // Format the post's creation date using moment.js
-  const createdAt = moment(item?.time).format("MMM D");
+  // ▶ Updated date format to "MMM D, YYYY"
+  const createdAt = moment(item?.time).format("MMM D, YYYY");
 
   // HTML content width
   const contentWidth = Dimensions.get("window").width - 32;
@@ -115,7 +113,6 @@ const UserPostCardDetails = ({
         { postId: item.id, recipientId: user._id },
         { headers: { Authorization: `Bearer ${authToken}` } }
       );
-    //   console.log("Post shared successfully with", user.name);
     } catch (error) {
       console.error(
         "Error sharing post:",
@@ -131,7 +128,7 @@ const UserPostCardDetails = ({
     setOptionsModalVisible(false);
   };
 
-  // **New**: Handle deleting the post
+  // Handle deleting the post
   const handleDeletePost = async () => {
     try {
       const url = `http://${ip}:3000/api/post/${item.id}`;
@@ -139,7 +136,7 @@ const UserPostCardDetails = ({
         headers: { Authorization: `Bearer ${authToken}` },
       });
       console.log("Post deleted successfully");
-      refreshUserProfile()
+      refreshUserProfile();
       // Optionally, refresh your posts list or navigate away
     } catch (error) {
       console.error(

@@ -1,17 +1,14 @@
 const crypto = require("crypto");
 const User = require("../models/userSchema");
 const Message = require("../models/messageSchema");
-const Post = require("../models/postSchema");
-const { sendFirebaseNotification } = require("./firebaseController");
-const { onlineUsers } = require("./socketController");
+const { sendRealTimeMessage } = require("./socketController"); // Ensure socketController exports a valid io instance
+const { sendExpoPushNotification } = require("./pushTokenController");
 
-// Encryption configuration
 const ENCRYPTION_KEY = Buffer.from(process.env.ENCRYPTION_KEY, "hex");
-const IV_LENGTH = 16; // AES block size
+const IV_LENGTH = 16;
 
 /**
  * Encrypts a string using AES-256-CBC.
- * Returns the result in the format: iv:encryptedData (both hex-encoded).
  */
 const encrypt = (text) => {
   const iv = crypto.randomBytes(IV_LENGTH);
@@ -21,109 +18,26 @@ const encrypt = (text) => {
 };
 
 /**
- * Decrypts an AES-256-CBC encrypted string (colon-separated format).
+ * Decrypts an AES-256-CBC encrypted string.
  */
 const decrypt = (encryptedText) => {
-  const parts = encryptedText.split(":");
-  const iv = Buffer.from(parts.shift(), "hex");
-  const encrypted = Buffer.from(parts.join(":"), "hex");
-  const decipher = crypto.createDecipheriv("aes-256-cbc", ENCRYPTION_KEY, iv);
-  const decryptedBuffer = Buffer.concat([decipher.update(encrypted), decipher.final()]);
-  return decryptedBuffer.toString("utf8");
-};
-
-/**
- * Helper: Emits a real-time message event using Socket.IO.
- */
-const emitMessage = (io, receiverId, payload) => {
-  const recipientSocketId = onlineUsers.get(receiverId);
-  if (recipientSocketId) {
-    io.to(recipientSocketId).emit("receiveMessage", payload);
-    console.log(`Message emitted to ${receiverId} at socket ${recipientSocketId}`);
-  } else {
-    console.log(`Receiver ${receiverId} is offline. Message stored.`);
-  }
-};
-
-/**
- * Checks if two users can message each other (mutual following).
- */
-const canMessage = async (userId1, userId2) => {
   try {
-    const user1 = await User.findById(userId1);
-    const user2 = await User.findById(userId2);
-    return user1.following.includes(userId2) && user2.followers.includes(userId1);
-  } catch (error) {
-    console.error("Error in canMessage:", error);
-    return false;
+    const parts = encryptedText.split(":");
+    const iv = Buffer.from(parts.shift(), "hex");
+    const encrypted = Buffer.from(parts.join(":"), "hex");
+    const decipher = crypto.createDecipheriv("aes-256-cbc", ENCRYPTION_KEY, iv);
+    const decryptedBuffer = Buffer.concat([decipher.update(encrypted), decipher.final()]);
+    return decryptedBuffer.toString("utf8");
+  } catch (err) {
+    console.error("❌ Decryption error:", err.message);
+    return "Unable to decrypt message.";
   }
 };
 
 /**
- * Formats a Message document for API responses.
- * Decrypts text messages and, for image messages, converts binary image data
- * into a UTF‑8 string (e.g. "/uploads/messages/filename.png") so that the frontend
- * can directly build the full URL.
+ * Sends a message and handles real-time delivery.
  */
-const formatMessage = (message, currentUserId) => {
-  let formattedContent = message.content;
-  if (message.messageType === "text" && message.content) {
-    try {
-      formattedContent = decrypt(message.content);
-    } catch (err) {
-      console.error("Decryption error:", err.message);
-      formattedContent = "Unable to decrypt message.";
-    }
-  }
-  
-  let formattedImage = null;
-  if (message.messageType === "image" && message.image) {
-    // If image is stored as binary (Buffer), convert it to UTF‑8 string.
-    if (Buffer.isBuffer(message.image)) {
-      formattedImage = message.image.toString("utf8");
-    } else {
-      formattedImage = message.image;
-    }
-  }
-  
-  return {
-    _id: message._id,
-    sender: {
-      _id: message.sender._id,
-      name:
-        message.sender._id.toString() === currentUserId.toString()
-          ? "You"
-          : message.sender.name,
-      avatar: message.sender.avatar || message.sender.profile_image,
-    },
-    receiver: {
-      _id: message.receiver._id,
-      name: message.receiver.name,
-      avatar: message.receiver.avatar || message.receiver.profile_image,
-    },
-    messageType: message.messageType,
-    content: message.messageType === "text" ? formattedContent : message.content,
-    // For image messages, include media array if needed
-    media: message.messageType === "image" ? message.media : undefined,
-    // Include converted image field
-    image: formattedImage,
-    post: message.post
-      ? {
-          _id: message.post._id,
-          title: message.post.title,
-          image: message.post.image,
-        }
-      : null,
-    timestamp: message.timestamp,
-    readByReceiver: message.readByReceiver,
-    isAdmin: message.isAdmin || false,
-  };
-};
-
-/**
- * Controller: Regular user sends a message.
- */
-const sendMessage = async (req, res, io) => {
+const sendMessage = async (req, res) => {
   try {
     const senderId = req.user?.id;
     const { receiverId, content, messageType, postId } = req.body;
@@ -137,7 +51,7 @@ const sendMessage = async (req, res, io) => {
 
     if (messageType === "text") {
       if (!content || typeof content !== "string") {
-        return res.status(400).json({ error: "Text content is required for text messages." });
+        return res.status(400).json({ error: "Text content is required." });
       }
       processedContent = encrypt(content);
     }
@@ -152,10 +66,9 @@ const sendMessage = async (req, res, io) => {
       }));
     }
 
-    // If your Message schema requires an "image" field for image messages, assign the first file's URL.
     const imageField = messageType === "image" && media.length > 0 ? media[0].media_path : undefined;
 
-    // Save the message
+    // Save the message in MongoDB
     const message = new Message({
       sender: senderId,
       receiver: receiverId,
@@ -167,383 +80,304 @@ const sendMessage = async (req, res, io) => {
     });
     await message.save();
 
-    // Emit the real-time message (plain text is sent for immediate display)
-    emitMessage(io, receiverId, {
-      senderId,
-      content: messageType === "text" ? content : null,
+    // Emit real-time message (Handled in `socketController.js`)
+    sendRealTimeMessage(senderId, receiverId, {
+      _id: message._id, // Include the message ID
+      sender: { _id: senderId, name: req.user.name },
+      receiver: { _id: receiverId, name: (await User.findById(receiverId)).name },
+      content: messageType === "text" ? content : null, // Send decrypted text
       messageType,
       media: messageType === "image" ? media : [],
+      image: imageField,
       postId: postId || null,
-      timestamp: Date.now(),
+      timestamp: message.timestamp,
     });
+
+    // Send push notification if receiver is offline
+    const receiver = await User.findById(receiverId, "expoPushToken name").lean();
+    if (receiver?.expoPushToken) {
+      let pushMessage = `${req.user.name || "Someone"} sent you a message.`;
+      if (messageType === "text") pushMessage = `${req.user.name || "Someone"}: ${content}`;
+      else if (messageType === "image") pushMessage = `${req.user.name || "Someone"} sent an image.`;
+      else if (messageType === "post") pushMessage = `${req.user.name || "Someone"} shared a post with you.`;
+
+      await sendExpoPushNotification(
+        receiver.expoPushToken,
+        "New Message",
+        pushMessage,
+        { screen: "ChatScreen", senderId, name: req.user.name },
+        "message"
+      );
+    }
 
     res.status(200).json({ success: true, message: "Message sent successfully.", data: message });
   } catch (error) {
-    console.error("Error sending message:", error);
+    console.error("❌ Error sending message:", error);
     res.status(500).json({ error: "An error occurred while sending the message." });
   }
 };
 
 /**
- * Controller: Retrieve conversation between the current user and another user.
+ * Mark a message as read.
+ */
+const markMessageAsRead = async (req, res) => {
+  try {
+    const { messageId } = req.body;
+    if (!messageId) {
+      return res.status(400).json({ error: "Message ID is required." });
+    }
+
+    const message = await Message.findByIdAndUpdate(
+      messageId,
+      { readByReceiver: true },
+      { new: true }
+    );
+    if (!message) {
+      return res.status(404).json({ error: "Message not found." });
+    }
+
+    sendRealTimeMessage(message.sender, message.receiver, {
+      messageId,
+      readByReceiver: true,
+      readAt: Date.now(),
+    });
+
+    res.status(200).json({ success: true, message: "Message marked as read.", data: message });
+  } catch (error) {
+    console.error("❌ Error marking message as read:", error);
+    res.status(500).json({ error: "Failed to mark message as read." });
+  }
+};
+
+/**
+ * Fetch messages between current user and a partner (used by both admin and regular users).
+ * For regular users, the request body should include senderId (partner's ID).
  */
 const getMessages = async (req, res) => {
   try {
     const currentUserId = req.user.id;
-    const { senderId } = req.body;
+    const { senderId, lastReadTimestamp } = req.body;
 
     if (!senderId) {
-      return res.status(400).json({ success: false, message: "Sender ID is required." });
+      return res.status(400).json({ error: "Sender ID is required." });
     }
 
-    const messages = await Message.find({
+    const query = {
       $or: [
         { sender: currentUserId, receiver: senderId },
-        { sender: senderId, receiver: currentUserId },
-      ],
-    })
-      .sort({ timestamp: 1 })
-      .populate("sender receiver", "name avatar profile_image")
-      .populate("post");
+        { sender: senderId, receiver: currentUserId }
+      ]
+    };
 
-    const formattedMessages = messages.map((msg) => formatMessage(msg, currentUserId));
-    res.status(200).json({ success: true, message: "Messages fetched successfully.", data: formattedMessages });
+    if (lastReadTimestamp) {
+      query.timestamp = { $gt: new Date(parseInt(lastReadTimestamp)) };
+    }
+
+    const messages = await Message.find(query)
+      .sort({ timestamp: 1 })
+      .populate("sender", "name")
+      .populate("receiver", "name")
+      .lean();
+
+    if (!messages.length) {
+      return res.status(200).json({
+        success: true,
+        message: "No new messages found.",
+        data: []
+      });
+    }
+
+    const formattedMessages = messages.map((msg) => {
+      let senderInfo = msg.sender;
+      if (msg.sender && msg.sender._id.toString() === currentUserId.toString()) {
+        senderInfo = { _id: msg.sender._id, name: "You" };
+      }
+      return {
+        _id: msg._id,
+        sender: senderInfo,
+        receiver: msg.receiver,
+        messageType: msg.messageType,
+        content: msg.messageType === "text" ? decrypt(msg.content) : msg.content,
+        media: msg.media || [],
+        image: msg.image || null,
+        postId: msg.post || null,
+        timestamp: msg.timestamp,
+        readByReceiver: msg.readByReceiver,
+      };
+    });
+
+    res.status(200).json({
+      success: true,
+      message: "Messages fetched successfully.",
+      data: formattedMessages,
+    });
   } catch (error) {
-    console.error("Error fetching messages:", error);
-    res.status(500).json({ success: false, message: "Failed to fetch messages." });
+    console.error("❌ Error fetching messages:", error);
+    res.status(500).json({ error: "Failed to fetch messages." });
   }
 };
 
 /**
- * Controller: Retrieve all conversation threads for the current user.
+ * Fetch all conversations for the current user.
+ * For non-admins, the query includes users from their following/followers as well as any user with role "admin".
  */
 const getAllMessages = async (req, res) => {
   try {
     const currentUserId = req.user.id;
-    const { searchQuery } = req.query;
+    const isAdmin = req.user.role === "admin";
+    const { searchQuery = "", page = 1, limit = 20 } = req.query;
 
-    // Get the current user's data with following/followers
-    const currentUser = await User.findById(currentUserId)
-      .populate('following', 'name avatar profile_image')
-      .populate('followers', 'name avatar profile_image');
+    // Base query: match name based on search
+    let query = {
+      name: { $regex: searchQuery, $options: "i" }
+    };
 
-    // Get mutual followers (users who follow each other)
-    const mutualFollowers = currentUser.followers.filter(follower =>
-      currentUser.following.some(following => following._id.toString() === follower._id.toString())
-    );
-    const mutualFollowerIds = new Set(mutualFollowers.map(user => user._id.toString()));
+    if (!isAdmin) {
+      const currentUser = await User.findById(currentUserId, "following followers").lean();
 
-    // Get admin users and extract their IDs
-    const adminUsers = await User.find({ role: "admin" }).select("_id name avatar profile_image");
-    const adminIds = adminUsers.map(admin => admin._id.toString());
-
-    // Combine mutual follower IDs and admin IDs into one set
-    const conversationParticipants = Array.from(new Set([...mutualFollowerIds, ...adminIds]));
-
-    // Query messages with conversation participants (either as sender or receiver)
-    const messages = await Message.find({
-      $or: [
-        { sender: currentUserId, receiver: { $in: conversationParticipants } },
-        { receiver: currentUserId, sender: { $in: conversationParticipants } }
-      ]
-    })
-      .sort({ timestamp: -1 })
-      .populate("sender receiver", "name avatar profile_image");
-
-    // Build a conversation map: one conversation per other user
-    const conversationMap = {};
-
-    messages.forEach(msg => {
-      const otherUser = msg.sender._id.toString() === currentUserId.toString() ? msg.receiver : msg.sender;
-      const otherUserId = otherUser._id.toString();
-
-      // Prepare a preview of the last message
-      let lastMessagePreview = "";
-      if (msg.messageType === "text" && msg.content) {
-        try {
-          lastMessagePreview = decrypt(msg.content);
-        } catch (err) {
-          console.error("Decryption error in preview:", err.message);
-          lastMessagePreview = "Encrypted message";
-        }
-      } else if (msg.messageType === "image") {
-        lastMessagePreview = "Image";
-      } else if (msg.messageType === "post") {
-        lastMessagePreview = "Post";
-      }
-
-      // Keep the most recent message per conversation
-      if (!conversationMap[otherUserId] || conversationMap[otherUserId].timestamp < msg.timestamp) {
-        conversationMap[otherUserId] = {
-          userId: otherUser._id,
-          name: otherUser.name,
-          avatar: otherUser.avatar || otherUser.profile_image,
-          lastMessage: lastMessagePreview,
-          timestamp: msg.timestamp,
-          hasMessages: true
-        };
-      }
-    });
-
-    // Ensure that all conversation participants are included,
-    // even if there are no messages yet.
-    conversationParticipants.forEach(participantId => {
-      if (!conversationMap[participantId]) {
-        // Try to find the participant in mutual followers or adminUsers.
-        let foundUser =
-          mutualFollowers.find(u => u._id.toString() === participantId) ||
-          adminUsers.find(u => u._id.toString() === participantId);
-        if (foundUser) {
-          conversationMap[participantId] = {
-            userId: foundUser._id,
-            name: foundUser.name,
-            avatar: foundUser.avatar || foundUser.profile_image,
-            lastMessage: "",
-            timestamp: null,
-            hasMessages: false
-          };
-        }
-      }
-    });
-
-    let results = Object.values(conversationMap);
-    if (searchQuery) {
-      const query = searchQuery.toLowerCase();
-      results = results.filter(conv =>
-        conv.name.toLowerCase().includes(query)
+      const mutualFollowers = currentUser.followers.filter(follower =>
+        currentUser.following.some(following => following._id.toString() === follower._id.toString())
       );
+
+      const userIdsToSearch = new Set([
+        ...currentUser.following.map(user => user.toString()),
+        ...currentUser.followers.map(user => user.toString()),
+        ...mutualFollowers.map(user => user.toString())
+      ]);
+
+      // Include any user with role "admin" automatically.
+      query.$or = [
+        { _id: { $in: Array.from(userIdsToSearch) } },
+        { role: "admin" }
+      ];
     }
 
-    // Sort the results: conversations with messages (by timestamp) first,
-    // then the rest alphabetically.
-    results.sort((a, b) => {
-      if (a.timestamp && b.timestamp) return b.timestamp - a.timestamp;
-      if (a.timestamp) return -1;
-      if (b.timestamp) return 1;
-      return a.name.localeCompare(b.name);
-    });
+    const users = await User.find(query, "_id name avatar profile_image")
+      .sort({ name: 1 })
+      .skip((page - 1) * limit)
+      .limit(parseInt(limit))
+      .lean();
+
+    const conversations = await Promise.all(
+      users.map(async (user) => {
+        const lastMessage = await Message.findOne({
+          $or: [
+            { sender: currentUserId, receiver: user._id },
+            { sender: user._id, receiver: currentUserId },
+          ],
+        })
+          .sort({ timestamp: -1 })
+          .lean();
+
+        return {
+          userId: user._id,
+          name: user.name,
+          avatar: user.avatar || user.profile_image,
+          lastMessage: lastMessage
+            ? lastMessage.messageType === "text"
+              ? decrypt(lastMessage.content)
+              : lastMessage.messageType === "image"
+              ? "Sent an image"
+              : "Shared a post"
+            : "Start a new conversation",
+          timestamp: lastMessage ? lastMessage.timestamp : null,
+          hasMessages: !!lastMessage,
+        };
+      })
+    );
+
+    conversations.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
 
     res.status(200).json({
       success: true,
-      message: "Mutual followers and admin messages fetched successfully.",
-      data: results
+      message: isAdmin
+        ? "Admin: All users fetched with last messages."
+        : "User: Allowed contacts fetched with last messages.",
+      data: conversations,
+      pagination: { page, limit, total: conversations.length },
     });
   } catch (error) {
-    console.error("Error fetching messages:", error);
-    res.status(500).json({ success: false, message: "Failed to fetch messages." });
-  }
-};
-
-
-/**
- * Controller: Admin sends a message to any user.
- * Bypasses mutual following checks and marks the message with an admin flag.
- */
-const adminSendMessage = async (req, res, io) => {
-  try {
-    if (!req.user || req.user.role !== "admin") {
-      return res.status(403).json({ error: "Only admin can use this endpoint." });
-    }
-    const senderId = req.user.id;
-    const { receiverId, content, messageType, postId } = req.body;
-
-    if (!receiverId || !messageType) {
-      return res.status(400).json({ error: "Receiver ID and message type are required." });
-    }
-
-    let processedContent = content;
-    let media = [];
-
-    if (messageType === "text") {
-      if (!content || typeof content !== "string") {
-        return res.status(400).json({ error: "Text content is required for text messages." });
-      }
-      processedContent = encrypt(content);
-    }
-    if (messageType === "image") {
-      if (!req.files || req.files.length === 0) {
-        return res.status(400).json({ error: "At least one image file is required." });
-      }
-      media = req.files.map((file) => ({
-        media_path: `/uploads/messages/${file.filename}`,
-        media_type: file.mimetype,
-      }));
-    }
-
-    const imageField = messageType === "image" && media.length > 0 ? media[0].media_path : undefined;
-
-    const message = new Message({
-      sender: senderId,
-      receiver: receiverId,
-      messageType,
-      content: messageType === "image" ? null : processedContent,
-      media: messageType === "image" ? media : [],
-      image: imageField,
-      post: messageType === "post" ? postId : null,
-      isAdmin: true,
-    });
-    await message.save();
-
-    emitMessage(io, receiverId, {
-      senderId,
-      content: messageType === "text" ? content : null,
-      messageType,
-      media: messageType === "image" ? media : [],
-      postId: postId || null,
-      timestamp: Date.now(),
-      isAdmin: true,
-    });
-
-    res.status(200).json({ success: true, message: "Admin message sent successfully.", data: message });
-  } catch (error) {
-    console.error("Error sending admin message:", error);
-    res.status(500).json({ error: "An error occurred while sending the admin message." });
+    console.error("❌ Error fetching conversations:", error);
+    res.status(500).json({ success: false, message: "Failed to fetch conversations." });
   }
 };
 
 /**
- * Controller: Retrieve conversation between an admin and a specific user.
+ * Fetch messages for admin between the admin and a specific user.
+ * The request body should include userId (the conversation partner’s ID).
  */
-const adminGetMessages = async (req, res) => {
+const getMessagesForAdmin = async (req, res) => {
   try {
-    if (!req.user || req.user.role !== "admin") {
-      return res.status(403).json({ error: "Only admin can use this endpoint." });
+    if (req.user.role !== "admin") {
+      return res.status(403).json({ error: "Forbidden: Admins only." });
     }
-    const adminId = req.user.id;
-    const { userId } = req.body;
+
+    const currentUserId = req.user.id;
+    const { userId, lastReadTimestamp } = req.body;
+
     if (!userId) {
       return res.status(400).json({ error: "User ID is required." });
     }
-    const messages = await Message.find({
+
+    const query = {
       $or: [
-        { sender: adminId, receiver: userId },
-        { sender: userId, receiver: adminId },
-      ],
-    })
-      .sort({ timestamp: 1 })
-      .populate("sender receiver", "name avatar profile_image")
-      .populate("post");
+        { sender: currentUserId, receiver: userId },
+        { sender: userId, receiver: currentUserId }
+      ]
+    };
 
-    const formattedMessages = messages.map((msg) => formatMessage(msg, adminId));
-    res.status(200).json({ success: true, message: "Admin messages fetched successfully.", data: formattedMessages });
-  } catch (error) {
-    console.error("Error fetching admin messages:", error);
-    res.status(500).json({ error: "Failed to fetch admin messages." });
-  }
-};
-
-/**
- * Controller: Retrieve all conversation threads for an admin.
- */
-const adminGetAllMessages = async (req, res) => {
-  try {
-    if (!req.user || req.user.role !== "admin") {
-      return res.status(403).json({ error: "Only admin can use this endpoint." });
+    if (lastReadTimestamp) {
+      query.timestamp = { $gt: new Date(parseInt(lastReadTimestamp)) };
     }
 
-    const adminId = req.user.id;
-    const { searchQuery } = req.query;
-
-    // Get all messages where admin is either sender or receiver
-    const messages = await Message.find({
-      $or: [{ sender: adminId }, { receiver: adminId }],
-    })
-      .sort({ timestamp: -1 })
-      .populate({
-        path: "sender",
-        select: "name email avatar profile_image"
-      })
-      .populate({
-        path: "receiver",
-        select: "name email avatar profile_image"
-      });
+    const messages = await Message.find(query)
+      .sort({ timestamp: 1 })
+      .populate("sender", "name")
+      .populate("receiver", "name")
+      .lean();
 
     if (!messages.length) {
-      return res.status(200).json({ 
-        success: true, 
-        message: "No messages found.", 
-        data: [] 
+      return res.status(200).json({
+        success: true,
+        message: "No new messages found.",
+        data: []
       });
     }
 
-    // Create a map to store unique conversations with latest message
-    const conversationMap = new Map();
-
-    // Process messages to create conversation map
-    messages.forEach(msg => {
-      const otherUser = msg.sender._id.toString() === adminId.toString() ? msg.receiver : msg.sender;
-      const userId = otherUser._id.toString();
-
-      let lastMessagePreview = "";
-      if (msg.messageType === "text" && msg.content) {
-        try {
-          lastMessagePreview = decrypt(msg.content);
-        } catch (err) {
-          console.error("Decryption error in preview:", err.message);
-          lastMessagePreview = "Encrypted message";
-        }
-      } else if (msg.messageType === "image") {
-        lastMessagePreview = "Image";
-      } else if (msg.messageType === "post") {
-        lastMessagePreview = "Post";
+    const formattedMessages = messages.map((msg) => {
+      let senderInfo = msg.sender;
+      if (msg.sender && msg.sender._id.toString() === currentUserId.toString()) {
+        senderInfo = { _id: msg.sender._id, name: "You" };
       }
-
-      // Only update if this is a more recent message for this user
-      if (!conversationMap.has(userId) || 
-          conversationMap.get(userId).timestamp < msg.timestamp) {
-        conversationMap.set(userId, {
-          userId: otherUser._id,
-          name: otherUser.name,
-          email: otherUser.email,
-          avatar: otherUser.avatar || otherUser.profile_image,
-          lastMessage: lastMessagePreview,
-          timestamp: msg.timestamp,
-          unreadCount: 0 // You can implement unread count logic here
-        });
-      }
+      return {
+        _id: msg._id,
+        sender: senderInfo,
+        receiver: msg.receiver,
+        messageType: msg.messageType,
+        content: msg.messageType === "text" ? decrypt(msg.content) : msg.content,
+        media: msg.media || [],
+        image: msg.image || null,
+        postId: msg.post || null,
+        timestamp: msg.timestamp,
+        readByReceiver: msg.readByReceiver,
+      };
     });
-
-    // Convert map to array
-    let conversations = Array.from(conversationMap.values());
-
-    // Apply search filter if query exists
-    if (searchQuery) {
-      const query = searchQuery.toLowerCase();
-      conversations = conversations.filter(conv => 
-        conv.name.toLowerCase().includes(query) || 
-        conv.email.toLowerCase().includes(query)
-      );
-    }
-
-    // Sort conversations by timestamp (most recent first)
-    conversations.sort((a, b) => b.timestamp - a.timestamp);
 
     res.status(200).json({
       success: true,
-      message: "Admin conversations fetched successfully.",
-      data: {
-        conversations,
-        total: conversations.length,
-        hasSearch: !!searchQuery
-      }
+      message: "Messages fetched successfully.",
+      data: formattedMessages,
     });
-
   } catch (error) {
-    console.error("Error fetching admin conversations:", error);
-    res.status(500).json({ 
-      success: false, 
-      message: "Failed to fetch admin conversations.",
-      error: error.message 
-    });
+    console.error("❌ Error fetching messages for admin:", error);
+    res.status(500).json({ error: "Failed to fetch messages." });
   }
 };
 
 module.exports = {
-  canMessage,
   sendMessage,
   getMessages,
+  markMessageAsRead,
   getAllMessages,
-  adminSendMessage,
-  adminGetMessages,
-  adminGetAllMessages,
+  getMessagesForAdmin,
 };

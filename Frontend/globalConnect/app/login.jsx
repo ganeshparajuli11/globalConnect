@@ -8,6 +8,7 @@ import {
   StyleSheet,
   Image,
   BackHandler,
+  Modal,
 } from "react-native";
 import ScreenWrapper from "../components/ScreenWrapper";
 import BackButton from "../components/BackButton";
@@ -40,6 +41,8 @@ const Login = () => {
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [errorMessage, setErrorMessage] = useState("");
+  const [showErrorModal, setShowErrorModal] = useState(false);
   const router = useRouter();
   const { setAuth } = userAuth();
 
@@ -58,7 +61,8 @@ const Login = () => {
 
   const handleLogin = async () => {
     if (!email || !password) {
-      Alert.alert("Error", "Please enter both email and password.");
+      setErrorMessage("Please enter both email and password.");
+      setShowErrorModal(true);
       return;
     }
     setLoading(true);
@@ -77,18 +81,18 @@ const Login = () => {
         );
         router.replace("/home");
       } else {
-        Alert.alert("Error", "Invalid response from server.");
+        setErrorMessage("Invalid response from server.");
+        setShowErrorModal(true);
       }
     } catch (error) {
-      Alert.alert(
-        "Login Failed",
+      setErrorMessage(
         error.response?.data?.message || "Invalid email or password."
       );
+      setShowErrorModal(true);
     } finally {
       setLoading(false);
     }
   };
-  
 
   return (
     <ScreenWrapper>
@@ -165,6 +169,27 @@ const Login = () => {
           style={styles.googleIcon}
         />
       </View>
+
+      {/* Error Modal */}
+      <Modal
+        visible={showErrorModal}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setShowErrorModal(false)}
+      >
+        <View style={styles.modalContainer}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Error</Text>
+            <Text style={styles.modalMessage}>{errorMessage}</Text>
+            <TouchableOpacity
+              onPress={() => setShowErrorModal(false)}
+              style={styles.modalButton}
+            >
+              <Text style={styles.modalButtonText}>Close</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </ScreenWrapper>
   );
 };
@@ -264,5 +289,42 @@ const styles = StyleSheet.create({
     height: wp(10),
     alignSelf: "center",
     marginTop: hp(3),
+  },
+  modalContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+  },
+  modalContent: {
+    width: wp(80),
+    padding: wp(5),
+    backgroundColor: theme.colors.white,
+    borderRadius: theme.radius.md,
+    alignItems: "center",
+  },
+  modalTitle: {
+    fontSize: hp(2.5),
+    fontWeight: theme.fonts.bold,
+    color: theme.colors.black,
+    marginBottom: hp(1),
+  },
+  modalMessage: {
+    fontSize: hp(2),
+    color: theme.colors.textDark,
+    textAlign: "center",
+    marginBottom: hp(2),
+  },
+  modalButton: {
+    width: wp(50),
+    paddingVertical: hp(1.5),
+    backgroundColor: theme.colors.primary,
+    borderRadius: theme.radius.md,
+    alignItems: "center",
+  },
+  modalButtonText: {
+    fontSize: hp(2),
+    color: theme.colors.white,
+    textAlign: "center",
   },
 });

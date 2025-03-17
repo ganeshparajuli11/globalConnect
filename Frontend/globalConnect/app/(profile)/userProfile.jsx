@@ -1,4 +1,3 @@
-// UserProfile.jsx
 import React, { useEffect, useState } from "react";
 import {
   StyleSheet,
@@ -6,18 +5,21 @@ import {
   View,
   ActivityIndicator,
   FlatList,
+  RefreshControl,
+  StatusBar
 } from "react-native";
 import axios from "axios";
+import { SafeAreaView } from "react-native-safe-area-context";
 
 import PostCardDetails from "../../components/PostCardDetails";
 import UserProfileCard from "../../components/UserProfileCard";
 import { userAuth } from "../../contexts/AuthContext";
 import config from "../../constants/config";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import ScreenWrapper from "../../components/ScreenWrapper";
+import { theme } from "../../constants/theme";
 
 const UserProfile = () => {
-    const { userId } = useLocalSearchParams();
+  const { userId } = useLocalSearchParams();
   const ip = config.API_IP;
   const router = useRouter();
   const { authToken, user: currentUser } = userAuth();
@@ -25,55 +27,52 @@ const UserProfile = () => {
   const [userData, setUserData] = useState(null);
   const [posts, setPosts] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const fetchUserProfile = async () => {
+    try {
+      setRefreshing(true);
+      const response = await axios.get(
+        `http://${ip}:3000/api/profile/user-data-user/${userId}`,
+        {
+          headers: { Authorization: `Bearer ${authToken}` },
+        }
+      );
+
+      const { user, posts } = response.data.data;
+
+      // Transform user data into expected format
+      const formattedUser = {
+        ...user,
+        _id: user.id, 
+        posts_count: user.postsCount,
+        followers: user.followersCount,
+        following: user.followingCount,
+      };
+
+      // Transform posts data
+      const transformedPosts = posts.map((post) => ({
+        id: post._id,
+        content: post.text_content,
+        time: post.createdAt,
+        likeCount: post.likesCount,
+        commentCount: post.commentsCount,
+        liked: currentUser ? post.likes.includes(currentUser._id) : false,
+        media: post.media?.length > 0 ? post.media.map((m) => m.media_path) : [],
+        user: formattedUser,
+      }));
+
+      setUserData(formattedUser);
+      setPosts(transformedPosts);
+    } catch (error) {
+      console.error("Error fetching user profile:", error);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  };
 
   useEffect(() => {
-    const fetchUserProfile = async () => {
-      try {
-        const response = await axios.get(
-          `http://${ip}:3000/api/profile/user-data-user/${userId}`,
-          {
-            headers: { Authorization: `Bearer ${authToken}` },
-          }
-        );
-
-        const { user, posts } = response.data.data;
-
-        // Transform backend user data to match the expected structure
-        const formattedUser = {
-          ...user,
-          _id: user.id, 
-          posts_count: user.postsCount,
-          followers: user.followersCount,
-          following: user.followingCount,
-        };
-
-        // Transform posts data for PostCardDetails
-        const transformedPosts = posts.map((post) => ({
-          id: post._id, // Map _id to id
-          content: post.text_content,
-          time: post.createdAt,
-          likeCount: post.likesCount,
-          commentCount: post.commentsCount,
-          // Determine if the current user has liked the post
-          liked: currentUser ? post.likes.includes(currentUser._id) : false,
-          // Convert media objects to an array of media URLs
-          media:
-            post.media && post.media.length > 0
-              ? post.media.map((m) => m.media_path)
-              : [],
-          // Attach the formatted user data as the post's user
-          user: formattedUser,
-        }));
-
-        setUserData(formattedUser);
-        setPosts(transformedPosts);
-      } catch (error) {
-        console.error("Error fetching user profile:", error);
-      } finally {
-        setLoading(false);
-      }
-    };
-
     if (userId) {
       fetchUserProfile();
     } else {
@@ -82,70 +81,93 @@ const UserProfile = () => {
     }
   }, [userId, currentUser, ip, authToken]);
 
+  const onRefresh = () => {
+    fetchUserProfile();
+  };
+
   if (loading) {
     return (
       <View style={styles.loader}>
-        <ActivityIndicator size="large" color="#007bff" />
+        <ActivityIndicator size="large" color={theme.colors.primary} />
       </View>
     );
   }
 
   return (
-    <ScreenWrapper style={styles.container}>
-      {userData && (
-        <UserProfileCard
-          user={userData}
-          isFollowing={userData.isFollowing}
-          // Optionally, pass onFollowToggle if you want to handle follow/unfollow actions here.
-          onFollowToggle={(id, newStatus) =>
-            console.log("Toggle follow for", id, "->", newStatus)
-          }
-        />
-      )}
-
-      <Text style={styles.sectionTitle}>Posts</Text>
-
-      {posts.length > 0 ? (
-        <FlatList
-          data={posts}
-          keyExtractor={(item) => item.id}
-          renderItem={({ item }) => (
-            <PostCardDetails
-              item={item}
-              currentUser={currentUser}
-              router={router}
-            />
-          )}
-        />
-      ) : (
-        <Text style={styles.noPosts}>No posts available.</Text>
-      )}
-    </ScreenWrapper>
+    <SafeAreaView style={styles.safeArea}>
+      <StatusBar barStyle="dark-content" />
+      
+      <FlatList
+        ListHeaderComponent={() => (
+          <>
+            {userData && (
+              <View style={styles.profileContainer}>
+                <UserProfileCard
+                  user={userData}
+                  isFollowing={userData.isFollowing}
+                  onFollowToggle={() => {
+                    console.log("Toggle follow for", userData._id);
+                  }}
+                />
+              </View>
+            )}
+            <Text style={styles.sectionTitle}>Posts</Text>
+          </>
+        )}
+        data={posts}
+        keyExtractor={(item) => item.id}
+        renderItem={({ item }) => (
+          <PostCardDetails
+            item={item}
+            currentUser={currentUser}
+            router={router}
+          />
+        )}
+        contentContainerStyle={styles.listContent}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.colors.primary} />
+        }
+        ListEmptyComponent={
+          <Text style={styles.noPosts}>No posts available.</Text>
+        }
+      />
+    </SafeAreaView>
   );
 };
 
 export default UserProfile;
 
 const styles = StyleSheet.create({
-  container: {
+  safeArea: {
     flex: 1,
-    padding: 10,
-    backgroundColor: "#fff",
+    backgroundColor: theme.colors.white,
   },
   loader: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
   },
+  profileContainer: {
+    padding: 16,
+    backgroundColor: theme.colors.white,
+    borderBottomWidth: 1,
+    borderBottomColor: "#ddd",
+    marginBottom: 10,
+  },
   sectionTitle: {
     fontSize: 20,
     fontWeight: "bold",
-    marginVertical: 10,
+    color: theme.colors.textDark,
+    paddingHorizontal: 16,
+    marginBottom: 10,
+  },
+  listContent: {
+    paddingBottom: 20,
   },
   noPosts: {
     textAlign: "center",
     fontSize: 16,
-    marginTop: 20,
-    color: "gray",
+    marginVertical: 20,
+    color: theme.colors.textMedium,
   },
 });

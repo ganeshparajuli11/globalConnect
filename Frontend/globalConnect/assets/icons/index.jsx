@@ -24,6 +24,7 @@ import Image from './Image';
 import Video from './Video';
 import Setting from './Setting';
 import Cross from './Cross';
+import VerifiedIcon from './verifiedIcon';
 
 const icons = {
     home: Home,
@@ -48,7 +49,8 @@ const icons = {
     image: Image,
     video: Video,
     setting: Setting,
-    cross: Cross
+    cross: Cross,
+    verify: VerifiedIcon
 }
 
 const Icon = ({name, ...props}) => {

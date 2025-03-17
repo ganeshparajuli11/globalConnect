@@ -2,14 +2,14 @@ import axios from "axios";
 import { useState, useCallback, useEffect } from "react";
 import config from "../constants/config";
 import { userAuth } from "../contexts/AuthContext";
+import { connectSocket, sendSocketMessage, setMessageHandler, disconnectSocket } from "../socketManager/socket";
 
 const ip = config.API_IP;
 
 // API Endpoints
 const ALL_MESSAGE_API_URL = `http://${ip}:3000/api/all-message/`;
-const SEND_MESSAGE_API_URL = `http://${ip}:3000/api/message`;
-// Renamed to fix the spelling of "receive"
 const RECEIVE_MESSAGE_API_URL = `http://${ip}:3000/api/get-message`;
+const SEND_MESSAGE_API_URL = `http://${ip}:3000/api/message`;
 
 /**
  * Hook to fetch the chat list.
@@ -62,126 +62,124 @@ export const useFetchChatList = () => {
   return { chatList, loading, fetchChatList };
 };
 
-/**
- * Function to send a message.
- * Logs detailed error information if sending fails.
- */
 export const sendMessage = async (messageData, authToken) => {
   try {
-    const headers = { Authorization: `Bearer ${authToken}` };
-    // If messageData is FormData (for image uploads), set the content type accordingly
-    if (messageData instanceof FormData) {
-      headers["Content-Type"] = "multipart/form-data";
-      // Log FormData entries for debugging:
-      console.log("FormData entries:");
-      for (let [key, value] of messageData.entries()) {
-        console.log(key, value);
-      }
+    const formData = new FormData();
+    
+    // Add text content if present
+    if (messageData.content) {
+      formData.append('content', messageData.content);
     }
-    console.log("Sending message to:", SEND_MESSAGE_API_URL);
-    console.log("Message data:", messageData);
-    const response = await axios.post(SEND_MESSAGE_API_URL, messageData, { headers });
-    console.log("Send message response:", response.data);
+
+    // Add image if present
+    if (messageData.media) {
+      const imageUri = messageData.media;
+      const filename = imageUri.split('/').pop();
+      const match = /\.(\w+)$/.exec(filename);
+      const type = match ? `image/${match[1]}` : 'image';
+      
+      formData.append('media', {
+        uri: imageUri,
+        name: filename,
+        type,
+      });
+    }
+
+    formData.append('receiverId', messageData.receiverId);
+    formData.append('messageType', messageData.messageType);
+
+    const response = await axios.post(SEND_MESSAGE_API_URL, formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+        Authorization: `Bearer ${authToken}`,
+      },
+    });
+
     return response.data;
   } catch (error) {
-    console.error("Error sending message:");
-    if (error.response) {
-      console.error("Server responded with status", error.response.status);
-      console.error("Response headers:", error.response.headers);
-      console.error("Response data:", error.response.data);
-    } else if (error.request) {
-      console.error("No response received. Request details:", error.request);
-    } else {
-      console.error("Error message:", error.message);
-    }
-    console.error("Full error details:", error.toJSON ? error.toJSON() : error);
+    console.error('Error sending message:', error);
     throw error;
   }
 };
 
-/**
- * Hook to fetch the conversation with a specific sender.
- * Logs additional error details on failure.
- */
+export const getFullMediaUrl = (mediaPath) => {
+  if (!mediaPath) return null;
+  // If mediaPath is in media array
+  if (Array.isArray(mediaPath) && mediaPath.length > 0) {
+    return `http://${ip}:3000${mediaPath[0].media_path}`;
+  }
+  // If mediaPath is a direct path
+  if (typeof mediaPath === 'string') {
+    return `http://${ip}:3000${mediaPath}`;
+  }
+  return null;
+};
+
+// Save image to device
+export const saveImageToDevice = async (imageUrl) => {
+  try {
+    const filename = imageUrl.split('/').pop();
+    const result = await FileSystem.downloadAsync(
+      imageUrl,
+      FileSystem.documentDirectory + filename
+    );
+    
+    if (result.status === 200) {
+      return result.uri;
+    }
+    throw new Error('Failed to download image');
+  } catch (error) {
+    console.error('Error saving image:', error);
+    throw error;
+  }
+};
+
 export const useFetchConversation = (senderId) => {
   const { authToken } = userAuth();
-  console.log("Using token in conversation fetch:", authToken);
   const [conversation, setConversation] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [lastReadTimestamp, setLastReadTimestamp] = useState(null);
 
-  const fetchConversation = useCallback(async () => {
-    if (!senderId) return;
+  const fetchInitialConversation = useCallback(async () => {
     setLoading(true);
     try {
-      console.log(
-        "Fetching conversation from:",
-        RECEIVE_MESSAGE_API_URL,
-        "with senderId:",
-        senderId
-      );
-      const response = await axios.post(
-        RECEIVE_MESSAGE_API_URL,
-        { senderId },
-        { headers: { Authorization: `Bearer ${authToken}` } }
-      );
-      console.log("Conversation response:", response.data);
+      const response = await axios.post(RECEIVE_MESSAGE_API_URL, { senderId }, {
+        headers: { Authorization: `Bearer ${authToken}` },
+      });
       if (response.data.success) {
-        // Transform messages to include populated post data
-        const transformedMessages = response.data.data.map(message => {
-          if (message.messageType === "post" && message.post) {
-            return {
-              ...message,
-              post: {
-                _id: message.post._id,
-                text_content: message.post.text_content,
-                media: message.post.media,
-                author: message.post.author,
-                createdAt: message.post.createdAt
-              }
-            };
-          }
-          return message;
-        });
-        setConversation(transformedMessages);
+        setConversation(response.data.data);
+        setLastReadTimestamp(response.data.data[response.data.data.length - 1]?.timestamp);
       } else {
-        console.error(
-          "Error fetching conversation: API responded with success=false",
-          response.data
-        );
+        console.error("Error fetching initial conversation:", response.data);
       }
     } catch (error) {
-      console.error("Error fetching conversation:");
-      if (error.response) {
-        console.error(
-          "Server responded with status",
-          error.response.status,
-          "and data:",
-          error.response.data
-        );
-      } else if (error.request) {
-        console.error("No response received:", error.request);
-      } else {
-        console.error("Error message:", error.message);
-      }
-      console.error("Full error details:", error.toJSON ? error.toJSON() : error);
+      console.error("Error fetching initial conversation:", error);
     } finally {
       setLoading(false);
     }
   }, [authToken, senderId]);
 
+  const fetchNewMessages = useCallback(async () => {
+    if (!lastReadTimestamp) return;
+    try {
+      const response = await axios.post(RECEIVE_MESSAGE_API_URL, { senderId, lastReadTimestamp }, {
+        headers: { Authorization: `Bearer ${authToken}` },
+      });
+      if (response.data.success) {
+        setConversation((prevConversation) => [...prevConversation, ...response.data.data]);
+        setLastReadTimestamp(response.data.data[response.data.data.length - 1]?.timestamp);
+      } else {
+        console.error("Error fetching new messages:", response.data);
+      }
+    } catch (error) {
+      console.error("Error fetching new messages:", error);
+    }
+  }, [authToken, senderId, lastReadTimestamp]);
+
   useEffect(() => {
-    fetchConversation();
-  }, [fetchConversation]);
+    fetchInitialConversation();
+  }, [fetchInitialConversation]);
 
-  return { conversation, loading, fetchConversation };
+  return { conversation, loading, fetchNewMessages, fetchInitialConversation };
 };
 
-/**
- * Helper to build a full media URL from a relative path.
- */
-export const getFullMediaUrl = (mediaPath) => {
-  if (!mediaPath) return "";
-  // Remove any leading slashes if needed and build the full URL
-  const normalizedPath = mediaPath.startsWith("/") ? mediaPath.slice(1) : mediaPath;
-  return `http://${config.API_IP}:3000/${normalizedPath}`;
-};

@@ -1,11 +1,13 @@
+let onlineUsers = new Map();
 const {
   UserNotification,
   GlobalNotification,
 } = require("../models/notificationSchema");
 const { sendRealTimeNotification } = require("./socketController");
 const mongoose = require("mongoose");
-const User = require("../models/userSchema"); // Used to fetch additional user info if needed
-const Post = require("../models/postSchema"); // Used to fetch additional user info if needed
+const User = require("../models/userSchema");
+const Post = require("../models/postSchema");
+const { sendExpoPushNotification, sendBatchPushNotifications } = require("./pushTokenController");
 
 let io;
 
@@ -16,199 +18,92 @@ const initializeNotificationController = (socketIoInstance) => {
   io = socketIoInstance;
 };
 
-/**
- * Admin sends a notification to users (either specific user or all users)
- */
-const sendAdminNotification = async (req, res) => {
+const emitNotification = (io, userId, notificationData) => {
+  const recipientSocketId = onlineUsers.get(userId);
+
+  if (recipientSocketId) {
+    io.to(recipientSocketId).emit("receiveNotification", notificationData);
+    console.log(`📩 Notification sent to user ${userId} (Socket: ${recipientSocketId})`);
+  } else {
+    console.log(`⚠️ User ${userId} is offline. Notification stored.`);
+  }
+};
+
+
+const sendNotification = async (req, res) => {
   try {
     const { message, title, type, userId } = req.body;
 
     if (!message) {
-      return res.status(400).json({
-        success: false,
-        message: "Message is required",
-      });
+      return res.status(400).json({ success: false, message: "Message is required" });
     }
 
-    // Create notification data
-    const notificationData = {
-      message,
-      title,
-      type: type || "info",
-      createdAt: new Date(),
-      isAdminNotification: true,
-    };
-
-    // If userId is provided, send to specific user
     if (userId) {
+      // Validate User ID
       if (!mongoose.Types.ObjectId.isValid(userId)) {
-        return res.status(400).json({
-          success: false,
-          message: "Invalid user ID",
-        });
+        return res.status(400).json({ success: false, message: "Invalid user ID" });
       }
 
-      // Create and save user notification
+      // Store in UserNotification Schema
       const notification = new UserNotification({
-        ...notificationData,
         userId,
+        message,
+        title: title || "Notification",
+        type: type || "info",
+        isAdminNotification: false,
       });
       await notification.save();
 
-      // Send real-time notification to specific user
-      sendRealTimeNotification(io, userId, notificationData);
+      // Emit Real-Time Notification to Specific User
+      emitNotification(io, userId, notification);
 
-      return res.status(200).json({
-        success: true,
-        message: "Notification sent to user successfully",
-        notification,
-      });
-    }
-    // If no userId, send to all users
-    else {
-      // Get all user IDs
-      const users = await User.find({}, "_id");
-      const userIds = users.map((user) => user._id);
+      // Send Push Notification if User has Expo Push Token
+      const userDoc = await User.findById(userId, "expoPushToken").lean();
+      if (userDoc?.expoPushToken) {
+        await sendExpoPushNotification(
+          userDoc.expoPushToken,
+          notification.title,
+          message,
+          { screen: "NotificationScreen" }
+        );
+      }
 
-      // Create notifications for all users
-      const notifications = await UserNotification.insertMany(
-        userIds.map((userId) => ({
-          ...notificationData,
-          userId,
-        }))
-      );
-
-      // Broadcast to all connected users
-      io.emit("receiveNotification", notificationData);
-
-      return res.status(200).json({
-        success: true,
-        message: "Notification sent to all users successfully",
-        notifications,
-      });
-    }
-  } catch (error) {
-    console.error("Error sending admin notification:", error);
-    return res.status(500).json({
-      success: false,
-      message: "Failed to send notification",
-      error: error.message,
-    });
-  }
-};
-
-/**
- * Get all admin notifications
- */
-const getAdminNotifications = async (req, res) => {
-  try {
-    const notifications = await UserNotification.find({
-      isAdminNotification: true,
-    })
-      .sort({ createdAt: -1 })
-      .lean();
-
-    return res.status(200).json(notifications);
-  } catch (error) {
-    console.error("Error fetching admin notifications:", error);
-    return res.status(500).json({
-      success: false,
-      message: "Failed to fetch notifications",
-      error: error.message,
-    });
-  }
-};
-
-/**
- * Delete an admin notification
- */
-const deleteAdminNotification = async (req, res) => {
-  try {
-    const { notificationId } = req.params;
-
-    if (!mongoose.Types.ObjectId.isValid(notificationId)) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid notification ID",
-      });
-    }
-
-    const notification = await UserNotification.findOneAndDelete({
-      _id: notificationId,
-      isAdminNotification: true,
-    });
-
-    if (!notification) {
-      return res.status(404).json({
-        success: false,
-        message: "Notification not found",
-      });
-    }
-
-    return res.status(200).json({
-      success: true,
-      message: "Notification deleted successfully",
-    });
-  } catch (error) {
-    console.error("Error deleting notification:", error);
-    return res.status(500).json({
-      success: false,
-      message: "Failed to delete notification",
-      error: error.message,
-    });
-  }
-};
-
-/**
- * Update an admin notification
- */
-const updateAdminNotification = async (req, res) => {
-  try {
-    const { notificationId } = req.params;
-    const { message, title, type } = req.body;
-
-    if (!mongoose.Types.ObjectId.isValid(notificationId)) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid notification ID",
-      });
-    }
-
-    const notification = await UserNotification.findOneAndUpdate(
-      {
-        _id: notificationId,
-        isAdminNotification: true,
-      },
-      {
+      return res.status(200).json({ success: true, message: "Notification sent to user", notification });
+    } else {
+      // Store in GlobalNotification Schema
+      const globalNotification = new GlobalNotification({
         message,
-        title,
-        type,
-        updatedAt: new Date(),
-      },
-      { new: true }
-    );
-
-    if (!notification) {
-      return res.status(404).json({
-        success: false,
-        message: "Notification not found",
+        title: title || "Admin Notification",
+        type: type || "admin",
       });
-    }
+      await globalNotification.save();
 
-    return res.status(200).json({
-      success: true,
-      message: "Notification updated successfully",
-      notification,
-    });
+      // Emit Real-Time Notification to All Users
+      io.emit("receiveNotification", globalNotification);
+      console.log("📢 Global notification sent to all users");
+
+      // Fetch Users with Push Tokens
+      const users = await User.find({ expoPushToken: { $ne: null } }, "expoPushToken").lean();
+      const tokens = users.map((u) => u.expoPushToken).filter(Boolean);
+
+      // Send Push Notifications in Batch
+      if (tokens.length > 0) {
+        await sendBatchPushNotifications(
+          tokens,
+          globalNotification.title,
+          message,
+          { type: "admin" }
+        );
+      }
+
+      return res.status(200).json({ success: true, message: "Admin notification sent to all users" });
+    }
   } catch (error) {
-    console.error("Error updating notification:", error);
-    return res.status(500).json({
-      success: false,
-      message: "Failed to update notification",
-      error: error.message,
-    });
+    console.error("❌ Error sending notification:", error);
+    return res.status(500).json({ success: false, message: "Failed to send notification", error: error.message });
   }
 };
+
 
 /**
  * Admin sends a notification to a specific user.
@@ -244,21 +139,6 @@ const sendNotificationToUser = async ({ userId, message }) => {
  * Admin sends a global notification for all users.
  * @param {Object} params - Contains message.
  */
-const sendGlobalNotification = async ({ message }) => {
-  try {
-    // Create and save the global notification
-    const notification = new GlobalNotification({ message });
-    await notification.save();
-    console.log("Global notification saved.");
-
-    // Broadcast the notification to all connected clients
-    io.emit("global-notification", { message, createdAt: new Date() });
-    return { success: true, message: "Global notification sent successfully." };
-  } catch (error) {
-    console.error("Error sending global notification:", error);
-    return { success: false, message: "Failed to send global notification." };
-  }
-};
 
 /**
  * Creates a notification when one user follows another.
@@ -266,46 +146,24 @@ const sendGlobalNotification = async ({ message }) => {
  */
 const sendFollowNotification = async ({ followerId, followedId }) => {
   try {
-    // Validate IDs if using ObjectId (adjust if they're strings)
-    if (
-      !mongoose.Types.ObjectId.isValid(followerId) ||
-      !mongoose.Types.ObjectId.isValid(followedId)
-    ) {
+    if (!mongoose.Types.ObjectId.isValid(followerId) || !mongoose.Types.ObjectId.isValid(followedId)) {
       throw new Error("Invalid followerId or followedId.");
     }
 
-    // Fetch follower details to personalize the notification
-    const follower = await User.findById(followerId);
-    const followerName = follower ? follower.name : "Someone";
-    const followerProfileImage =
-      follower && follower.profile_image ? follower.profile_image : null;
-    const message = `${followerName} started following you.`;
+    const follower = await User.findById(followerId).lean();
+    const message = `${follower?.name || "Someone"} started following you.`;
 
-    // Create and save the follow notification for the followed user, including metadata
-    const notification = new UserNotification({
-      userId: followedId,
-      message,
-      metadata: {
-        followerName,
-        profileImage: followerProfileImage,
-      },
-    });
+    const notification = new UserNotification({ userId: followedId, message });
     await notification.save();
-    console.log(`Follow notification saved for user ${followedId}`);
 
-    // Emit a real-time notification to the followed user, including the profile image
-    if (io) {
-      sendRealTimeNotification(io, followedId, {
-        message,
-        followerName,
-        profileImage: followerProfileImage,
-        createdAt: new Date(),
-      });
-    } else {
-      console.warn("Socket.io instance is not initialized.");
+    sendRealTimeNotification(io, followedId, { message, createdAt: new Date() });
+
+    const followedUser = await User.findById(followedId, "expoPushToken").lean();
+    if (followedUser?.expoPushToken) {
+      await sendExpoPushNotification(followedUser.expoPushToken, "New Follower", message, { screen: "UserProfile", userId: followerId });
     }
 
-    return { success: true, message: "Follow notification sent successfully." };
+    return { success: true, message: "Follow notification sent successfully" };
   } catch (error) {
     console.error("Error sending follow notification:", error);
     return { success: false, message: "Failed to send follow notification." };
@@ -361,13 +219,13 @@ const sendCommentNotification = async ({
     }
 
     // Fetch commenter details
-    const commenter = await User.findById(commenterId);
+    const commenter = await User.findById(commenterId).lean();
     if (!commenter) {
       throw new Error("Commenter not found.");
     }
 
     // Fetch post details
-    const post = await Post.findById(postId);
+    const post = await Post.findById(postId).lean();
     if (!post) {
       throw new Error("Post not found.");
     }
@@ -387,7 +245,7 @@ const sendCommentNotification = async ({
     });
 
     await notification.save();
-    console.log(`Comment notification saved for user ${postOwnerId}`);
+    console.log(`✅ Comment notification saved for user ${postOwnerId}`);
 
     // Emit real-time notification using Socket.io
     if (io) {
@@ -400,15 +258,24 @@ const sendCommentNotification = async ({
         createdAt: new Date(),
       });
     } else {
-      console.warn("Socket.io instance is not initialized.");
+      console.warn("⚠️ Socket.io instance is not initialized.");
     }
 
-    return {
-      success: true,
-      message: "Comment notification sent successfully.",
-    };
+    // ✔️ Send push notification if post owner has an Expo push token
+    const postOwner = await User.findById(postOwnerId, "expoPushToken").lean();
+    if (postOwner?.expoPushToken) {
+      await sendExpoPushNotification(
+        postOwner.expoPushToken,
+        "New Comment",
+        message,
+        { screen: "PostDetails", postId }
+      );
+      console.log(`📲 Push notification sent to post owner ${postOwnerId}`);
+    }
+
+    return { success: true, message: "Comment notification sent successfully." };
   } catch (error) {
-    console.error("Error sending comment notification:", error);
+    console.error("❌ Error sending comment notification:", error);
     return { success: false, message: "Failed to send comment notification." };
   }
 };
@@ -436,17 +303,6 @@ const getUserNotifications = async (req, res) => {
 /**
  * Fetch global notifications (available to all users).
  */
-const getGlobalNotifications = async (req, res) => {
-  try {
-    const notifications = await GlobalNotification.find({})
-      .sort({ createdAt: -1 })
-      .lean();
-    return res.status(200).json({ notifications });
-  } catch (err) {
-    console.error("Error fetching global notifications:", err);
-    return res.status(500).json({ error: "Error fetching notifications" });
-  }
-};
 
 /**
  * Mark a user-specific notification as read or unread.
@@ -485,15 +341,12 @@ const markNotificationAsRead = async (req, res) => {
 module.exports = {
   initializeNotificationController,
   sendNotificationToUser,
-  sendGlobalNotification,
+  sendNotification,
   sendFollowNotification,
   getUserNotifications,
-  getGlobalNotifications,
   markNotificationAsRead,
   sendCommentNotification,
   clearAllNotifications,
-  sendAdminNotification,
-  getAdminNotifications,
-  deleteAdminNotification,
-  updateAdminNotification,
+  emitNotification,
+
 };

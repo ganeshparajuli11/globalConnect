@@ -144,6 +144,9 @@ export const connectSocket = (userId) => {
   });
 };
 
+
+
+
 // Send message through socket with enhanced error handling and timeout
 export const sendSocketMessage = (messageData) => {
   return new Promise((resolve, reject) => {
@@ -159,15 +162,23 @@ export const sendSocketMessage = (messageData) => {
 
     socket.emit("sendMessage", messageData, (response) => {
       clearTimeout(timeout);
-      
-      if (response && (response.status === "delivered" || response.status === "stored")) {
+
+      console.log("Socket sendMessage callback response:", response);
+
+      // Check the response structure as per your server implementation.
+      // For instance, if your server returns { status: "delivered", ... }
+      if (response && (response.status === "sent" || response.status === "stored" || response.success === true)) {
         resolve(response);
       } else {
+        console.error("Socket response did not meet expectations:", response);
         reject(new Error(response?.error || "Message not delivered"));
       }
     });
   });
 };
+
+
+
 
 // Disconnect socket with cleanup
 export const disconnectSocket = () => {

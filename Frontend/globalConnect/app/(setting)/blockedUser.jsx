@@ -23,10 +23,11 @@ const BlockedUser = () => {
   const [loading, setLoading] = useState(true);
   const router = useRouter();
   const ip = config.API_IP;
+  const { authToken } = userAuth(); // Retrieve token from AuthContext
 
-  // Call hook at top-level
-  const { authToken } = userAuth();
-
+  /**
+   * Fetch the list of blocked users from your API
+   */
   const fetchBlockedUsers = async () => {
     try {
       const response = await axios.get(
@@ -47,6 +48,9 @@ const BlockedUser = () => {
     fetchBlockedUsers();
   }, []);
 
+  /**
+   * Handle the user pressing the unblock button (dots)
+   */
   const handleUnblock = (targetUserId) => {
     Alert.alert("Unblock User", "Do you really want to unblock this user?", [
       { text: "Cancel", style: "cancel" },
@@ -54,6 +58,12 @@ const BlockedUser = () => {
     ]);
   };
 
+  /**
+   * Unblock the user via your API
+   *
+   * NOTE: Some docs say "POST" for unblocking.
+   *       If you prefer, replace axios.put -> axios.post below.
+   */
   const unblockUser = async (targetUserId) => {
     try {
       const token = await AsyncStorage.getItem("authToken");
@@ -67,10 +77,9 @@ const BlockedUser = () => {
           },
         }
       );
+
       // Remove the unblocked user from the list
-      setBlockedUsers((prev) =>
-        prev.filter((user) => user._id !== targetUserId)
-      );
+      setBlockedUsers((prev) => prev.filter((user) => user._id !== targetUserId));
       Alert.alert("Success", "User unblocked successfully.");
     } catch (error) {
       console.error("Error unblocking user:", error);
@@ -78,24 +87,35 @@ const BlockedUser = () => {
     }
   };
 
-  const renderItem = ({ item }) => (
-    <View style={styles.userContainer}>
-      <Image source={{ uri: item.profile_image }} style={styles.profileImage} />
-      <Text style={styles.userName}>{item.name}</Text>
-      <TouchableOpacity
-        onPress={() => handleUnblock(item._id)}
-        style={styles.optionsButton}
-      >
-        <Text style={styles.optionsText}>⋮</Text>
-      </TouchableOpacity>
-    </View>
-  );
+  /**
+   * Render each blocked user row
+   */
+  const renderItem = ({ item }) => {
+    // Build the full path to the user's profile image
+    const profileImageURL = item.profile_image
+      ? `http://${ip}:3000/${item.profile_image}`
+      : "https://via.placeholder.com/100";
+
+    return (
+      <View style={styles.userContainer}>
+        <Image source={{ uri: profileImageURL }} style={styles.profileImage} />
+        <Text style={styles.userName}>{item.name}</Text>
+        <TouchableOpacity
+          onPress={() => handleUnblock(item._id)}
+          style={styles.optionsButton}
+        >
+          <Text style={styles.optionsText}>⋮</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  };
 
   return (
     <ScreenWrapper bg="#fff">
       <StatusBar style="dark" />
       {/* Use the shared Header for consistent top bar styling */}
       <Header title="Blocked Users" showBackButton={true} />
+
       {loading ? (
         <ActivityIndicator size="large" color="#4F46E5" style={styles.loader} />
       ) : (

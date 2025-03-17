@@ -60,6 +60,7 @@ async function createPost(req, res) {
     });
   }
 }
+// Get all posts based on query/interest logic
 const getAllPost = async (req, res) => {
   try {
     let { page = 1, limit = 5, category = "" } = req.query;
@@ -106,28 +107,26 @@ const getAllPost = async (req, res) => {
       }
     }
 
-    // For queries with a category filter (i.e. user selected one or more categories other than "All")
+    // When a specific category is provided (other than "All")
     if (category && category !== "All") {
       let posts = await Post.find(baseQuery)
         .populate({
           path: "user_id",
-          select: "name profile_image reported_count",
-          match: { reported_count: { $lt: 4 } }, // filter out posts from users with reported_count >= 4
+          select: "name profile_image verified reported_count", // include verified field
+          match: { reported_count: { $lt: 4 } },
         })
         .populate("category_id")
         .sort({ createdAt: -1 })
         .skip((page - 1) * limit)
         .limit(limit);
 
-      // Remove posts whose populated user is null (i.e. user reported_count was too high)
-      posts = posts.filter(post => post.user_id);
+      posts = posts.filter((post) => post.user_id);
       return res.status(200).json({
         message: "Posts retrieved successfully.",
         data: formatPosts(posts),
       });
     } else {
-      // If no category filter is applied or "All" is selected,
-      // then use your existing interest-based logic.
+      // Use interest-based or general logic
       const interestQuery = {
         ...baseQuery,
         $or: [
@@ -138,14 +137,13 @@ const getAllPost = async (req, res) => {
 
       const isNewUser = user.preferred_categories.length === 0 && user.following.length === 0;
       if (!isNewUser) {
-        // Split the limit for interest-based and general posts
         const interestLimit = Math.ceil(limit * 0.7);
         const generalLimit = limit - interestLimit;
 
         let interestBasedPosts = await Post.find(interestQuery)
           .populate({
             path: "user_id",
-            select: "name profile_image reported_count",
+            select: "name profile_image verified reported_count",
             match: { reported_count: { $lt: 4 } },
           })
           .populate("category_id")
@@ -153,17 +151,16 @@ const getAllPost = async (req, res) => {
           .skip((page - 1) * interestLimit)
           .limit(interestLimit);
 
-        interestBasedPosts = interestBasedPosts.filter(post => post.user_id);
-
-        const interestPostIds = interestBasedPosts.map(post => post._id);
+        interestBasedPosts = interestBasedPosts.filter((post) => post.user_id);
+        const interestPostIds = interestBasedPosts.map((post) => post._id);
 
         let generalPosts = await Post.find({
           ...baseQuery,
-          _id: { $nin: interestPostIds }
+          _id: { $nin: interestPostIds },
         })
           .populate({
             path: "user_id",
-            select: "name profile_image reported_count",
+            select: "name profile_image verified reported_count",
             match: { reported_count: { $lt: 4 } },
           })
           .populate("category_id")
@@ -171,13 +168,14 @@ const getAllPost = async (req, res) => {
           .skip((page - 1) * generalLimit)
           .limit(generalLimit);
 
-        generalPosts = generalPosts.filter(post => post.user_id);
-
-        // Combine and sort the two sets of posts
+        generalPosts = generalPosts.filter((post) => post.user_id);
         const combinedPosts = [...interestBasedPosts, ...generalPosts];
-        const uniquePosts = combinedPosts.filter((post, index, self) =>
-          index === self.findIndex(p => p._id.toString() === post._id.toString())
-        ).sort((a, b) => b.createdAt - a.createdAt);
+        const uniquePosts = combinedPosts
+          .filter(
+            (post, index, self) =>
+              index === self.findIndex((p) => p._id.toString() === post._id.toString())
+          )
+          .sort((a, b) => b.createdAt - a.createdAt);
 
         return res.status(200).json({
           message: "Posts retrieved successfully.",
@@ -185,18 +183,18 @@ const getAllPost = async (req, res) => {
         });
       }
 
-      // Fallback for new users: simply fetch posts with baseQuery.
+      // Fallback for new users
       let posts = await Post.find(baseQuery)
         .populate({
           path: "user_id",
-          select: "name profile_image reported_count",
+          select: "name profile_image verified reported_count",
           match: { reported_count: { $lt: 4 } },
         })
         .populate("category_id")
         .sort({ createdAt: -1 })
         .skip((page - 1) * limit)
         .limit(limit);
-      posts = posts.filter(post => post.user_id);
+      posts = posts.filter((post) => post.user_id);
       return res.status(200).json({
         message: "Posts retrieved successfully.",
         data: formatPosts(posts),
@@ -208,6 +206,37 @@ const getAllPost = async (req, res) => {
   }
 };
 
+// Function to format posts
+const formatPosts = (posts) => {
+  return posts.map((post) => ({
+    id: post._id,
+    user: {
+      _id: post.user_id ? post.user_id._id : null,
+      name: post.user_id ? post.user_id.name : "Unknown User",
+      profile_image:
+        post.user_id && post.user_id.profile_image
+          ? `${post.user_id.profile_image}`
+          : "https://via.placeholder.com/40",
+      verified: post.user_id.verified,
+    },
+    type: post.category_id?.name || "Unknown Category",
+    time: post.createdAt,
+    content: post.text_content || "No content available",
+    media:
+      post.media && post.media.length > 0
+        ? post.media.map((m) => `${m.media_path}`)
+        : [],
+    liked: post.likes && post.user_id ? post.likes.includes(post.user_id._id) : false,
+    likeCount: post.likes ? post.likes.length : 0,
+    commentCount: post.comments ? post.comments.length : 0,
+    shareCount: post.shares ? post.shares.length : 0,
+    comments: post.comments.map((comment) => ({
+      user: comment.user_id ? comment.user_id.name : "Unknown",
+      text: comment.text,
+      time: comment.createdAt,
+    })),
+  }));
+};
 // function to search for posts
 
 const searchPosts = async (req, res) => {
@@ -280,36 +309,7 @@ const searchPosts = async (req, res) => {
   }
 };
 
-// Function to format posts
-const formatPosts = (posts) => {
-  return posts.map((post) => ({
-    id: post._id,
-    user: {
-      _id: post.user_id ? post.user_id._id : null,
-      name: post.user_id ? post.user_id.name : "Unknown User",
-      profile_image:
-        post.user_id && post.user_id.profile_image
-          ? `${post.user_id.profile_image}`
-          : "https://via.placeholder.com/40",
-    },
-    type: post.category_id?.name || "Unknown Category",
-    time: post.createdAt,
-    content: post.text_content || "No content available",
-    media:
-      post.media && post.media.length > 0
-        ? post.media.map((m) => `${m.media_path}`)
-        : [],
-    liked: post.likes && post.user_id ? post.likes.includes(post.user_id._id) : false,
-    likeCount: post.likes ? post.likes.length : 0,
-    commentCount: post.comments ? post.comments.length : 0,
-    shareCount: post.shares ? post.shares.length : 0,
-    comments: post.comments.map((comment) => ({
-      user: comment.user_id ? comment.user_id.name : "Unknown",
-      text: comment.text,
-      time: comment.createdAt,
-    })),
-  }));
-};
+
 
 
 const getPostById = async (req, res) => {

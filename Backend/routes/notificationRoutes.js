@@ -2,16 +2,15 @@ const express = require('express');
 const router = express.Router();
 
 const { 
-  sendNotificationToUser, 
-  sendGlobalNotification, 
   getUserNotifications, 
-  getGlobalNotifications, 
+
   markNotificationAsRead,
   clearAllNotifications,
-  getAdminNotifications
+  sendNotification
 } = require('../controller/notificationController');
 
 const { checkAuthentication, checkIsUser } = require('../middleware/middleware');
+const { sendAdminNotification, getGlobalNotifications, scheduleAdminNotification, resendAdminNotification } = require('../controller/adminNotificationController');
 
 // =============================
 // User Notification Routes
@@ -32,15 +31,14 @@ router.delete('/user/clear-all', checkAuthentication, checkIsUser, clearAllNotif
 // =============================
 
 
-router.post('/admin/send/user', checkAuthentication, sendNotificationToUser);
+
+router.post('/admin/send/global', checkAuthentication, sendAdminNotification);
+router.post('/admin/schedule', checkAuthentication, scheduleAdminNotification);
 
 
-router.post('/admin/send/global', checkAuthentication, sendGlobalNotification);
+// // router to get all admin notifications
+router.get('/admin/all', checkAuthentication, getGlobalNotifications);
+router.post('/admin/resend/:notificationId', checkAuthentication, resendAdminNotification);
 
-
-router.get('/admin/global', checkAuthentication, getGlobalNotifications);
-
-// router to get all admin notifications
-router.get('/admin', checkAuthentication, getAdminNotifications);
 
 module.exports = router;

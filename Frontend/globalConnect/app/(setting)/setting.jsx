@@ -14,6 +14,7 @@ import ScreenWrapper from "../../components/ScreenWrapper";
 import { theme } from "../../constants/theme";
 import { StatusBar } from "expo-status-bar";
 import { userAuth } from "../../contexts/AuthContext";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 // Axios interceptor to catch and log 401 errors
 axios.interceptors.response.use(
@@ -28,7 +29,8 @@ axios.interceptors.response.use(
 
 const Setting = () => {
   const router = useRouter();
-  const { logout } = userAuth();
+  const auth = userAuth(); 
+  const { logout } = auth; 
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
 
@@ -36,43 +38,31 @@ const Setting = () => {
     setNotificationsEnabled(!notificationsEnabled);
   };
 
-  const handleLogout = async () => {
+  // ✅ Separate logout function that ensures React handles state updates correctly
+  const confirmLogout = () => {
     Alert.alert("Logout", "Are you sure you want to logout?", [
-      {
-        text: "Cancel",
-        style: "cancel",
-      },
-      {
-        text: "Logout",
-        onPress: async () => {
-          try {
-            setIsLoading(true);
-            await logout();
-            router.replace("/login");
-          } catch (error) {
-            console.error("Logout Error:", error);
-            Alert.alert("Error", "Failed to logout. Please try again.");
-          } finally {
-            setIsLoading(false);
-          }
-        },
-      },
+      { text: "Cancel", style: "cancel" },
+      { text: "Logout", onPress: handleLogout },
     ]);
   };
 
-  // If you need to prevent rendering, do it here after all hooks
-  if (isLoading) {
-    return (
-      <ScreenWrapper>
-        <View style={styles.container}>
-          <Header title="Settings" showBackButton={true} />
-          <View style={[styles.body, styles.loadingContainer]}>
-            <Text>Loading...</Text>
-          </View>
-        </View>
-      </ScreenWrapper>
-    );
-  }
+  const handleLogout = async () => {
+    try {
+        setIsLoading(true);
+        
+        // Remove authToken from AsyncStorage
+        await AsyncStorage.removeItem("authToken");
+
+        // Navigate to login screen
+        router.replace("/login");
+    } catch (error) {
+        console.error("Logout Error:", error);
+        Alert.alert("Error", "Failed to logout. Please try again.");
+    } finally {
+        setIsLoading(false);
+    }
+};
+
 
   return (
     <ScreenWrapper>
@@ -80,63 +70,71 @@ const Setting = () => {
       <View style={styles.container}>
         <Header title="Settings" showBackButton={true} />
         <View style={styles.body}>
-          <TouchableOpacity
-            style={styles.option}
-            onPress={() => router.push("/changePassword")}
-          >
-            <Text style={styles.optionText}>Change Password</Text>
-          </TouchableOpacity>
+          {isLoading ? (
+            <View style={styles.loadingContainer}>
+              <Text>Loading...</Text>
+            </View>
+          ) : (
+            <>
+              <TouchableOpacity
+                style={styles.option}
+                onPress={() => router.push("/changePassword")}
+              >
+                <Text style={styles.optionText}>Change Password</Text>
+              </TouchableOpacity>
 
-          <TouchableOpacity
-            style={styles.option}
-            onPress={() => router.push("/privacyPolicy")}
-          >
-            <Text style={styles.optionText}>Privacy Policy</Text>
-          </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.option}
+                onPress={() => router.push("/privacyPolicy")}
+              >
+                <Text style={styles.optionText}>Privacy Policy</Text>
+              </TouchableOpacity>
 
-          <TouchableOpacity
-            style={styles.option}
-            onPress={() => router.push("/termsAndCondition")}
-          >
-            <Text style={styles.optionText}>Terms and Conditions</Text>
-          </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.option}
+                onPress={() => router.push("/termsAndCondition")}
+              >
+                <Text style={styles.optionText}>Terms and Conditions</Text>
+              </TouchableOpacity>
 
-          <TouchableOpacity
-            style={styles.option}
-            onPress={() => router.push("/destination")}
-          >
-            <Text style={styles.optionText}>Destination</Text>
-          </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.option}
+                onPress={() => router.push("/destination")}
+              >
+                <Text style={styles.optionText}>Destination</Text>
+              </TouchableOpacity>
 
-          <View style={styles.option}>
-            <Text style={styles.optionText}>Notifications</Text>
-            <Switch
-              value={notificationsEnabled}
-              onValueChange={toggleNotifications}
-            />
-          </View>
+              <View style={styles.option}>
+                <Text style={styles.optionText}>Notifications</Text>
+                <Switch
+                  value={notificationsEnabled}
+                  onValueChange={toggleNotifications}
+                />
+              </View>
 
-          <TouchableOpacity
-            style={styles.option}
-            onPress={() => router.push("/updateProfile")}
-          >
-            <Text style={styles.optionText}>Update Profile</Text>
-          </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.option}
+                onPress={() => router.push("/updateProfile")}
+              >
+                <Text style={styles.optionText}>Update Profile</Text>
+              </TouchableOpacity>
 
-          <TouchableOpacity
-            style={styles.option}
-            onPress={() => router.push("/blockedUser")}
-          >
-            <Text style={styles.optionText}>Blocked</Text>
-          </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.option}
+                onPress={() => router.push("/blockedUser")}
+              >
+                <Text style={styles.optionText}>Blocked</Text>
+              </TouchableOpacity>
 
-          <TouchableOpacity
-            style={styles.option}
-            onPress={handleLogout}
-            disabled={isLoading}
-          >
-            <Text style={styles.optionText}>Logout</Text>
-          </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.option}
+                onPress={confirmLogout} // ✅ Call confirmLogout instead
+                disabled={isLoading}
+              >
+                <Text style={styles.optionText}>Logout</Text>
+              </TouchableOpacity>
+            </>
+          )}
         </View>
       </View>
     </ScreenWrapper>

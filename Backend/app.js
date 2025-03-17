@@ -5,6 +5,8 @@ const http = require("http");
 const { initSocket } = require("./controller/socketController"); // Correct usage
 const mongoose = require("mongoose");
 const notificationRoutes = require("./routes/notificationRoutes");
+const pushTokenRoute = require("./routes/pushTokenRoute");
+const logoController = require('./controller/logoController');
 const cors = require("cors");
 require("dotenv").config();
 
@@ -53,6 +55,8 @@ app.use("/api/notifications", notificationRoutes);
 app.use("/api", userMessagingRoute);
 app.use("/api", userFollowRoute);
 app.use("/api", adminPolicyRoutes);
+app.use("/api", pushTokenRoute);
+app.use('/api', logoController);
 
 app.use("/uploads", express.static("uploads"));
 

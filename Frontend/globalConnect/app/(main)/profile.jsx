@@ -20,13 +20,13 @@ import { useRouter } from "expo-router";
 import * as ImagePicker from "expo-image-picker";
 import UserPostCardDetails from "../../components/UserPostCardDetails";
 import axios from "axios";
-import Animated from "react-native-reanimated";
+
 
 const Profile = () => {
   const router = useRouter();
   const { user, authToken, setUserData, refreshUserProfile } = userAuth();
   const ip = config.API_IP;
-
+  console.log("user", user)
   const profileImagePath =
     user?.user?.profile_image?.uri || user?.user?.profile_image || "";
 
@@ -110,7 +110,7 @@ const Profile = () => {
           Alert.alert(
             "Error",
             error.response.data.message ||
-              "An error occurred while updating your profile"
+            "An error occurred while updating your profile"
           );
         } else {
           Alert.alert("Error", "An error occurred while updating your profile");
@@ -119,7 +119,7 @@ const Profile = () => {
     }
   };
 
-  console.log("user", user);
+
   return (
     <ScreenWrapper>
       <StatusBar style="dark" />
@@ -155,6 +155,9 @@ const Profile = () => {
             <Text style={styles.userName}>
               {user?.user?.name || "John Doe"}
             </Text>
+            {user?.user?.verified && (
+              <VerifiedIcon size={20} color="#1877F2" style={styles.verifiedIcon} />
+            )}
             <Text style={styles.userEmail}>{user?.user?.email}</Text>
             <Text style={styles.userLocation}>
               destination: {user?.user?.destination || "Not specified"}
@@ -214,7 +217,7 @@ const Profile = () => {
                     profile_image: post.user.profile_image
                   }
                 };
-                
+
                 return (
                   <UserPostCardDetails
                     key={post.id}
@@ -355,11 +358,18 @@ const styles = StyleSheet.create({
     shadowRadius: 3,
     elevation: 5,
   },
+  userNameContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 10,
+  },
   userName: {
     fontSize: 24,
     fontWeight: "bold",
     color: theme.colors.black,
-    marginTop: 10,
+  },
+  verifiedIcon: {
+    marginLeft: 6,
   },
   userEmail: {
     fontSize: 16,

@@ -2,19 +2,20 @@ import React, { useState, useEffect } from "react";
 import Sidebar from "../sidebar/Sidebar";
 import { toast, ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
-import { FiSend, FiTrash2, FiEdit2, FiX, FiAlertCircle } from "react-icons/fi";
+import { FiSend, FiTrash2, FiClock, FiX, FiAlertCircle, FiRepeat } from "react-icons/fi";
 import { format } from "date-fns";
 import axiosInstance from "./axiosInstance";
+import axios from "axios";
 
 const NotificationPage = () => {
+
   const [notifications, setNotifications] = useState([]);
   const [formData, setFormData] = useState({
     message: "",
     title: "",
-    type: "info", 
+    type: "info",
+    scheduleTime: "",
   });
-  const [isEditing, setIsEditing] = useState(false);
-  const [editId, setEditId] = useState(null);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [notificationToDelete, setNotificationToDelete] = useState(null);
   const [searchTerm, setSearchTerm] = useState("");
@@ -27,8 +28,8 @@ const NotificationPage = () => {
 
   const fetchNotifications = async () => {
     try {
-      const res = await axiosInstance.get("/notifications/admin");
-      setNotifications(res.data);
+      const res = await axiosInstance.get("http://localhost:3000/api/notifications/admin/all");
+      setNotifications(res.data.notifications);
     } catch (error) {
       toast.error("Failed to fetch notifications");
       console.error("Error fetching notifications:", error);
@@ -46,9 +47,9 @@ const NotificationPage = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
-      if (isEditing) {
-        await axiosInstance.put(`/notifications/${editId}`, formData);
-        toast.success("Notification updated successfully!");
+      if (formData.scheduleTime) {
+        await axiosInstance.post("/notifications/admin/schedule", formData);
+        toast.success("Notification scheduled successfully!");
       } else {
         await axiosInstance.post("/notifications/admin/send/global", formData);
         toast.success("Notification sent successfully!");
@@ -56,25 +57,13 @@ const NotificationPage = () => {
       fetchNotifications();
       resetForm();
     } catch (error) {
-      toast.error(isEditing ? "Failed to update notification" : "Failed to send notification");
-      console.error("Error saving notification:", error);
+      toast.error("Failed to send notification");
+      console.error("Error sending notification:", error);
     }
   };
 
   const resetForm = () => {
-    setFormData({ message: "", title: "", type: "info" });
-    setIsEditing(false);
-    setEditId(null);
-  };
-
-  const handleEdit = (notification) => {
-    setIsEditing(true);
-    setEditId(notification._id);
-    setFormData({
-      message: notification.message,
-      title: notification.title || "",
-      type: notification.type || "info",
-    });
+    setFormData({ message: "", title: "", type: "info", scheduleTime: "" });
   };
 
   const handleDelete = (id) => {
@@ -93,6 +82,16 @@ const NotificationPage = () => {
     }
     setShowDeleteDialog(false);
     setNotificationToDelete(null);
+  };
+
+  const handleResend = async (id) => {
+    try {
+      await axiosInstance.post(`/notifications/admin/resend/${id}`);
+      toast.success("Notification resent successfully!");
+    } catch (error) {
+      toast.error("Failed to resend notification");
+      console.error("Error resending notification:", error);
+    }
   };
 
   const filteredNotifications = notifications
@@ -117,11 +116,9 @@ const NotificationPage = () => {
             <p className="text-gray-600 mt-2">Send and manage notifications to your users</p>
           </div>
 
-          {/* Create/Edit Form */}
+          {/* Create Form */}
           <div className="bg-white rounded-xl shadow-sm p-6 mb-8">
-            <h2 className="text-xl font-semibold mb-4">
-              {isEditing ? "Edit Notification" : "Send New Notification"}
-            </h2>
+            <h2 className="text-xl font-semibold mb-4">Send New Notification</h2>
 
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
@@ -166,22 +163,24 @@ const NotificationPage = () => {
                 />
               </div>
 
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Schedule Time (Optional)</label>
+                <input
+                  type="datetime-local"
+                  name="scheduleTime"
+                  value={formData.scheduleTime}
+                  onChange={handleChange}
+                  className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+              </div>
+
               <div className="flex justify-end space-x-3">
-                {isEditing && (
-                  <button
-                    type="button"
-                    onClick={resetForm}
-                    className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50"
-                  >
-                    Cancel
-                  </button>
-                )}
                 <button
                   type="submit"
                   className="flex items-center px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
                 >
                   <FiSend className="mr-2" />
-                  {isEditing ? "Update Notification" : "Send Notification"}
+                  {formData.scheduleTime ? "Schedule Notification" : "Send Notification"}
                 </button>
               </div>
             </form>
@@ -252,11 +251,11 @@ const NotificationPage = () => {
 
                     <div className="flex space-x-2">
                       <button
-                        onClick={() => handleEdit(notification)}
+                        onClick={() => handleResend(notification._id)}
                         className="p-2 text-gray-600 hover:text-blue-600 transition-colors"
-                        title="Edit"
+                        title="Resend"
                       >
-                        <FiEdit2 />
+                        <FiRepeat />
                       </button>
                       <button
                         onClick={() => handleDelete(notification._id)}

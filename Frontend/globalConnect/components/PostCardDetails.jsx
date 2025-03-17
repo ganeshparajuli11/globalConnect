@@ -20,6 +20,7 @@ import config from "../constants/config";
 import { userAuth } from "../contexts/AuthContext";
 import axios from "axios";
 import { useFetchFollowing } from "../services/followFetchService";
+import VerifiedIcon from "../assets/icons/verifiedIcon";
 
 const PostCardDetails = ({
   item,
@@ -82,6 +83,7 @@ const PostCardDetails = ({
     setFullScreenVisible(false);
     setSelectedImage(null);
   };
+console.log("user",item)
 
   const onLike = async () => {
     try {
@@ -149,7 +151,14 @@ const PostCardDetails = ({
             rounded={theme.radius.md}
           />
           <View style={styles.userDetails}>
-            <Text style={styles.userName}>{item.user.name}</Text>
+          <Text style={styles.userName}>{item.user.name}</Text>
+              {item.user.verified && (
+                <VerifiedIcon
+                  size={16}
+                  color="#1877F2"
+                  style={styles.verifiedIcon}
+                />
+              )}
             <Text style={styles.postTime}>{createdAt}</Text>
           </View>
         </View>

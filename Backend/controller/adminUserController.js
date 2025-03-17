@@ -403,13 +403,14 @@ const updateUserActivity = async (req, res) => {
 
 // get all users
 
-getAllUsers = async (req, res) => {
+const getAllUsers = async (req, res) => {
   try {
-    // Fetch all users excluding those with the 'admin' role
-    const allUsers = await User.find({ role: { $ne: "admin" } }) // Exclude 'admin' role
+    // Fetch all non-admin users
+    const allUsers = await User.find({ role: { $ne: "admin" } })
       .sort({ name: 1 })
       .lean();
 
+    // Map them into a cleaner structure
     const userData = allUsers.map((user, index) => ({
       userId: user._id,
       s_n: index + 1,
@@ -423,8 +424,13 @@ getAllUsers = async (req, res) => {
       last_login: user.last_login
         ? moment(user.last_login).format("MMMM Do YYYY, h:mm:ss a")
         : "Not logged in",
-      status: user.status,
-      created_at: moment(user.date_created).format("MMMM Do YYYY, h:mm:ss a"), // Format created_at (date_created) to be more user-friendly
+      status: user.status, // Could be "Active", "Inactive", etc.
+      is_blocked: user.is_blocked,
+      is_suspended: user.is_suspended,
+      is_deleted: user.is_deleted,
+      created_at: user.date_created
+        ? moment(user.date_created).format("MMMM Do YYYY, h:mm:ss a")
+        : null,
     }));
 
     res.status(200).json({
@@ -486,10 +492,10 @@ const getUserDashboard = async (req, res) => {
 };
 
 
-// get active user
-
 const getActiveUsers = async (req, res) => {
   try {
+    // Active means: has done something within the last 30 minutes,
+    // status is "Active", not blocked, not deleted, not admin.
     const thirtyMinutesAgo = moment().subtract(30, "minutes").toDate();
 
     const activeUsers = await User.find({
@@ -497,11 +503,12 @@ const getActiveUsers = async (req, res) => {
       status: "Active",
       role: { $ne: "admin" },
       is_blocked: false,
-      is_deleted: false
+      is_deleted: false,
+      // possibly is_suspended: false if you want to exclude suspended as well
     })
-    .select('_id name email last_activity status profile_image')
-    .sort({ last_activity: -1 })
-    .lean();
+      .select("_id name email last_activity status profile_image is_blocked is_suspended is_deleted")
+      .sort({ last_activity: -1 })
+      .lean();
 
     const activeUserData = activeUsers.map((user, index) => ({
       id: user._id,
@@ -509,26 +516,32 @@ const getActiveUsers = async (req, res) => {
       name: user.name,
       email: user.email,
       last_activity: moment(user.last_activity).fromNow(),
-      status: "Active",
+      // Forced 'Active' or from user.status:
+      status: user.status,
       profile_image: user.profile_image,
-      last_active: moment(user.last_activity).format("YYYY-MM-DD HH:mm:ss")
+      last_active: moment(user.last_activity).format("YYYY-MM-DD HH:mm:ss"),
+      is_blocked: user.is_blocked,
+      is_suspended: user.is_suspended,
+      is_deleted: user.is_deleted,
     }));
 
     res.status(200).json({
       message: "Active users retrieved successfully.",
       count: activeUserData.length,
-      data: activeUserData
+      data: activeUserData,
     });
   } catch (error) {
     console.error("Error fetching active users:", error);
     res.status(500).json({
       message: "An error occurred while fetching active users.",
-      error: error.message
+      error: error.message,
     });
   }
 };
 
-
+// ---------------------------------------------------------------------
+// 3) getInactiveUsers
+// ---------------------------------------------------------------------
 const getInactiveUsers = async (req, res) => {
   try {
     const thirtyMinutesAgo = moment().subtract(30, "minutes").toDate();
@@ -536,18 +549,18 @@ const getInactiveUsers = async (req, res) => {
 
     console.log("🔹 Checking inactive users since:", thirtyMinutesAgo);
 
+    // Inactive means last_activity older than 30 minutes or null,
+    // not blocked, not deleted, not admin
     const inactiveUsers = await User.find({
-      $or: [
-        { last_activity: { $lt: thirtyMinutesAgo } },
-        { last_activity: null }
-      ],
+      $or: [{ last_activity: { $lt: thirtyMinutesAgo } }, { last_activity: null }],
       is_blocked: false,
       is_deleted: false,
-      role: { $ne: "admin" }
+      role: { $ne: "admin" },
+      // possibly is_suspended: false if you want them excluded from 'inactive' logic
     })
-    .select('_id name email last_activity status profile_image createdAt')
-    .sort({ last_activity: -1 })
-    .lean();
+      .select("_id name email last_activity status profile_image createdAt is_blocked is_suspended is_deleted")
+      .sort({ last_activity: -1 })
+      .lean();
 
     console.log("✅ Found Inactive Users:", inactiveUsers.length);
 
@@ -556,159 +569,165 @@ const getInactiveUsers = async (req, res) => {
       s_n: index + 1,
       name: user.name,
       email: user.email,
-      last_active: user.last_activity ? moment(user.last_activity).format("YYYY-MM-DD HH:mm:ss") : "Never",
-      inactivity_duration: user.last_activity ? moment(user.last_activity).fromNow() : "Never active",
-      status: user.last_activity && moment(user.last_activity).isAfter(thirtyDaysAgo) ? "Inactive" : "Long-term Inactive",
+      last_active: user.last_activity
+        ? moment(user.last_activity).format("YYYY-MM-DD HH:mm:ss")
+        : "Never",
+      inactivity_duration: user.last_activity
+        ? moment(user.last_activity).fromNow()
+        : "Never active",
+      status:
+        user.last_activity && moment(user.last_activity).isAfter(thirtyDaysAgo)
+          ? "Inactive"
+          : "Long-term Inactive",
       profile_image: user.profile_image,
-      joined: moment(user.createdAt).format("YYYY-MM-DD")
+      joined: user.createdAt ? moment(user.createdAt).format("YYYY-MM-DD") : null,
+      is_blocked: user.is_blocked,
+      is_suspended: user.is_suspended,
+      is_deleted: user.is_deleted,
     }));
 
-    // Update status for inactive users
+    // Optionally: Update status field to "Inactive" in the DB
     await User.updateMany(
-      { _id: { $in: inactiveUsers.map(user => user._id) } },
+      { _id: { $in: inactiveUsers.map((u) => u._id) } },
       { $set: { status: "Inactive" } }
     );
 
     res.status(200).json({
       message: "Inactive users retrieved and status updated successfully.",
       count: inactiveUserData.length,
-      data: inactiveUserData
+      data: inactiveUserData,
     });
   } catch (error) {
     console.error("❌ Error fetching inactive users:", error);
     res.status(500).json({
       message: "An error occurred while fetching inactive users.",
-      error: error.message
+      error: error.message,
     });
   }
 };
 
-
-
-// reported user
+// ---------------------------------------------------------------------
+// 4) getReportedUsers
+//    (already includes logic to show 'Blocked' status if user.is_blocked)
+// ---------------------------------------------------------------------
 const getReportedUsers = async (req, res) => {
   try {
-    // Aggregate reports
+    // Aggregation that groups all reports by user, merges with user details.
     const reportData = await ReportUser.aggregate([
       {
         $group: {
-          _id: "$user_id", // Group by the user who was reported (reported user)
-          reportedCount: { $sum: 1 }, // Count the number of reports for the user
-          reportedReasons: { $push: "$report_category" }, // Push all report category references for this user
-          reportedBy: { $push: "$reported_by" }, // Push the users who reported this user
+          _id: "$user_id",
+          reportedCount: { $sum: 1 },
+          reportedReasons: { $push: "$report_category" },
+          reportedBy: { $push: "$reported_by" },
         },
       },
       {
         $project: {
           _id: 0,
-          reportedTo: "$_id", // Rename the _id field to reportedTo
+          reportedTo: "$_id",
           reportedCount: 1,
-          reportedReasons: 1, // All report category references
-          reportedBy: 1, // Users who reported
+          reportedReasons: 1,
+          reportedBy: 1,
         },
       },
       {
         $lookup: {
-          from: "users", // Join with the User collection to get user details
+          from: "users",
           localField: "reportedTo",
           foreignField: "_id",
           as: "userDetails",
         },
       },
-      {
-        $unwind: "$userDetails"
-      },
+      { $unwind: "$userDetails" },
       {
         $lookup: {
-          from: "reportcategories", // Lookup the report categories using the correct field
-          localField: "reportedReasons", // This refers to the report_category field in the report
-          foreignField: "_id", // Reference the _id in ReportCategory
-          as: "reportCategoryDetails", // Store the report category details in this field
+          from: "reportcategories",
+          localField: "reportedReasons",
+          foreignField: "_id",
+          as: "reportCategoryDetails",
         },
       },
       {
         $lookup: {
-          from: "users", // Lookup the users who reported the reported user
-          localField: "reportedBy", // This will be an array of user IDs
-          foreignField: "_id", // Match to the _id in the users collection
-          as: "reporterDetails", // Store the reporter details in this field
+          from: "users",
+          localField: "reportedBy",
+          foreignField: "_id",
+          as: "reporterDetails",
         },
       },
       {
         $project: {
           reportedTo: {
-            _id: "$userDetails._id", // User ID
-            name: "$userDetails.name", // User Name
-            email: "$userDetails.email", // User Email
-            profile_image: "$userDetails.profile_image", // Profile Image
+            _id: "$userDetails._id",
+            name: "$userDetails.name",
+            email: "$userDetails.email",
+            profile_image: "$userDetails.profile_image",
+            // If user is_blocked => Show 'Blocked' else keep userDetails.status
             status: {
               $cond: {
-                if: "$userDetails.is_blocked", // If the user is blocked
+                if: "$userDetails.is_blocked",
                 then: "Blocked",
-                else: "$userDetails.status", // Otherwise, keep their current status
+                else: "$userDetails.status",
               },
             },
+            is_blocked: "$userDetails.is_blocked",
+            is_suspended: "$userDetails.is_suspended",
+            is_deleted: "$userDetails.is_deleted",
           },
           reportedCount: 1,
-          reportedReasons: 1, // This will hold the raw report reasons (references)
-          reportCategoryDetails: {
-            report_title: 1,
-            description: 1,
-          },
-          reportedBy: { // Map each reporter to their required fields (id, name, email, profile_image, status)
+          reportedReasons: 1,
+          reportCategoryDetails: 1,
+          reportedBy: {
             $map: {
-              input: "$reporterDetails", // Array of reporters
+              input: "$reporterDetails",
               as: "reporter",
               in: {
-                _id: "$$reporter._id", // Reporter ID
-                name: "$$reporter.name", // Reporter Name
-                email: "$$reporter.email", // Reporter Email
-                profile_image: "$$reporter.profile_image", // Reporter Profile Image
+                _id: "$$reporter._id",
+                name: "$$reporter.name",
+                email: "$$reporter.email",
+                profile_image: "$$reporter.profile_image",
                 status: {
                   $cond: {
-                    if: "$$reporter.is_blocked", // If the reporter is blocked
+                    if: "$$reporter.is_blocked",
                     then: "Blocked",
-                    else: "$$reporter.status", // Otherwise, keep their current status
+                    else: "$$reporter.status",
                   },
                 },
+                is_blocked: "$$reporter.is_blocked",
+                is_suspended: "$$reporter.is_suspended",
+                is_deleted: "$$reporter.is_deleted",
               },
             },
           },
         },
       },
       {
-        $sort: {
-          reportedCount: -1, // Sort by most reported users first
-        },
+        $sort: { reportedCount: -1 },
       },
     ]);
 
-    // Process the reportData to ensure all reports show reasons correctly
+    // Further process the result to gather reason counts, etc.
     const finalReport = reportData.map((report) => {
-      // Handle cases where there is only one report, and reasons might be missing
+      // Build a map of reason => count
       const reasonCount = report.reportedReasons.reduce((acc, reason) => {
         acc[reason] = (acc[reason] || 0) + 1;
         return acc;
       }, {});
 
-      // If no report categories were found, assume the report reason is a string
-      const processedReasons = reasonCount ? reasonCount : { "No reason provided": 1 };
-
       return {
-        reportedTo: report.reportedTo, // Now includes ID, name, email, profile_image, status (Reported user)
+        reportedTo: report.reportedTo,
         reportedCount: report.reportedCount,
-        reportedReasons: processedReasons, // Handle missing reasons
-        reportCategoryDetails: report.reportCategoryDetails, // All the report categories for each reason
-        reportedBy: report.reportedBy, // Array of reporters with ID, name, email, profile_image, status (Reporter)
+        reportedReasons: reasonCount,
+        reportCategoryDetails: report.reportCategoryDetails,
+        reportedBy: report.reportedBy,
       };
     });
 
-    // Send the response with the final report
     res.status(200).json({
       message: "Admin report fetched successfully.",
       data: finalReport,
     });
-
   } catch (error) {
     console.error("Error generating admin report:", error);
     res.status(500).json({
@@ -718,54 +737,58 @@ const getReportedUsers = async (req, res) => {
   }
 };
 
-
+// ---------------------------------------------------------------------
+// 5) getBlockedUsers
+// ---------------------------------------------------------------------
 const getBlockedUsers = async (req, res) => {
   try {
-    // Fetch users who are blocked (is_blocked is true)
+    // Find all blocked users
     const blockedUsers = await User.find({ is_blocked: true })
       .sort({ name: 1 })
       .lean();
 
-    // Fetch the reports associated with these blocked users
+    // For each blocked user, fetch associated reports
     const blockedUsersWithReports = await Promise.all(
       blockedUsers.map(async (user, index) => {
-        // Find reports related to this user
         const reports = await ReportUser.find({ user_id: user._id })
           .populate("report_category", "report_title")
           .lean();
 
-        console.log("Reports for user:", user.name, reports);
-
-        // Get the reason from the most recent report (if it exists)
-        const reason =
-          reports.length > 0
-            ? reports[reports.length - 1].report_category.report_title
-            : "No reason provided";
-
-        // Format the created_at date to a readable format
-        const formattedDate =
-          reports.length > 0
-            ? moment(reports[reports.length - 1].created_at).format("YYYY-MM-DD HH:mm:ss")
+        // You could get the reason from the last or first report, or combine them
+        let reason = "No reason provided";
+        let reportTime = "N/A";
+        if (reports.length > 0) {
+          const lastReport = reports[reports.length - 1];
+          if (lastReport?.report_category?.report_title) {
+            reason = lastReport.report_category.report_title;
+          }
+          reportTime = lastReport?.created_at
+            ? moment(lastReport.created_at).format("YYYY-MM-DD HH:mm:ss")
             : "N/A";
+        }
 
-        // Ensure the status is marked as "blocked" for blocked users
-        user.status = "blocked";
+        // Force user.status to 'blocked'
+        const finalStatus = "Blocked";
 
         return {
-          id: user._id, // Added id field
+          id: user._id,
           s_n: index + 1,
           name: user.name,
           email: user.email,
-          reason: reason,
+          reason,
           age: user.age,
-          profile_image: user.profile_image, // Profile image included
+          profile_image: user.profile_image,
           location: user.location,
           role: user.role,
           destination_country: user.destination_country,
-          last_login: user.last_login,
-          status: user.status,
+          last_login: user.last_login
+            ? moment(user.last_login).format("YYYY-MM-DD HH:mm:ss")
+            : "Never logged in",
+          status: finalStatus,
           is_blocked: user.is_blocked,
-          report_created_at: formattedDate,
+          is_suspended: user.is_suspended,
+          is_deleted: user.is_deleted,
+          report_created_at: reportTime,
         };
       })
     );
@@ -782,6 +805,7 @@ const getBlockedUsers = async (req, res) => {
     });
   }
 };
+
 
 
 const updateLocation = async (req, res) => {
@@ -864,20 +888,30 @@ const sendEmail = async (email, subject, message) => {
 // Controller to block/suspend/delete user
 const manageUserStatus = async (req, res) => {
   try {
-    const { userId, action, reason, duration } = req.body; // Action (block, suspend, delete), duration, and reason
-    const validActions = ['block', 'suspend', 'delete'];
-    const validDurations = ['1w', '1m', '6m', 'permanent'];
+    const {
+      userId,
+      action,       // block | suspend | delete
+      reason,
+      duration,     // 1w | 1m | 6m | permanent (required if block/suspend)
+      resetReports, // optional boolean
+    } = req.body;
 
-    // Validate action and duration
+    const validActions = ["block", "suspend", "delete"];
+    const validDurations = ["1w", "1m", "6m", "permanent"];
+
+    // Validate action
     if (!validActions.includes(action)) {
       return res.status(400).json({ message: "Invalid action." });
     }
 
-    if (!validDurations.includes(duration)) {
-      return res.status(400).json({ message: "Invalid duration." });
+    // If block or suspend, duration is required
+    if ((action === "block" || action === "suspend") && !validDurations.includes(duration)) {
+      return res
+        .status(400)
+        .json({ message: "Invalid or missing duration for block/suspend." });
     }
 
-    // Find the user
+    // Find user
     const user = await User.findById(userId);
     if (!user) {
       return res.status(404).json({ message: "User not found." });
@@ -886,37 +920,73 @@ const manageUserStatus = async (req, res) => {
     let updatedStatus;
     let unblockDate = null;
 
-    // Calculate unblock date based on duration
-    if (duration === '1w') {
-      unblockDate = moment().add(1, 'weeks').toDate();
-    } else if (duration === '1m') {
-      unblockDate = moment().add(1, 'months').toDate();
-    } else if (duration === '6m') {
-      unblockDate = moment().add(6, 'months').toDate();
-    } else if (duration === 'permanent') {
-      unblockDate = null; // Permanent suspension means no unblock
+    // Calculate the unblock date if block or suspend
+    if (duration === "1w") {
+      unblockDate = moment().add(1, "weeks").toDate();
+    } else if (duration === "1m") {
+      unblockDate = moment().add(1, "months").toDate();
+    } else if (duration === "6m") {
+      unblockDate = moment().add(6, "months").toDate();
+    } else if (duration === "permanent") {
+      unblockDate = null; // indefinite
     }
 
-    // Update user status and apply appropriate action
-    if (action === 'block') {
-      updatedStatus = 'Blocked';
-      await User.findByIdAndUpdate(userId, { is_blocked: true, block_reason: reason, unblock_date: unblockDate });
-    } else if (action === 'suspend') {
-      updatedStatus = 'Suspended';
-      await User.findByIdAndUpdate(userId, { status: 'Suspended', suspend_reason: reason, suspended_until: unblockDate });
-    } else if (action === 'delete') {
-      updatedStatus = 'Deleted';
-      await User.findByIdAndUpdate(userId, { status: 'Deleted', delete_reason: reason });
+    // Build update fields
+    const updateFields = {};
+
+    // Switch on action
+    if (action === "block") {
+      updatedStatus = "Blocked";
+      updateFields.is_blocked = true;
+      updateFields.block_reason = reason || "No reason provided";
+      updateFields.unblock_date = unblockDate;
+      // Also ensure user is not suspended if we are blocking them
+      updateFields.is_suspended = false;
+      updateFields.suspend_reason = null;
+      updateFields.suspended_until = null;
+      // Optionally set user.status = "Blocked" if you like
+
+    } else if (action === "suspend") {
+      updatedStatus = "Suspended";
+      updateFields.is_suspended = true;
+      updateFields.suspend_reason = reason || "No reason provided";
+      updateFields.suspended_until = unblockDate;
+      // Also ensure user is not blocked if we are suspending them
+      updateFields.is_blocked = false;
+      updateFields.block_reason = null;
+      updateFields.unblock_date = null;
+      // Optionally set user.status = "Suspended"
+
+      updateFields.status = "Suspended";
+
+    } else if (action === "delete") {
+      updatedStatus = "Deleted";
+      updateFields.is_deleted = true;
+      updateFields.delete_reason = reason || "No reason provided";
+      // Optionally set user.status = "Deleted"
+      updateFields.status = "Deleted";
+      // Make sure to remove block/suspend if you prefer
+      updateFields.is_blocked = false;
+      updateFields.is_suspended = false;
     }
 
-    // Send email to user with the reason
+    // Optionally reset the user's reported_count or report_count
+    if (resetReports === true) {
+      updateFields.report_count = 0; 
+      // or updateFields.reported_count = 0 if your schema uses that
+    }
+
+    // Perform the update
+    await User.findByIdAndUpdate(userId, updateFields, { new: true });
+
+    // Send email
     const emailSubject = `Your account has been ${updatedStatus}`;
-    const emailMessage = `
+    const emailHTML = `
       <html lang="en">
       <head>
           <meta charset="UTF-8">
           <meta name="viewport" content="width=device-width, initial-scale=1.0">
-          <title>Your account status update</title>
+          <title>Account Status Update</title>
           <style>
               body {
                   font-family: Arial, sans-serif;
@@ -962,20 +1032,14 @@ const manageUserStatus = async (req, res) => {
           </style>
       </head>
       <body>
-
           <div class="email-container">
               <h1>Your account status has been updated</h1>
-
               <p>Dear <strong>${user.name}</strong>,</p>
-
-              <p>Your account has been <strong>${updatedStatus}</strong> due to the following reason:</p>
-
+              <p>Your account has been <strong>${updatedStatus}</strong> for the following reason:</p>
               <blockquote style="background-color: #f9f9f9; padding: 10px; border-left: 5px solid #4F46E5; font-style: italic; margin-top: 20px;">
-                  ${reason}
+                  ${reason || "No reason provided"}
               </blockquote>
-
               <p>If you have any questions, please contact support.</p>
-
               <div class="email-footer">
                   <div class="footer-logo">
                       <span>Global</span><span class="black">Connect</span>
@@ -983,29 +1047,38 @@ const manageUserStatus = async (req, res) => {
                   <p>&copy; 2025 GlobalConnect. All rights reserved.</p>
               </div>
           </div>
-
       </body>
       </html>
     `;
 
-    await sendEmail(user.email, emailSubject, emailMessage);
+    await sendEmail(user.email, emailSubject, emailHTML);
 
     return res.status(200).json({
       message: `User has been ${updatedStatus} successfully.`,
-      data: user,
+      data: {
+        userId: user._id,
+        action,
+        updatedStatus,
+        unblockDate,
+        resetReports: !!resetReports,
+      },
     });
   } catch (error) {
     console.error("Error managing user status:", error);
-    return res.status(500).json({ message: "An error occurred while managing user status." });
+    return res.status(500).json({
+      message: "An error occurred while managing user status.",
+      error: error.message,
+    });
   }
 };
 const removeSuspensionOrBlock = async (req, res) => {
   try {
-    const { userId, status } = req.body; // Expected status: "Suspended" or "Blocked"
+    const { userId, status } = req.body; // "Blocked" or "Suspended"
 
-    // Validate status input
-    if (!['Suspended', 'Blocked'].includes(status)) {
-      return res.status(400).json({ message: "Invalid status. It must be 'Suspended' or 'Blocked'." });
+    if (!["Blocked", "Suspended"].includes(status)) {
+      return res
+        .status(400)
+        .json({ message: "Invalid status. Must be 'Blocked' or 'Suspended'." });
     }
 
     // Find the user
@@ -1014,102 +1087,61 @@ const removeSuspensionOrBlock = async (req, res) => {
       return res.status(404).json({ message: "User not found." });
     }
 
-    let updateData = {};
+    // Build updated fields
+    const updateData = {};
 
-    // Create a nodemailer transporter using Gmail
-    const transporter = nodemailer.createTransport({
-      service: "Gmail",
-      auth: { user: process.env.EMAIL, pass: process.env.EMAIL_PASSWORD },
-    });
+    // If removing "Suspended"
+    if (status === "Suspended") {
+      updateData.is_suspended = false;
+      updateData.suspend_reason = null;
+      updateData.suspended_until = null;
+      // Optionally set user.status = "Active"
+      updateData.status = "Active";
 
-    // Beautiful email template
-    const getEmailTemplate = (subject, messageBody) => `
-      <html>
-        <head>
-          <meta charset="UTF-8">
-          <title>${subject}</title>
-        </head>
-        <body style="margin:0; padding:0; background-color:#f4f4f4; font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;">
-          <table role="presentation" style="width:100%; border-collapse:collapse;">
-            <tr>
-              <td style="padding:20px 0; background-color:#f4f4f4;">
-                <table align="center" style="width:600px; background-color:#ffffff; border-radius:8px; overflow:hidden; box-shadow:0 2px 8px rgba(0,0,0,0.1);">
-                  <!-- Header -->
-                  <tr>
-                    <td align="center" style="padding:40px; background-color:#4F46E5;">
-                      <h1 style="color:#ffffff; margin:0; font-size:32px;">GlobalConnect</h1>
-                    </td>
-                  </tr>
-                  <!-- Body -->
-                  <tr>
-                    <td style="padding:40px 30px; color:#333333; font-size:16px; line-height:24px;">
-                      ${messageBody}
-                    </td>
-                  </tr>
-                  <!-- Footer -->
-                  <tr>
-                    <td align="center" style="padding:20px; background-color:#f4f4f4; font-size:12px; color:#777777;">
-                      &copy; ${new Date().getFullYear()} GlobalConnect. All rights reserved.
-                    </td>
-                  </tr>
-                </table>
-              </td>
-            </tr>
-          </table>
-        </body>
-      </html>
-    `;
-
-    if (status === 'Suspended') {
-      // Remove suspension: set is_suspended to false and clear suspended_until.
-      updateData = { 
-        is_suspended: false, 
-        suspended_until: null,
-      };
-
-      // Also, if the user is blocked, remove block fields.
+      // If also blocked, remove the block
       if (user.is_blocked) {
         updateData.is_blocked = false;
-        updateData.unblock_date = null;
         updateData.block_reason = null;
+        updateData.unblock_date = null;
       }
 
+      // Email user to say suspension is lifted
       const emailSubject = "Your Account Suspension Has Been Lifted";
-      const emailBody = `
-        <p>Dear <strong>${user.name}</strong>,</p>
-        <p>Your account suspension has been lifted, and your account is now active. You can now log in and enjoy our services.</p>
-        <p>If you have any questions, please contact our support team.</p>
+      const emailHTML = `
+        <html>
+        <head><meta charset="UTF-8"><title>Suspension Lifted</title></head>
+        <body>
+          <p>Dear <strong>${user.name}</strong>,</p>
+          <p>Your account suspension has been lifted. You can now log in again!</p>
+          <p>If you have any questions, please contact our support team.</p>
+        </body>
+        </html>
       `;
-      await transporter.sendMail({
-        from: process.env.EMAIL,
-        to: user.email,
-        subject: emailSubject,
-        html: getEmailTemplate(emailSubject, emailBody),
-      });
+      await sendEmail(user.email, emailSubject, emailHTML);
 
-    } else if (status === 'Blocked') {
-      // Remove block: set is_blocked to false and clear related fields.
-      updateData = { 
-        is_blocked: false, 
-        unblock_date: null, 
-        block_reason: null 
-      };
+    } else if (status === "Blocked") {
+      // If removing block
+      updateData.is_blocked = false;
+      updateData.block_reason = null;
+      updateData.unblock_date = null;
+      // Optionally set user.status = "Active"
+      updateData.status = "Active";
 
+      // Email user
       const emailSubject = "Your Account Has Been Unblocked";
-      const emailBody = `
-        <p>Dear <strong>${user.name}</strong>,</p>
-        <p>Your account has been unblocked. You can now access your account without any restrictions.</p>
-        <p>If you have any questions, please contact our support team.</p>
+      const emailHTML = `
+        <html>
+        <head><meta charset="UTF-8"><title>Unblock Notice</title></head>
+        <body>
+          <p>Dear <strong>${user.name}</strong>,</p>
+          <p>Your account has been unblocked. You can now access your account freely.</p>
+          <p>If you have any questions, please contact our support team.</p>
+        </body>
+        </html>
       `;
-      await transporter.sendMail({
-        from: process.env.EMAIL,
-        to: user.email,
-        subject: emailSubject,
-        html: getEmailTemplate(emailSubject, emailBody),
-      });
+      await sendEmail(user.email, emailSubject, emailHTML);
     }
 
-    // Update the user document
     await User.findByIdAndUpdate(userId, updateData, { new: true });
 
     return res.status(200).json({
@@ -1118,7 +1150,10 @@ const removeSuspensionOrBlock = async (req, res) => {
     });
   } catch (error) {
     console.error("Error removing suspension or block:", error);
-    return res.status(500).json({ message: "An error occurred while removing suspension or block." });
+    return res.status(500).json({
+      message: "An error occurred while removing suspension or block.",
+      error: error.message,
+    });
   }
 };
 

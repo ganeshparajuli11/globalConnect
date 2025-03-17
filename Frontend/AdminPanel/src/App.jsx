@@ -107,6 +107,7 @@ function App() {
         <Route path="/user/:userId" element={<UserProfile />} />
         <Route path="/message" element={<Message />} />
         <Route path="/chat/:id" element={<ChatPage />} />
+
         <Route path="/admin" element={<AdminManagement />} />
 
 

@@ -58,7 +58,7 @@ const userSchema = new mongoose.Schema(
     status: {
       type: String,
       enum: ["Active", "Inactive", "Under Review", "Suspended", "Banned", "Long-term Inactive"],
-      default: "Active"
+      default: "Active",
     },
     suspended_until: { type: Date, default: null },
     unblock_date: { type: Date, default: null },
@@ -91,6 +91,9 @@ const userSchema = new mongoose.Schema(
       sms: { type: Boolean, default: false },
       push: { type: Boolean, default: true },
     },
+    // NEW: Store Expo push token for notifications
+    expoPushToken: { type: String, default: null },
+
     last_activity: { type: Date, default: null },
     last_login: { type: Date, default: null },
 
@@ -123,7 +126,7 @@ userSchema.pre("save", async function (next) {
   next();
 });
 
-// ✅ Fix: Add comparePassword method
+// Compare password method
 userSchema.methods.comparePassword = async function (enteredPassword) {
   return await bcrypt.compare(enteredPassword, this.password);
 };

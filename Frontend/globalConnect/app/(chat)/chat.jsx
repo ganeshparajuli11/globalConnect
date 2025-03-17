@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   View,
   Text,
@@ -11,300 +11,195 @@ import {
   Modal,
   Alert,
 } from "react-native";
-import { useLocalSearchParams, useRouter } from "expo-router";
 import * as ImagePicker from "expo-image-picker";
 import * as MediaLibrary from "expo-media-library";
+import * as FileSystem from "expo-file-system";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
-
 import ScreenWrapper from "../../components/ScreenWrapper";
 import BottomNav from "../../components/bottomNav";
 import config from "../../constants/config";
 import { userAuth } from "../../contexts/AuthContext";
 import { useFetchConversation, sendMessage, getFullMediaUrl } from "../../services/messageSerive";
-import socket, { cleanup } from "../../socketManager/socket";
+import socket, { cleanup, connectSocket, setMessageHandler } from "../../socketManager/socket";
 
 const Chat = () => {
-  const ip = config.API_IP;
-  const router = useRouter();
-  // Extract conversation partner id and name from route params
   const { userId, name } = useLocalSearchParams();
   const { authToken, user } = userAuth();
-  const { conversation, loading, fetchConversation } = useFetchConversation(userId);
+  const { conversation, loading: fetchLoading, fetchInitialConversation } = useFetchConversation(userId);
   const [messageText, setMessageText] = useState("");
   const [sending, setSending] = useState(false);
   const [selectedImage, setSelectedImage] = useState(null);
-  const [isPreviewModalVisible, setIsPreviewModalVisible] = useState(false);
   const [messages, setMessages] = useState([]);
+  const [isPreviewModalVisible, setIsPreviewModalVisible] = useState(false);
 
-  // Reference for the ScrollView to auto-scroll
   const scrollViewRef = useRef(null);
 
-  // Socket listener for incoming messages
+  // When conversation updates, update messages
   useEffect(() => {
-    if (!user?._id || !userId) {
-      console.log("Missing user ID or recipient ID", { userId, currentUserId: user?._id });
-      return;
+    if (conversation) {
+      setMessages(conversation);
     }
+  }, [conversation]);
 
-    console.log("Initializing chat with:", { currentUserId: user._id, recipientId: userId });
-
-    // Initialize socket connection
-    const initializeSocket = async () => {
-      try {
-        if (!socket.connected) {
-          await connectSocket(user._id);
-          console.log("Socket connected successfully");
-        }
-        
-        // Explicitly join the room
-        socket.emit("join", user._id);
-        console.log("Joined socket room with user ID:", user._id);
-      } catch (error) {
-        console.error("Socket connection error:", error);
-      }
-    };
-
-    initializeSocket();
-
+  // Setup socket and incoming message handling
+  useEffect(() => {
+    if (!user?.user?.id || !userId) return;
+    connectSocket(user.user.id)
+      .then(() => console.log("Socket connected"))
+      .catch((error) => console.error("Socket connection error:", error));
+    // Inside your useEffect for real-time message handling
     const handleReceiveMessage = (data) => {
-      console.log("Received message data:", data);
-      if (data.senderId === userId || data.receiverId === user._id) {
-        // Update messages immediately instead of fetching
-        const newMessage = {
-          _id: data._id || Date.now().toString(),
-          sender: { 
-            _id: data.senderId, 
-            name: data.senderId === user._id ? "You" : name 
-          },
-          content: data.content,
-          messageType: data.messageType,
-          media: data.media,
-          image: data.image,
-          timestamp: data.timestamp
-        };
-        
-        setMessages(prev => [...prev, newMessage]);
+      if (
+        (data.sender._id === userId && data.receiver._id === user.user.id) ||
+        (data.sender._id === user.user.id && data.receiver._id === userId)
+      ) {
+        setMessages((prev) => {
+          // Check if message already exists using its unique _id
+          if (prev.some((msg) => msg._id === data._id)) {
+            return prev;
+          }
+          return [...prev, data];
+        });
         scrollToBottom();
       }
     };
-
-    // Set up socket message handler
     setMessageHandler(handleReceiveMessage);
     socket.on("receiveMessage", handleReceiveMessage);
+    socket.on("connect", () => socket.emit("join", user.user.id));
+    socket.on("disconnect", () =>
+      setTimeout(() => connectSocket(user.user.id), 3000)
+    );
+    return () => cleanup();
+  }, [userId, user?.user?.id]);
 
-    // Socket connection status handlers
-    socket.on("connect", () => {
-      console.log("Socket connected, joining room...");
-      socket.emit("join", user._id);
-    });
-
-    socket.on("connect_error", (error) => {
-      console.error("Socket connection error:", error);
-    });
-
-    socket.on("disconnect", (reason) => {
-      console.log("Socket disconnected:", reason);
-      // Attempt to reconnect if disconnected
-      if (reason === "io server disconnect" || reason === "transport close") {
-        initializeSocket();
-      }
-    });
-
-    // Initial fetch of conversation
-    fetchConversation().then(msgs => {
-      if (msgs) {
-        setMessages(msgs);
-        setTimeout(scrollToBottom, 100);
-      }
-    });
-
-    return () => {
-      console.log("Cleaning up chat component");
-      cleanup(); // This will clear the heartbeat interval and disconnect the socket
-    };
-  }, [userId, user?._id, name]);
-
-  // Function to send a text-only message
-  const handleSendText = async () => {
-    if (!messageText.trim()) return;
+  // Long press handler to save an image
+  const handleLongPressImage = async (imageUrl) => {
     try {
-      setSending(true);
-      const messageData = {
-        senderId: user._id,
-        receiverId: userId,
-        messageType: "text",
-        content: messageText,
-      };
-
-      // Update UI immediately for better UX
-      const optimisticMessage = {
-        _id: Date.now().toString(),
-        sender: { _id: user._id, name: "You" },
-        content: messageText,
-        messageType: "text",
-        timestamp: Date.now()
-      };
-      setMessages(prev => [...prev, optimisticMessage]);
-      setMessageText("");
-      scrollToBottom();
-
-      // Send through socket first for real-time delivery
-      try {
-        await sendSocketMessage(messageData);
-      } catch (socketError) {
-        console.warn("Socket delivery failed, falling back to HTTP:", socketError);
+      const { status } = await MediaLibrary.requestPermissionsAsync();
+      if (status !== "granted") {
+        Alert.alert("Permission needed", "Please grant permission to save images");
+        return;
       }
+      Alert.alert(
+        "Image Options",
+        "Do you want to save this image to your device?",
+        [
+          { text: "Cancel", style: "cancel" },
+          {
+            text: "Save",
+            onPress: async () => {
+              try {
+                const filename = imageUrl.split("/").pop();
+                const localUri = FileSystem.documentDirectory + filename;
+                const { uri } = await FileSystem.downloadAsync(imageUrl, localUri);
+                const asset = await MediaLibrary.createAssetAsync(uri);
+                await MediaLibrary.createAlbumAsync("GlobalConnect", asset, false);
+                Alert.alert("Success", "Image saved successfully!");
+              } catch (error) {
+                console.error("Error saving image:", error);
+                Alert.alert("Error", "Failed to save image");
+              }
+            },
+          },
+        ]
+      );
+    } catch (error) {
+      console.error("Error handling long press:", error);
+      Alert.alert("Error", "Failed to process image");
+    }
+  };
 
-      // Then persist through HTTP API
+  const handleSend = async () => {
+    if (!messageText.trim() && !selectedImage) return;
+    setSending(true);
+    try {
+      const messageData = {
+        receiverId: userId,
+        messageType: selectedImage ? "image" : "text",
+        content: messageText.trim(),
+        media: selectedImage,
+      };
       const response = await sendMessage(messageData, authToken);
-      if (!response.success) {
-        // If HTTP fails, remove the optimistic message
-        setMessages(prev => prev.filter(msg => msg._id !== optimisticMessage._id));
-        Alert.alert("Error", "Failed to send message");
+      if (response.success) {
+        // Instead of appending the temporary message, refetch the conversation.
+        await fetchInitialConversation();
+        setMessageText("");
+        setSelectedImage(null);
+        scrollToBottom();
       }
     } catch (error) {
       console.error("Failed to send message:", error);
-      Alert.alert("Error", "Failed to send message. Please try again.");
+      Alert.alert("Error", "Failed to send message");
     } finally {
       setSending(false);
     }
   };
 
-  // Function to send an image message
-  const handleSendImage = async () => {
-    if (!selectedImage) return;
-    try {
-      setSending(true);
-      const formData = new FormData();
-      formData.append("senderId", user._id);
-      formData.append("receiverId", userId);
-      formData.append("messageType", "image");
-      if (messageText.trim()) {
-        formData.append("content", messageText);
-      }
-      
-      // Prepare image data
-      const uriParts = selectedImage.split("/");
-      const fileName = uriParts[uriParts.length - 1];
-      const fileTypeMatch = /\.(\w+)$/.exec(fileName);
-      const fileType = fileTypeMatch ? `image/${fileTypeMatch[1]}` : "image";
-      formData.append("media", {
-        uri: selectedImage,
-        name: fileName,
-        type: fileType,
-      });
-
-      // Send through HTTP API first
-      const response = await sendMessage(formData, authToken);
-      
-      if (response.success) {
-        try {
-          // Emit through socket
-          await sendSocketMessage({
-            senderId: user._id,
-            receiverId: userId,
-            messageType: "image",
-            media: response.data.media,
-            content: messageText,
-            timestamp: Date.now()
-          });
-          
-          // Update UI immediately
-          const newMessage = {
-            _id: response.data._id || Date.now().toString(),
-            sender: { _id: user._id, name: "You" },
-            messageType: "image",
-            image: response.data.image,
-            content: messageText,
-            timestamp: Date.now()
-          };
-          setMessages(prev => [...prev, newMessage]);
-          
-          setSelectedImage(null);
-          setMessageText("");
-          scrollToBottom();
-        } catch (socketError) {
-          console.warn("Socket delivery failed, but image was saved:", socketError);
-        }
-      } else {
-        Alert.alert("Error", "Failed to send image");
-      }
-    } catch (error) {
-      console.error("Failed to send image:", error);
-      Alert.alert("Error", "Failed to send image. Please try again.");
-    } finally {
-      setSending(false);
-    }
-  };
-
-  // Unified send function
-  const handleSend = async () => {
-    if (selectedImage) {
-      await handleSendImage();
-    } else {
-      await handleSendText();
-    }
-  };
-
-  // Launch image picker
   const handlePickImage = async () => {
-    const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!permissionResult.granted) {
-      alert("Permission to access media library is required!");
-      return;
-    }
     const pickerResult = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       allowsEditing: true,
       aspect: [4, 3],
       quality: 1,
     });
-    if (!pickerResult.canceled && pickerResult.assets && pickerResult.assets.length > 0) {
+    if (!pickerResult.canceled) {
       setSelectedImage(pickerResult.assets[0].uri);
     }
   };
 
-  // Helper to build full URL for profile images (if needed)
-  const getProfilePicUrl = (avatar) => {
-    if (!avatar) return "https://via.placeholder.com/100";
-    return avatar.startsWith("http") ? avatar : `http://${ip}:3000/${avatar}`;
-  };
-
-  // Auto-scroll to bottom of conversation
   const scrollToBottom = () => {
     if (scrollViewRef.current) {
       scrollViewRef.current.scrollTo({ y: 100000, animated: true });
     }
   };
 
-  // Handle long press on image to save it
-  const handleLongPressImage = async (imageUri) => {
-    // Request media library permission if not already granted
-    const { status } = await MediaLibrary.requestPermissionsAsync();
-    if (status !== "granted") {
-      Alert.alert("Permission required", "Please allow media library permissions to save images.");
-      return;
+  const renderMessage = (msg, index) => {
+    const isSender = msg.sender._id === user?.user?.id;
+    switch (msg.messageType) {
+      case "text":
+        return (
+          <View
+            key={msg._id + index}
+            style={[styles.messageContainer, isSender ? styles.sender : styles.receiver]}
+          >
+            <Text style={isSender ? styles.senderText : styles.receiverText}>
+              {msg.content}
+            </Text>
+          </View>
+        );
+      case "image":
+        const imageUrl = msg.media && msg.media.length > 0 ? getFullMediaUrl(msg.media) : null;
+        return (
+          <View
+            key={msg._id + index}
+            style={[styles.messageContainer, isSender ? styles.sender : styles.receiver]}
+          >
+            {imageUrl && (
+              <TouchableOpacity
+                onLongPress={() => handleLongPressImage(imageUrl)}
+                onPress={() => setIsPreviewModalVisible(true)}
+              >
+                <Image
+                  source={{ uri: imageUrl }}
+                  style={styles.messageImage}
+                  resizeMode="cover"
+                  onError={() => {
+                    // Suppress error silently.
+                  }}
+                />
+              </TouchableOpacity>
+            )}
+            {msg.content && (
+              <Text style={isSender ? styles.senderText : styles.receiverText}>
+                {msg.content}
+              </Text>
+            )}
+          </View>
+        );
+      default:
+        return null;
     }
-    Alert.alert(
-      "Save Image",
-      "Do you want to save this image to your device?",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Save",
-          onPress: async () => {
-            try {
-              await MediaLibrary.saveToLibraryAsync(imageUri);
-              Alert.alert("Success", "Image saved to your library!");
-            } catch (error) {
-              console.error("Error saving image:", error);
-              Alert.alert("Error", "Failed to save image.");
-            }
-          },
-        },
-      ],
-      { cancelable: true }
-    );
   };
 
   return (
@@ -317,106 +212,19 @@ const Chat = () => {
           <Ionicons name="ellipsis-horizontal" size={24} color="#007bff" style={{ marginLeft: 15 }} />
         </View>
       </View>
-
       {/* Conversation Messages */}
       <ScrollView
         ref={scrollViewRef}
         style={styles.messagesContainer}
         contentContainerStyle={{ padding: 10, flexGrow: 1 }}
-        onContentSizeChange={() => scrollToBottom()}
+        onContentSizeChange={scrollToBottom}
       >
-        {loading ? (
+        {fetchLoading ? (
           <ActivityIndicator size="large" color="#007bff" />
         ) : (
-          conversation.map((msg) => {
-            const isSender = msg.sender.name === "You";
-            
-            if (msg.messageType === "text") {
-              return (
-                <View
-                  key={msg._id}
-                  style={[styles.messageContainer, isSender ? styles.sender : styles.receiver]}
-                >
-                  <Text style={isSender ? styles.senderText : styles.receiverText}>
-                    {msg.content}
-                  </Text>
-                </View>
-              );
-            } else if (msg.messageType === "image") {
-              const imageUrl = msg.image ? getFullMediaUrl(msg.image) : null;
-              return (
-                <View
-                  key={msg._id}
-                  style={[styles.messageContainer, isSender ? styles.sender : styles.receiver]}
-                >
-                  {imageUrl && (
-                    <TouchableOpacity onLongPress={() => handleLongPressImage(imageUrl)}>
-                      <Image source={{ uri: imageUrl }} style={styles.messageImage} />
-                    </TouchableOpacity>
-                  )}
-                  {msg.content ? (
-                    <Text style={isSender ? styles.senderText : styles.receiverText}>
-                      {msg.content}
-                    </Text>
-                  ) : null}
-                </View>
-              );
-            } else if (msg.messageType === "post" && msg.post) {
-              // Handle shared post messages
-              const postMedia = msg.post.media && msg.post.media.length > 0 
-                ? getFullMediaUrl(msg.post.media[0].media_path) 
-                : null;
-              
-              return (
-                <TouchableOpacity
-                  key={msg._id}
-                  onPress={() => router.push(`/post/${msg.post._id}`)}
-                  style={[
-                    styles.messageContainer,
-                    isSender ? styles.sender : styles.receiver,
-                    styles.sharedPostContainer
-                  ]}
-                >
-                  <Text style={[
-                    isSender ? styles.senderText : styles.receiverText,
-                    styles.sharedPostLabel
-                  ]}>
-                    Shared Post
-                  </Text>
-                  
-                  {postMedia && (
-                    <Image 
-                      source={{ uri: postMedia }} 
-                      style={styles.sharedPostImage}
-                    />
-                  )}
-                  
-                  <Text 
-                    style={[
-                      isSender ? styles.senderText : styles.receiverText,
-                      styles.sharedPostContent
-                    ]}
-                    numberOfLines={2}
-                  >
-                    {msg.post.text_content}
-                  </Text>
-                  
-                  {msg.post.author && (
-                    <Text style={[
-                      isSender ? styles.senderText : styles.receiverText,
-                      styles.sharedPostAuthor
-                    ]}>
-                      By {msg.post.author.name}
-                    </Text>
-                  )}
-                </TouchableOpacity>
-              );
-            }
-            return null;
-          })
+          messages.map((msg, index) => renderMessage(msg, index))
         )}
       </ScrollView>
-
       {/* Image Preview Section */}
       {selectedImage && (
         <>
@@ -438,7 +246,6 @@ const Chat = () => {
           </Modal>
         </>
       )}
-
       {/* Input Section */}
       <View style={styles.inputContainer}>
         <TouchableOpacity onPress={handlePickImage} style={styles.imageButton}>
@@ -579,12 +386,12 @@ const styles = StyleSheet.create({
     width: 250,
   },
   sharedPostLabel: {
-    fontWeight: 'bold',
+    fontWeight: "bold",
     marginBottom: 5,
     fontSize: 14,
   },
   sharedPostImage: {
-    width: '100%',
+    width: "100%",
     height: 150,
     borderRadius: 8,
     marginVertical: 8,
@@ -595,7 +402,7 @@ const styles = StyleSheet.create({
   },
   sharedPostAuthor: {
     fontSize: 12,
-    fontStyle: 'italic',
+    fontStyle: "italic",
     marginTop: 5,
   },
 });

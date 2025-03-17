@@ -8,6 +8,7 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   StyleSheet,
+  Platform,
 } from "react-native";
 import { useRouter } from "expo-router";
 import { theme } from "../../constants/theme";
@@ -16,20 +17,20 @@ import BottomNav from "../../components/bottomNav";
 import { useFetchChatList } from "../../services/messageSerive";
 import BackButton from "../../components/BackButton";
 import config from "../../constants/config";
+import moment from "moment"; // Import moment library for better time formatting
 
 const MessagePage = () => {
   const ip = config.API_IP;
   const router = useRouter();
-  const { chatList, loading } = useFetchChatList();
+  const { chatList, loading, fetchChatList } = useFetchChatList();
   const [searchQuery, setSearchQuery] = useState("");
   const [filteredChats, setFilteredChats] = useState([]);
+  const [error, setError] = useState(null); // State to handle errors
 
-  // Update filtered chats when chatList changes.
   useEffect(() => {
     setFilteredChats(chatList);
   }, [chatList]);
 
-  // Filter chat list based on search query.
   useEffect(() => {
     if (searchQuery.trim() === "") {
       setFilteredChats(chatList);
@@ -40,6 +41,18 @@ const MessagePage = () => {
       setFilteredChats(filtered);
     }
   }, [searchQuery, chatList]);
+
+  useEffect(() => {
+    const fetchChatListWithRetry = async () => {
+      try {
+        await fetchChatList();
+      } catch (error) {
+        setError("Failed to fetch messages. Please try again later.");
+      }
+    };
+
+    fetchChatListWithRetry();
+  }, [fetchChatList]);
 
   const renderChatItem = ({ item }) => {
     const avatarUrl = item?.avatar
@@ -57,7 +70,15 @@ const MessagePage = () => {
           );
         }}
       >
-        <Image source={{ uri: avatarUrl }} style={styles.avatar} />
+        <Image
+          source={{ uri: avatarUrl }}
+          style={styles.avatar}
+          onError={(e) => {
+            console.error("Image load error:", e);
+            // Use a placeholder image
+            //   setAvatarUrl("your_placeholder_image_url");
+          }}
+        />
         <View style={styles.chatDetails}>
           <Text style={styles.chatName}>{item.name}</Text>
           <Text style={styles.chatMessage} numberOfLines={1}>
@@ -65,12 +86,7 @@ const MessagePage = () => {
           </Text>
         </View>
         <Text style={styles.timestamp}>
-          {item.timestamp
-            ? new Date(item.timestamp).toLocaleTimeString([], {
-                hour: "2-digit",
-                minute: "2-digit",
-              })
-            : ""}
+          {item.timestamp ? moment(item.timestamp).fromNow() : ""}
         </Text>
       </TouchableOpacity>
     );
@@ -100,11 +116,17 @@ const MessagePage = () => {
 
       {/* Chat List */}
       {loading ? (
-        <ActivityIndicator
-          size="large"
-          color={theme.colors.primary}
-          style={{ marginTop: 20 }}
-        />
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={theme.colors.primary} />
+        </View>
+      ) : error ? (
+        <View style={styles.errorContainer}>
+          <Text style={styles.errorText}>{error}</Text>
+        </View>
+      ) : filteredChats.length === 0 ? (
+        <View style={styles.emptyContainer}>
+          <Text style={styles.emptyText}>No chats yet.</Text>
+        </View>
       ) : (
         <FlatList
           data={filteredChats}
@@ -112,6 +134,11 @@ const MessagePage = () => {
           renderItem={renderChatItem}
           contentContainerStyle={styles.chatListContainer}
           showsVerticalScrollIndicator={false}
+          ListEmptyComponent={
+            <View style={styles.emptyContainer}>
+              <Text style={styles.emptyText}>No chats yet.</Text>
+            </View>
+          }
         />
       )}
 
@@ -201,6 +228,29 @@ const styles = StyleSheet.create({
   },
   timestamp: {
     fontSize: 12,
+    color: theme.colors.gray,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  errorText: {
+    color: theme.colors.error,
+    fontSize: 18,
+  },
+  emptyContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  emptyText: {
+    fontSize: 18,
     color: theme.colors.gray,
   },
 });

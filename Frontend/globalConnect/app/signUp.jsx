@@ -3,11 +3,11 @@ import {
   View,
   Text,
   TextInput,
-  Alert,
   StyleSheet,
   Pressable,
   TouchableOpacity,
   Platform,
+  Modal,
 } from "react-native";
 import ScreenWrapper from "../components/ScreenWrapper";
 import BackButton from "../components/BackButton";
@@ -33,6 +33,8 @@ const SignUp = () => {
   const [loading, setLoading] = useState(false);
   const [isPasswordVisible, setIsPasswordVisible] = useState(false);
   const [isConfirmPasswordVisible, setIsConfirmPasswordVisible] = useState(false);
+  const [errorMessage, setErrorMessage] = useState("");
+  const [showErrorModal, setShowErrorModal] = useState(false);
 
   const router = useRouter();
   const { setAuth } = userAuth();
@@ -46,13 +48,31 @@ const SignUp = () => {
     }/${year}`;
   };
 
+  const calculateAge = (dob) => {
+    const today = new Date();
+    const birthDate = new Date(dob);
+    let age = today.getFullYear() - birthDate.getFullYear();
+    const monthDifference = today.getMonth() - birthDate.getMonth();
+    if (monthDifference < 0 || (monthDifference === 0 && today.getDate() < birthDate.getDate())) {
+      age--;
+    }
+    return age;
+  };
+
   const handleSignup = async () => {
     if (!name || !email || !password || !confirmPassword || !dob) {
-      Alert.alert("Error", "Please fill in all fields.");
+      setErrorMessage("Please fill in all fields.");
+      setShowErrorModal(true);
       return;
     }
     if (password !== confirmPassword) {
-      Alert.alert("Error", "Passwords do not match.");
+      setErrorMessage("Passwords do not match.");
+      setShowErrorModal(true);
+      return;
+    }
+    if (calculateAge(dob) < 18) {
+      setErrorMessage("You must be at least 18 years old to sign up.");
+      setShowErrorModal(true);
       return;
     }
 
@@ -71,17 +91,29 @@ const SignUp = () => {
       if (response.data?.authToken) {
         // Use the authContext to store user data and token.
         await setAuth(response.data.data.user, response.data.authToken);
-        Alert.alert("Success", `Welcome, ${response.data.data.user.name}! Signup successful!`);
-        router.replace("/destination");
+
+        // Send OTP to the user's email
+        const otpResponse = await axios.post(`http://${ip}:3000/api/profile/forgot-password`, {
+          email,
+        });
+
+        const message = otpResponse.data?.message;
+
+        if (message === "OTP sent to your email.") {
+          // Redirect to verifyOTP page with the user's email
+          router.replace(`/verifyOTP?email=${encodeURIComponent(email)}`);
+        } else {
+          setErrorMessage(message || "Something went wrong. Please try again.");
+          setShowErrorModal(true);
+        }
       } else {
-        Alert.alert("Error", "Invalid response from server.");
+        setErrorMessage("Invalid response from server.");
+        setShowErrorModal(true);
       }
     } catch (error) {
       console.error("Signup error:", error.response?.data || error.message);
-      Alert.alert(
-        "Error",
-        error.response?.data?.message || "Something went wrong!"
-      );
+      setErrorMessage("Something went wrong. Please try again.");
+      setShowErrorModal(true);
     } finally {
       setLoading(false);
     }
@@ -198,6 +230,27 @@ const SignUp = () => {
           </Text>
         </Text>
       </View>
+
+      {/* Error Modal */}
+      <Modal
+        visible={showErrorModal}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setShowErrorModal(false)}
+      >
+        <View style={styles.modalContainer}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Error</Text>
+            <Text style={styles.modalMessage}>{errorMessage}</Text>
+            <TouchableOpacity
+              onPress={() => setShowErrorModal(false)}
+              style={styles.modalButton}
+            >
+              <Text style={styles.modalButtonText}>Close</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </ScreenWrapper>
   );
 };
@@ -278,5 +331,42 @@ const styles = StyleSheet.create({
   loginLink: {
     color: theme.colors.primary,
     fontWeight: theme.fonts.bold,
+  },
+  modalContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+  },
+  modalContent: {
+    width: wp(80),
+    padding: wp(5),
+    backgroundColor: theme.colors.white,
+    borderRadius: theme.radius.md,
+    alignItems: "center",
+  },
+  modalTitle: {
+    fontSize: hp(2.5),
+    fontWeight: theme.fonts.bold,
+    color: theme.colors.black,
+    marginBottom: hp(1),
+  },
+  modalMessage: {
+    fontSize: hp(2),
+    color: theme.colors.textDark,
+    textAlign: "center",
+    marginBottom: hp(2),
+  },
+  modalButton: {
+    width: wp(50),
+    paddingVertical: hp(1.5),
+    backgroundColor: theme.colors.primary,
+    borderRadius: theme.radius.md,
+    alignItems: "center",
+  },
+  modalButtonText: {
+    fontSize: hp(2),
+    color: theme.colors.white,
+    textAlign: "center",
   },
 });

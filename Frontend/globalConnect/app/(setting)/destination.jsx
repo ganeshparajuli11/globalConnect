@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   StyleSheet,
   Text,
@@ -7,6 +7,7 @@ import {
   ScrollView,
   ActivityIndicator,
   TouchableOpacity,
+  Image,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import axios from 'axios';
@@ -15,6 +16,18 @@ import config from '../../constants/config';
 import Button from '../../components/Button';
 import BackButton from '../../components/BackButton';
 import ScreenWrapper from '../../components/ScreenWrapper';
+import { theme } from '../../constants/theme';
+import { Ionicons } from '@expo/vector-icons';
+
+// Popular countries to show initially
+const POPULAR_COUNTRIES = [
+  { name: 'United States', flag: '🇺🇸' },
+  { name: 'United Kingdom', flag: '🇬🇧' },
+  { name: 'Canada', flag: '🇨🇦' },
+  { name: 'Australia', flag: '🇦🇺' },
+  { name: 'Germany', flag: '🇩🇪' },
+  { name: 'France', flag: '🇫🇷' },
+];
 
 const Destination = () => {
   const ip = config.API_IP;
@@ -29,6 +42,7 @@ const Destination = () => {
   const [loading, setLoading] = useState(false);
   const [countrySearch, setCountrySearch] = useState('');
   const [citySearch, setCitySearch] = useState('');
+  const [showPopularCountries, setShowPopularCountries] = useState(true);
 
   // Fetch countries from public API
   useEffect(() => {
@@ -39,11 +53,10 @@ const Destination = () => {
         const countryList = data.map((country) => ({
           name: country.name.common,
           code: country.cca2,
+          flag: country.flag || '🏳️',
         }));
-        // Sort alphabetically for a better UX
         countryList.sort((a, b) => a.name.localeCompare(b.name));
         setCountries(countryList);
-        setFilteredCountries(countryList);
         setLoading(false);
       })
       .catch((error) => {
@@ -95,12 +108,14 @@ const Destination = () => {
   // Filter countries based on user input
   const filterCountries = (text) => {
     setCountrySearch(text);
+    setShowPopularCountries(text.length === 0);
     if (text.length > 0) {
-      setFilteredCountries(
-        countries.filter((country) =>
+      const filtered = countries
+        .filter((country) =>
           country.name.toLowerCase().includes(text.toLowerCase())
         )
-      );
+        .slice(0, 5); // Limit to 5 results
+      setFilteredCountries(filtered);
     } else {
       setFilteredCountries([]);
     }
@@ -150,80 +165,103 @@ const Destination = () => {
       });
   };
 
+  const renderCountryItem = (item, isPopular = false) => (
+    <TouchableOpacity
+      key={item.name}
+      style={styles.countryItem}
+      onPress={() => handleCountryChange(item.name)}
+    >
+      <Text style={styles.flagEmoji}>{item.flag}</Text>
+      <Text style={styles.countryName}>{item.name}</Text>
+      <Ionicons name="chevron-forward" size={20} color={theme.colors.textLight} />
+    </TouchableOpacity>
+  );
+
   return (
     <ScreenWrapper>
-    <ScrollView contentContainerStyle={styles.container}>
-      {/* Header */}
-      <View style={styles.header}>
-        <BackButton size={24} />
-        <Text style={styles.headerTitle}>Select Destination</Text>
-      </View>
+      <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
+        {/* Header */}
+        <View style={styles.header}>
+          <BackButton size={24} />
+          <Text style={styles.headerTitle}>Select Destination</Text>
+        </View>
 
-      {loading ? (
-        <ActivityIndicator size="large" color="#4F46E5" style={styles.loader} />
-      ) : (
-        <>
-          {/* Country Search Section */}
-          <View style={styles.section}>
-            <Text style={styles.label}>Country</Text>
-            <TextInput
-              style={styles.searchBox}
-              placeholder="Search country..."
-              value={countrySearch}
-              onChangeText={filterCountries}
-              placeholderTextColor="#999"
-            />
-            {/* Show suggestions only when user has started typing */}
-            {countrySearch.length > 0 && filteredCountries.length > 0 && (
-              <View style={styles.list}>
-                {filteredCountries.slice(0, 10).map((item) => (
-                  <TouchableOpacity
-                    key={item.name}
-                    onPress={() => handleCountryChange(item.name)}
-                  >
-                    <Text style={styles.listItem}>{item.name}</Text>
-                  </TouchableOpacity>
-                ))}
+        {loading ? (
+          <ActivityIndicator size="large" color={theme.colors.primary} style={styles.loader} />
+        ) : (
+          <>
+            {/* Country Selection Section */}
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Where would you like to go?</Text>
+              <View style={styles.searchContainer}>
+                <Ionicons name="search" size={20} color={theme.colors.textLight} style={styles.searchIcon} />
+                <TextInput
+                  style={styles.searchInput}
+                  placeholder="Search countries..."
+                  value={countrySearch}
+                  onChangeText={filterCountries}
+                  placeholderTextColor={theme.colors.textLight}
+                />
+              </View>
+
+              {/* Popular Countries or Search Results */}
+              <View style={styles.resultsContainer}>
+                {showPopularCountries ? (
+                  <>
+                    <Text style={styles.sectionSubtitle}>Popular Destinations</Text>
+                    {POPULAR_COUNTRIES.map((country) => renderCountryItem(country, true))}
+                  </>
+                ) : (
+                  filteredCountries.map((country) => renderCountryItem(country))
+                )}
+              </View>
+            </View>
+
+            {/* City Selection Section */}
+            {selectedCountry && (
+              <View style={styles.section}>
+                <Text style={styles.sectionTitle}>Select a City</Text>
+                <View style={styles.searchContainer}>
+                  <Ionicons name="location" size={20} color={theme.colors.textLight} style={styles.searchIcon} />
+                  <TextInput
+                    style={styles.searchInput}
+                    placeholder="Search cities..."
+                    value={citySearch}
+                    onChangeText={filterCities}
+                    placeholderTextColor={theme.colors.textLight}
+                  />
+                </View>
+
+                {citySearch.length > 0 && (
+                  <View style={styles.resultsContainer}>
+                    {filteredCities.slice(0, 5).map((city) => (
+                      <TouchableOpacity
+                        key={city}
+                        style={styles.cityItem}
+                        onPress={() => handleCityChange(city)}
+                      >
+                        <Ionicons name="location-outline" size={20} color={theme.colors.textLight} />
+                        <Text style={styles.cityName}>{city}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                )}
               </View>
             )}
-          </View>
 
-          {/* City Search Section (display only when a country is selected) */}
-          {selectedCountry && (
-            <View style={styles.section}>
-              <Text style={styles.label}>City</Text>
-              <TextInput
-                style={styles.searchBox}
-                placeholder="Search city..."
-                value={citySearch}
-                onChangeText={filterCities}
-                placeholderTextColor="#999"
-              />
-              {citySearch.length > 0 && filteredCities.length > 0 && (
-                <View style={styles.list}>
-                  {filteredCities.slice(0, 10).map((item) => (
-                    <TouchableOpacity
-                      key={item}
-                      onPress={() => handleCityChange(item)}
-                    >
-                      <Text style={styles.listItem}>{item}</Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              )}
-            </View>
-          )}
-
-          {/* Next Button using custom Button component */}
-          <Button
-            title="Next"
-            onPress={handleSubmit}
-            buttonStyle={styles.nextButton}
-            textStyle={styles.nextButtonText}
-          />
-        </>
-      )}
-    </ScrollView>
+            {/* Next Button */}
+            <Button
+              title={selectedCountry ? 'Continue' : 'Select a Country'}
+              onPress={handleSubmit}
+              buttonStyle={styles.nextButton}
+              textStyle={styles.nextButtonText}
+              loading={false}
+              hasShadow={true}
+              disabled={!selectedCountry}
+            />
+          </>
+        )}
+      </ScrollView>
     </ScreenWrapper>
   );
 };
@@ -232,70 +270,107 @@ export default Destination;
 
 const styles = StyleSheet.create({
   container: {
-    flexGrow: 1,
-    padding: 20,
+    flex: 1,
     backgroundColor: '#F8F9FA',
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 25,
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    paddingBottom: 10,
   },
   headerTitle: {
     flex: 1,
     textAlign: 'center',
     fontSize: 24,
     fontWeight: '700',
-    color: '#000',
-    marginRight: 32, // Leaves space for the back button
-  },
-  loader: {
-    marginTop: 50,
+    color: theme.colors.textDark,
+    marginRight: 32,
   },
   section: {
-    marginBottom: 20,
+    padding: 20,
   },
-  label: {
+  sectionTitle: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: theme.colors.textDark,
+    marginBottom: 16,
+  },
+  sectionSubtitle: {
     fontSize: 16,
-    marginBottom: 8,
-    color: '#333',
+    fontWeight: '600',
+    color: theme.colors.textLight,
+    marginBottom: 12,
   },
-  searchBox: {
-    backgroundColor: '#FFF',
+  searchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    marginBottom: 16,
     borderWidth: 1,
-    borderColor: '#E0E0E0',
-    borderRadius: 8,
-    padding: 12,
+    borderColor: theme.colors.gray,
+  },
+  searchIcon: {
+    marginRight: 10,
+  },
+  searchInput: {
+    flex: 1,
+    paddingVertical: 12,
     fontSize: 16,
-    color: '#000',
+    color: theme.colors.textDark,
   },
-  list: {
-    maxHeight: 150,
-    marginTop: 5,
+  resultsContainer: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    overflow: 'hidden',
     borderWidth: 1,
-    borderColor: '#E0E0E0',
-    borderRadius: 8,
-    backgroundColor: '#FFF',
+    borderColor: theme.colors.gray,
   },
-  listItem: {
-    padding: 12,
+  countryItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#E0E0E0',
+    borderBottomColor: theme.colors.gray,
+  },
+  flagEmoji: {
+    fontSize: 24,
+    marginRight: 12,
+  },
+  countryName: {
+    flex: 1,
     fontSize: 16,
-    color: '#555',
+    color: theme.colors.textDark,
+    fontWeight: '500',
+  },
+  cityItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: theme.colors.gray,
+  },
+  cityName: {
+    marginLeft: 12,
+    fontSize: 16,
+    color: theme.colors.textDark,
+    fontWeight: '500',
   },
   nextButton: {
-    marginTop: 30,
-    backgroundColor: '#4F46E5',
-    paddingVertical: 15,
-    paddingHorizontal: 20, // Ensure horizontal padding is sufficient
-    borderRadius: 8,
-    alignItems: 'center',
+    margin: 20,
+    backgroundColor: theme.colors.primary,
+    borderRadius: 12,
+    height: 56,
   },
   nextButtonText: {
     fontSize: 18,
-    fontWeight: '700',
-    color: '#FFF',
-    flexShrink: 1, // Allow the text to shrink instead of being clipped
+    fontWeight: '600',
+    color: '#FFFFFF',
+  },
+  loader: {
+    marginTop: 50,
   },
 });

@@ -1,15 +1,8 @@
 const express = require("express");
-const { 
-  sendMessage, 
-  getMessages, 
-  getAllMessages, 
-  adminGetMessages, 
-  adminGetAllMessages, 
-  adminSendMessage 
-} = require("../controller/userMessaging");
+
 const { checkAuthentication } = require("../middleware/middleware");
 const { uploadMessageMedia } = require("../middleware/uploadMiddleware");
-
+const { getMessages, markMessageAsRead, sendMessage, getAllMessages, getMessagesForAdmin } = require("../controller/userMessaging");
 
 module.exports = (io) => {
   const router = express.Router();
@@ -17,25 +10,16 @@ module.exports = (io) => {
   router.post(
     "/message",
     checkAuthentication,
-    uploadMessageMedia.array("media", 1), 
-    (req, res, next) => next(),
-    (req, res) => sendMessage(req, res, io)
+    uploadMessageMedia.array("media", 5), // Handle multiple media files
+    (req, res) => sendMessage(req, res, io) // Pass io for real-time updates
   );
 
-  router.post("/get-message", checkAuthentication, getMessages);
+  router.post("/get-message", checkAuthentication, getMessages); //Corrected this to POST because we are sending data from frontend
+  router.post("/admin/get-message", checkAuthentication, getMessagesForAdmin); //Corrected this to POST because we are sending data from frontend
+
   router.get("/all-message", checkAuthentication, getAllMessages);
 
-  // ----- Admin Messaging Routes -----
-  router.post(
-    "/admin/message",
-    checkAuthentication,
-    uploadMessageMedia.array("media", 1), 
-    (req, res, next) => next(),
-    (req, res) => adminSendMessage(req, res, io)
-  );
-
-  router.post("/admin/get-message", checkAuthentication, adminGetMessages);
-  router.get("/admin/all-message", checkAuthentication, adminGetAllMessages);
+  router.post("/mark-as-read", checkAuthentication, markMessageAsRead);
 
   return router;
 };

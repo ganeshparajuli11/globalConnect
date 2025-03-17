@@ -32,7 +32,9 @@ const Login = ({ setIsAuthenticated }) => {
       toast.success("Login successful!");
       
       const { token } = res.data;
-      localStorage.setItem("access_token", token); // Use localStorage instead of reactLocalStorage
+      localStorage.setItem("access_token", token);
+      localStorage.setItem("adminId", res.data.user.id); 
+      console.log("Admin ID:", res.data.user.id);
   
       // Update authentication state (pass setIsAuthenticated as a prop)
       setIsAuthenticated(true);

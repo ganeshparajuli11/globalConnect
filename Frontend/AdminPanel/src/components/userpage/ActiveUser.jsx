@@ -4,7 +4,23 @@ import axios from "axios";
 import { reactLocalStorage } from "reactjs-localstorage";
 import { toast, ToastContainer } from "react-toastify";
 import Sidebar from "../sidebar/Sidebar";
-import { FaSearch, FaFilter, FaEllipsisV, FaUserLock, FaUserMinus, FaUserClock, FaTimes, FaChevronLeft, FaChevronRight, FaUsers, FaUserCheck, FaUserTimes, FaExclamationTriangle } from "react-icons/fa";
+
+// Icons
+import {
+  FaSearch,
+  FaEllipsisV,
+  FaUserLock,
+  FaUserMinus,
+  FaUserClock,
+  FaTimes,
+  FaChevronLeft,
+  FaChevronRight,
+  FaUsers,
+  FaUserCheck,
+  FaUserTimes,
+  FaExclamationTriangle,
+  FaUndo,
+} from "react-icons/fa";
 
 const ActiveUser = () => {
   const [userData, setUserData] = useState([]);
@@ -21,9 +37,13 @@ const ActiveUser = () => {
   const [selectedUser, setSelectedUser] = useState(null);
   const [actionModalVisible, setActionModalVisible] = useState(false);
   const [durationModalVisible, setDurationModalVisible] = useState(false);
+
+  // Action logic
   const [selectedAction, setSelectedAction] = useState("");
   const [actionReason, setActionReason] = useState("");
   const [selectedDuration, setSelectedDuration] = useState("");
+
+  // Confirmation
   const [confirmationModalVisible, setConfirmationModalVisible] = useState(false);
   const [confirmationMessage, setConfirmationMessage] = useState("");
   const [onConfirm, setOnConfirm] = useState(() => () => {});
@@ -33,45 +53,47 @@ const ActiveUser = () => {
     totalUsers: 0,
     activeUsers: 0,
     inactiveUsers: 0,
-    reportedUsers: 0
+    reportedUsers: 0,
   });
 
-  // Fetch token
+  // =======================================================
+  // 1) Auth & Fetch Active Users
+  // =======================================================
   useEffect(() => {
     const token = reactLocalStorage.get("access_token");
     if (token) {
       setAccessToken(token);
     } else {
       toast.error("Please login to continue");
-      navigate('/login');
+      navigate("/login");
     }
   }, [navigate]);
 
-  // Function to fetch active users
   const fetchActiveUsers = async () => {
-    if (accessToken) {
-      try {
-        setLoading(true);
-        const response = await axios.get(
-          "http://localhost:3000/api/dashboard/get-active-user",
-          { headers: { Authorization: `Bearer ${accessToken}` } }
-        );
-        if (response.data.message === "Active users retrieved successfully.") {
-          setUserData(response.data.data);
-          // Update stats
-          setStats({
-            totalUsers: response.data.data.length,
-            activeUsers: response.data.data.filter(user => user.status === 'Active').length,
-            inactiveUsers: response.data.data.filter(user => user.status === 'Inactive').length,
-            reportedUsers: response.data.data.filter(user => user.reported_count > 0).length
-          });
-        }
-      } catch (error) {
-        console.error("Error fetching active users:", error);
-        toast.error("Failed to fetch active users");
-      } finally {
-        setLoading(false);
+    if (!accessToken) return;
+
+    try {
+      setLoading(true);
+      const response = await axios.get("http://localhost:3000/api/dashboard/get-active-user", {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+      if (response.data.message === "Active users retrieved successfully.") {
+        setUserData(response.data.data);
+
+        // Example stats
+        const users = response.data.data;
+        setStats({
+          totalUsers: users.length,
+          activeUsers: users.filter((u) => u.status === "Active").length,
+          inactiveUsers: users.filter((u) => u.status === "Inactive").length,
+          reportedUsers: users.filter((u) => (u.report_count || 0) > 0).length,
+        });
       }
+    } catch (error) {
+      console.error("Error fetching active users:", error);
+      toast.error("Failed to fetch active users");
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -79,24 +101,27 @@ const ActiveUser = () => {
     fetchActiveUsers();
   }, [accessToken]);
 
-  // Filter users based on search
-  const filteredUsers = userData.filter(user =>
-    user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    user.email.toLowerCase().includes(searchTerm.toLowerCase())
+  // =======================================================
+  // 2) Search & Pagination
+  // =======================================================
+  const filteredUsers = userData.filter(
+    (user) =>
+      user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      user.email.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  // Pagination logic
   const indexOfLastUser = currentPage * usersPerPage;
   const indexOfFirstUser = indexOfLastUser - usersPerPage;
   const currentUsers = filteredUsers.slice(indexOfFirstUser, indexOfLastUser);
   const totalPages = Math.ceil(filteredUsers.length / usersPerPage);
 
-  // Handle page change
   const handlePageChange = (pageNumber) => {
     setCurrentPage(pageNumber);
   };
 
-  // Action handlers
+  // =======================================================
+  // 3) Basic Click Handlers
+  // =======================================================
   const handleUserClick = (user) => {
     navigate(`/user/${user.id}`);
   };
@@ -107,12 +132,16 @@ const ActiveUser = () => {
     setActionModalVisible(true);
   };
 
+  // =======================================================
+  // 4) Delete User
+  // =======================================================
   const handleDelete = () => {
+    if (!selectedUser) return;
     setConfirmationMessage(`Are you sure you want to delete user ${selectedUser.name}?`);
     setOnConfirm(() => async () => {
       try {
         await axios.delete(`http://localhost:3000/api/dashboard/delete-user/${selectedUser.id}`, {
-          headers: { Authorization: `Bearer ${accessToken}` }
+          headers: { Authorization: `Bearer ${accessToken}` },
         });
         toast.success("User deleted successfully");
         fetchActiveUsers();
@@ -126,24 +155,61 @@ const ActiveUser = () => {
     setConfirmationModalVisible(true);
   };
 
+  // =======================================================
+  // 5) Block / Unblock / Suspend / Unsuspend
+  //    dynamic approach based on is_blocked or is_suspended
+  // =======================================================
+
+  // Show the duration modal for block/suspend
   const handleBlockOrSuspend = (actionType) => {
     setSelectedAction(actionType);
     setActionModalVisible(false);
-    setDurationModalVisible(true);
+    // e.g. "block", "suspend", "unblock", "unsuspend"
+    if (actionType === "block" || actionType === "suspend") {
+      // Show reason/duration modal
+      setDurationModalVisible(true);
+    } else {
+      // "unblock" or "unsuspend" => direct confirmation
+      const message = `Are you sure you want to ${actionType} user ${selectedUser.name}?`;
+      setConfirmationMessage(message);
+      setOnConfirm(() => async () => {
+        try {
+          await axios.put(
+            "http://localhost:3000/api/dashboard/admin-update-user-status",
+            {
+              userId: selectedUser.id,
+              action: actionType, // "unblock" or "unsuspend"
+            },
+            { headers: { Authorization: `Bearer ${accessToken}` } }
+          );
+          toast.success(`User successfully ${actionType}ed.`);
+          fetchActiveUsers();
+        } catch (error) {
+          toast.error(`Failed to ${actionType} user.`);
+        } finally {
+          setConfirmationModalVisible(false);
+          setSelectedUser(null);
+          setSelectedAction("");
+        }
+      });
+      setConfirmationModalVisible(true);
+    }
   };
 
+  // After reason/duration is filled, confirm blocking or suspending
   const handleSubmitAction = () => {
     if (!selectedDuration || !actionReason.trim()) {
       toast.error("Please select a duration and enter a reason");
       return;
     }
 
-    const durationText = {
+    const durationMap = {
       "1w": "1 Week",
       "1m": "1 Month",
       "6m": "6 Months",
-      "permanent": "Permanent"
-    }[selectedDuration];
+      "permanent": "Permanent",
+    };
+    const durationText = durationMap[selectedDuration] || "N/A";
 
     setConfirmationMessage(
       `Are you sure you want to ${selectedAction} user ${selectedUser.name} for ${durationText} with the reason:\n"${actionReason}"?`
@@ -155,9 +221,10 @@ const ActiveUser = () => {
           "http://localhost:3000/api/dashboard/admin-update-user-status",
           {
             userId: selectedUser.id,
-            action: selectedAction,
+            action: selectedAction, // "block" or "suspend"
             reason: actionReason,
             duration: selectedDuration,
+            // If you want to reset the user's report_count, add: resetReports: true
           },
           { headers: { Authorization: `Bearer ${accessToken}` } }
         );
@@ -176,10 +243,45 @@ const ActiveUser = () => {
     setConfirmationModalVisible(true);
   };
 
+  // =======================================================
+  // 6) Reset Report Count
+  // =======================================================
+  const handleResetReportCount = () => {
+    if (!selectedUser) return;
+    const message = `Are you sure you want to reset report count for ${selectedUser.name} to 0?`;
+    setConfirmationMessage(message);
+    setOnConfirm(() => async () => {
+      try {
+        // This expects your admin-update-user-status endpoint or a separate
+        // /reset-report-count endpoint. For example:
+        await axios.put(
+          "http://localhost:3000/api/dashboard/admin-update-user-status",
+          {
+            userId: selectedUser.id,
+            action: "block", // or any valid action, but if you just want to reset reports:
+            resetReports: true, // so your backend sets report_count=0
+          },
+          { headers: { Authorization: `Bearer ${accessToken}` } }
+        );
+        toast.success("Report count reset to 0");
+        fetchActiveUsers();
+      } catch (error) {
+        toast.error("Failed to reset report count");
+      }
+      setConfirmationModalVisible(false);
+      setActionModalVisible(false);
+      setSelectedUser(null);
+    });
+    setConfirmationModalVisible(true);
+  };
+
+  // =======================================================
+  // 7) Render
+  // =======================================================
   return (
     <div className="flex h-screen bg-gray-50 font-sans overflow-hidden">
       <ToastContainer />
-      
+
       {/* Sidebar */}
       <div className="w-64 bg-white shadow-lg">
         <Sidebar />
@@ -217,7 +319,7 @@ const ActiveUser = () => {
                   </div>
                 </div>
               </div>
-              
+
               <div className="bg-gradient-to-r from-green-500 to-green-600 rounded-lg px-6 py-4 text-white shadow-lg">
                 <div className="flex items-center">
                   <FaUserCheck className="text-3xl opacity-80" />
@@ -284,14 +386,21 @@ const ActiveUser = () => {
                     className="hover:bg-gray-50 transition-colors cursor-pointer"
                     onClick={() => handleUserClick(user)}
                   >
-                    <td className="px-6 py-4 text-sm text-gray-600">{user.s_n}</td>
+                    <td className="px-6 py-4 text-sm text-gray-600">
+                      {user.s_n /* If your API returns s_n for numbering */}
+                    </td>
                     <td className="px-6 py-4">
                       <div className="relative">
                         <img
-                          src={user.profile_image ? `http://localhost:3000/${user.profile_image}` : "https://via.placeholder.com/80"}
+                          src={
+                            user.profile_image
+                              ? `http://localhost:3000/${user.profile_image}`
+                              : "https://via.placeholder.com/80"
+                          }
                           alt={user.name}
                           className="w-10 h-10 rounded-full object-cover ring-2 ring-gray-100"
                         />
+                        {/* Example: user.is_online => green dot */}
                         {user.is_online && (
                           <div className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 rounded-full ring-2 ring-white"></div>
                         )}
@@ -299,18 +408,17 @@ const ActiveUser = () => {
                     </td>
                     <td className="px-6 py-4">
                       <div className="font-medium text-gray-800">{user.name}</div>
-                      <div className="text-sm text-gray-500">{user.username || '@' + user.name.toLowerCase().replace(' ', '')}</div>
+                      <div className="text-sm text-gray-500">
+                        {user.username || "@" + user.name.toLowerCase().replace(" ", "")}
+                      </div>
                     </td>
                     <td className="px-6 py-4 text-sm text-gray-600">{user.email}</td>
                     <td className="px-6 py-4">
                       <div className="text-sm text-gray-600">
-                        {user.last_activity ? new Date(user.last_activity).toLocaleString() : 'N/A'}
+                        {user.last_activity
+                          ? new Date(user.last_activity).toLocaleString()
+                          : "N/A"}
                       </div>
-                      {user.last_activity && (
-                        <div className="text-xs text-gray-400">
-                          {new Date(user.last_activity).toRelativeTimeString()}
-                        </div>
-                      )}
                     </td>
                     <td className="px-6 py-4">
                       <button
@@ -351,17 +459,19 @@ const ActiveUser = () => {
 
               <div className="flex items-center space-x-2">
                 <span className="text-sm text-gray-700">
-                  Showing {indexOfFirstUser + 1} to {Math.min(indexOfLastUser, filteredUsers.length)} of {filteredUsers.length} entries
+                  Showing {indexOfFirstUser + 1} to{" "}
+                  {Math.min(indexOfLastUser, filteredUsers.length)} of{" "}
+                  {filteredUsers.length} entries
                 </span>
-                
+
                 <div className="flex items-center space-x-1">
                   <button
                     onClick={() => handlePageChange(currentPage - 1)}
                     disabled={currentPage === 1}
                     className={`px-3 py-1 rounded-md ${
                       currentPage === 1
-                        ? 'text-gray-400 cursor-not-allowed'
-                        : 'text-gray-700 hover:bg-gray-50'
+                        ? "text-gray-400 cursor-not-allowed"
+                        : "text-gray-700 hover:bg-gray-50"
                     }`}
                   >
                     <FaChevronLeft className="h-4 w-4" />
@@ -373,8 +483,8 @@ const ActiveUser = () => {
                       onClick={() => handlePageChange(number)}
                       className={`px-3 py-1 rounded-md ${
                         number === currentPage
-                          ? 'bg-blue-500 text-white'
-                          : 'text-gray-700 hover:bg-gray-50'
+                          ? "bg-blue-500 text-white"
+                          : "text-gray-700 hover:bg-gray-50"
                       }`}
                     >
                       {number}
@@ -386,8 +496,8 @@ const ActiveUser = () => {
                     disabled={currentPage === totalPages}
                     className={`px-3 py-1 rounded-md ${
                       currentPage === totalPages
-                        ? 'text-gray-400 cursor-not-allowed'
-                        : 'text-gray-700 hover:bg-gray-50'
+                        ? "text-gray-400 cursor-not-allowed"
+                        : "text-gray-700 hover:bg-gray-50"
                     }`}
                   >
                     <FaChevronRight className="h-4 w-4" />
@@ -399,19 +509,21 @@ const ActiveUser = () => {
         </div>
       </div>
 
-      {/* Action Modal */}
-      {actionModalVisible && (
+      {/* === Action Side-Drawer === */}
+      {actionModalVisible && selectedUser && (
         <div className="fixed inset-0 overflow-hidden z-50">
           <div className="absolute inset-0 overflow-hidden">
-            <div className="absolute inset-0 bg-gray-500 bg-opacity-75 transition-opacity" 
-                 onClick={() => setActionModalVisible(false)} />
+            <div
+              className="absolute inset-0 bg-gray-500 bg-opacity-75 transition-opacity"
+              onClick={() => setActionModalVisible(false)}
+            />
             <div className="fixed inset-y-0 right-0 pl-10 max-w-full flex">
               <div className="w-screen max-w-md">
                 <div className="h-full flex flex-col bg-white shadow-xl">
                   <div className="px-4 py-6 bg-gray-50 sm:px-6">
                     <div className="flex items-center justify-between">
                       <h2 className="text-lg font-medium text-gray-900">
-                        Manage User: {selectedUser?.name}
+                        Manage User: {selectedUser.name}
                       </h2>
                       <button
                         onClick={() => setActionModalVisible(false)}
@@ -424,19 +536,47 @@ const ActiveUser = () => {
 
                   <div className="flex-1 px-4 py-6 sm:px-6 overflow-y-auto">
                     <div className="space-y-4">
+                      {/* Info Card */}
                       <div className="flex items-center space-x-4 p-4 bg-gray-50 rounded-lg">
                         <img
-                          src={selectedUser?.profile_image ? `http://localhost:3000/${selectedUser.profile_image}` : "https://via.placeholder.com/80"}
-                          alt={selectedUser?.name}
+                          src={
+                            selectedUser.profile_image
+                              ? `http://localhost:3000/${selectedUser.profile_image}`
+                              : "https://via.placeholder.com/80"
+                          }
+                          alt={selectedUser.name}
                           className="w-16 h-16 rounded-full object-cover"
                         />
                         <div>
-                          <h3 className="font-medium text-gray-900">{selectedUser?.name}</h3>
-                          <p className="text-sm text-gray-500">{selectedUser?.email}</p>
+                          <h3 className="font-medium text-gray-900">
+                            {selectedUser.name}
+                          </h3>
+                          <p className="text-sm text-gray-500">
+                            {selectedUser.email}
+                          </p>
+                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 mt-2">
+                            Active
+                          </span>
                         </div>
                       </div>
 
-                      <div className="space-y-3">
+                      {/* Check booleans for dynamic Block/Unblock */}
+                      {selectedUser.is_blocked ? (
+                        <button
+                          onClick={() => handleBlockOrSuspend("unblock")}
+                          className="w-full flex items-center justify-between px-4 py-3 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                        >
+                          <div className="flex items-center">
+                            <FaUndo className="text-green-500 mr-3" />
+                            <div className="text-left">
+                              <div className="font-medium">Unblock User</div>
+                              <div className="text-sm text-gray-500">
+                                Allow user to re-access the platform
+                              </div>
+                            </div>
+                          </div>
+                        </button>
+                      ) : (
                         <button
                           onClick={() => handleBlockOrSuspend("block")}
                           className="w-full flex items-center justify-between px-4 py-3 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
@@ -445,11 +585,31 @@ const ActiveUser = () => {
                             <FaUserLock className="text-red-500 mr-3" />
                             <div className="text-left">
                               <div className="font-medium">Block User</div>
-                              <div className="text-sm text-gray-500">Prevent user from accessing the platform</div>
+                              <div className="text-sm text-gray-500">
+                                Prevent user from accessing the platform
+                              </div>
                             </div>
                           </div>
                         </button>
+                      )}
 
+                      {/* Check booleans for dynamic Suspend/Unsuspend */}
+                      {selectedUser.is_suspended ? (
+                        <button
+                          onClick={() => handleBlockOrSuspend("unsuspend")}
+                          className="w-full flex items-center justify-between px-4 py-3 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                        >
+                          <div className="flex items-center">
+                            <FaUndo className="text-green-500 mr-3" />
+                            <div className="text-left">
+                              <div className="font-medium">Unsuspend User</div>
+                              <div className="text-sm text-gray-500">
+                                Lift suspension from the user
+                              </div>
+                            </div>
+                          </div>
+                        </button>
+                      ) : (
                         <button
                           onClick={() => handleBlockOrSuspend("suspend")}
                           className="w-full flex items-center justify-between px-4 py-3 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
@@ -458,24 +618,45 @@ const ActiveUser = () => {
                             <FaUserClock className="text-yellow-500 mr-3" />
                             <div className="text-left">
                               <div className="font-medium">Suspend User</div>
-                              <div className="text-sm text-gray-500">Temporarily restrict user access</div>
+                              <div className="text-sm text-gray-500">
+                                Temporarily restrict user access
+                              </div>
                             </div>
                           </div>
                         </button>
+                      )}
 
-                        <button
-                          onClick={handleDelete}
-                          className="w-full flex items-center justify-between px-4 py-3 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
-                        >
-                          <div className="flex items-center">
-                            <FaUserMinus className="text-gray-500 mr-3" />
-                            <div className="text-left">
-                              <div className="font-medium">Delete User</div>
-                              <div className="text-sm text-gray-500">Permanently remove user account</div>
+                      {/* Reset Report Count */}
+                      <button
+                        onClick={handleResetReportCount}
+                        className="w-full flex items-center justify-between px-4 py-3 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                      >
+                        <div className="flex items-center">
+                          <FaUndo className="text-blue-500 mr-3" />
+                          <div className="text-left">
+                            <div className="font-medium">Reset Report Count</div>
+                            <div className="text-sm text-gray-500">
+                              Set report count to 0
                             </div>
                           </div>
-                        </button>
-                      </div>
+                        </div>
+                      </button>
+
+                      {/* Delete User */}
+                      <button
+                        onClick={handleDelete}
+                        className="w-full flex items-center justify-between px-4 py-3 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                      >
+                        <div className="flex items-center">
+                          <FaUserMinus className="text-gray-500 mr-3" />
+                          <div className="text-left">
+                            <div className="font-medium">Delete User</div>
+                            <div className="text-sm text-gray-500">
+                              Permanently remove user account
+                            </div>
+                          </div>
+                        </div>
+                      </button>
                     </div>
                   </div>
                 </div>
@@ -485,12 +666,14 @@ const ActiveUser = () => {
         </div>
       )}
 
-      {/* Duration/Reason Modal */}
+      {/* Duration/Reason Modal for block / suspend */}
       {durationModalVisible && (
         <div className="fixed inset-0 overflow-hidden z-50">
           <div className="absolute inset-0 overflow-hidden">
-            <div className="absolute inset-0 bg-gray-500 bg-opacity-75 transition-opacity" 
-                 onClick={() => setDurationModalVisible(false)} />
+            <div
+              className="absolute inset-0 bg-gray-500 bg-opacity-75 transition-opacity"
+              onClick={() => setDurationModalVisible(false)}
+            />
             <div className="absolute inset-x-0 bottom-0 max-w-full flex justify-center">
               <div className="w-full max-w-lg">
                 <div className="bg-white rounded-t-xl shadow-xl">
@@ -499,6 +682,7 @@ const ActiveUser = () => {
                       {selectedAction === "block" ? "Block" : "Suspend"} User
                     </h3>
 
+                    {/* Reason */}
                     <div className="mb-4">
                       <label className="block text-sm font-medium text-gray-700 mb-2">
                         Reason
@@ -512,6 +696,7 @@ const ActiveUser = () => {
                       />
                     </div>
 
+                    {/* Duration */}
                     <div className="mb-6">
                       <label className="block text-sm font-medium text-gray-700 mb-2">
                         Duration
@@ -521,14 +706,14 @@ const ActiveUser = () => {
                           { value: "1w", label: "1 Week" },
                           { value: "1m", label: "1 Month" },
                           { value: "6m", label: "6 Months" },
-                          { value: "permanent", label: "Permanent" }
+                          { value: "permanent", label: "Permanent" },
                         ].map((option) => (
                           <label
                             key={option.value}
                             className={`flex items-center justify-center px-4 py-2 rounded-lg cursor-pointer border transition-all ${
                               selectedDuration === option.value
-                                ? 'border-blue-500 bg-blue-50 text-blue-700'
-                                : 'border-gray-200 hover:border-gray-300'
+                                ? "border-blue-500 bg-blue-50 text-blue-700"
+                                : "border-gray-200 hover:border-gray-300"
                             }`}
                           >
                             <input
@@ -574,13 +759,15 @@ const ActiveUser = () => {
       {confirmationModalVisible && (
         <div className="fixed inset-0 overflow-y-auto z-50">
           <div className="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center">
-            <div className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" 
-                 onClick={() => setConfirmationModalVisible(false)} />
+            <div
+              className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity"
+              onClick={() => setConfirmationModalVisible(false)}
+            />
             <div className="inline-block w-full max-w-md p-6 my-8 overflow-hidden text-left align-middle transition-all transform bg-white shadow-xl rounded-lg">
-              <h3 className="text-lg font-medium text-gray-900 mb-4">
-                Confirm Action
-              </h3>
-              <p className="text-sm text-gray-500 mb-6">{confirmationMessage}</p>
+              <h3 className="text-lg font-medium text-gray-900 mb-4">Confirm Action</h3>
+              <p className="text-sm text-gray-500 mb-6 whitespace-pre-line">
+                {confirmationMessage}
+              </p>
               <div className="flex space-x-3">
                 <button
                   onClick={() => onConfirm()}

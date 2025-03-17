@@ -7,13 +7,13 @@ import {
   Dimensions,
   Modal,
   Image,
-  Alert,
 } from "react-native";
 import moment from "moment";
 import RenderHtml from "react-native-render-html";
 import { theme } from "../constants/theme";
 import Avator from "./Avator";
 import Icon from "../assets/icons";
+import VerifiedIcon from "../assets/icons/verifiedIcon";
 import { hp } from "../helpers/common";
 import config from "../constants/config";
 import { userAuth } from "../contexts/AuthContext";
@@ -76,7 +76,6 @@ const PostCard = ({
   };
 
   const onLike = async () => {
-    // Save previous state in case the API call fails
     const prevLiked = liked;
     const prevLikeCount = likeCount;
     const newLiked = !liked;
@@ -88,18 +87,12 @@ const PostCard = ({
 
     try {
       const url = `http://${ip}:3000/api/post/like-unlike/${item.id}`;
-      await axios.put(
-        url,
-        {},
-        { headers: { Authorization: `Bearer ${authToken}` } }
-      );
-      // Do not override our optimistic state. If needed, you can later sync with server data.
+      await axios.put(url, {}, { headers: { Authorization: `Bearer ${authToken}` } });
     } catch (error) {
       console.error(
         "Error toggling like:",
         error.response ? error.response.data : error.message
       );
-      // Revert to previous state if there was an error
       setLiked(prevLiked);
       setLikeCount(prevLikeCount);
     }
@@ -130,19 +123,23 @@ const PostCard = ({
   return (
     <View style={[styles.container, hasShadow && styles.shadow]} key={item.id}>
       {/* Header with user info and three-dots icon */}
-      {/* Header with user info and three-dots icon */}
       <View style={styles.header}>
         <TouchableOpacity
           style={styles.userInfo}
           onPress={() => router.push(`/userProfile?userId=${item.user._id}`)}
         >
-          <Avator
-            size={hp(4.5)}
-            uri={profileImageURL}
-            rounded={theme.radius.md}
-          />
+          <Avator size={hp(4.5)} uri={profileImageURL} rounded={theme.radius.md} />
           <View style={styles.userDetails}>
-            <Text style={styles.userName}>{item.user.name}</Text>
+            <View style={styles.userNameContainer}>
+              <Text style={styles.userNameText}>{item.user.name}</Text>
+              {item.user.verified && (
+                <VerifiedIcon
+                  size={16}
+                  color="#1877F2"
+                  style={styles.verifiedIcon}
+                />
+              )}
+            </View>
             <Text style={styles.postTime}>{createdAt}</Text>
           </View>
         </TouchableOpacity>
@@ -160,10 +157,7 @@ const PostCard = ({
 
       {/* Post content */}
       <View style={styles.content}>
-        <RenderHtml
-          contentWidth={contentWidth}
-          source={{ html: item.content }}
-        />
+        <RenderHtml contentWidth={contentWidth} source={{ html: item.content }} />
       </View>
 
       {/* Media images */}
@@ -184,10 +178,7 @@ const PostCard = ({
       {/* Fullscreen Modal for images */}
       <Modal visible={fullScreenVisible} transparent={true}>
         <View style={styles.fullScreenContainer}>
-          <Image
-            source={{ uri: selectedImage }}
-            style={styles.fullScreenImage}
-          />
+          <Image source={{ uri: selectedImage }} style={styles.fullScreenImage} />
           <TouchableOpacity style={styles.closeIcon} onPress={closeFullScreen}>
             <Icon name="cross" size={24} color={theme.colors.text} />
           </TouchableOpacity>
@@ -207,12 +198,9 @@ const PostCard = ({
           </TouchableOpacity>
           <Text style={styles.count}>{likeCount}</Text>
         </View>
-
         <View style={styles.footerButton}>
           {showMoreIcon ? (
-            <TouchableOpacity
-              onPress={() => router.push(`/postDetails?postId=${item.id}`)}
-            >
+            <TouchableOpacity onPress={() => router.push(`/postDetails?postId=${item.id}`)}>
               <Icon name="comment" size={24} color={theme.colors.textLight} />
             </TouchableOpacity>
           ) : (
@@ -220,7 +208,6 @@ const PostCard = ({
           )}
           <Text style={styles.count}>{item.commentCount}</Text>
         </View>
-
         <View style={styles.footerButton}>
           <TouchableOpacity onPress={onShare}>
             <Icon name="share" size={24} color={theme.colors.textLight} />
@@ -229,11 +216,7 @@ const PostCard = ({
       </View>
 
       {/* Share Modal */}
-      <Modal
-        visible={shareModalVisible}
-        transparent={true}
-        animationType="slide"
-      >
+      <Modal visible={shareModalVisible} transparent={true} animationType="slide">
         <View style={styles.shareModalContainer}>
           <View style={styles.shareModalContent}>
             <Text style={styles.shareModalTitle}>Share Post With</Text>
@@ -253,10 +236,7 @@ const PostCard = ({
             ) : (
               <Text>No users found</Text>
             )}
-            <TouchableOpacity
-              style={styles.cancelButton}
-              onPress={() => setShareModalVisible(false)}
-            >
+            <TouchableOpacity style={styles.cancelButton} onPress={() => setShareModalVisible(false)}>
               <Text style={styles.cancelButtonText}>Cancel</Text>
             </TouchableOpacity>
           </View>
@@ -299,11 +279,19 @@ const styles = StyleSheet.create({
   },
   userDetails: {
     marginLeft: 10,
+    flexDirection: "column",
   },
-  userName: {
+  userNameContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  userNameText: {
     fontSize: 16,
     fontWeight: "bold",
     color: theme.colors.text,
+  },
+  verifiedIcon: {
+    marginLeft: 4,
   },
   postTime: {
     fontSize: 12,
