@@ -14,6 +14,7 @@ const {
   removeSuspensionOrBlock,
   sendEmailToUsers,
   searchUsers,
+  resetReportCount,
 } = require("../controller/adminUserController");
 const {
   checkAuthentication,
@@ -84,4 +85,6 @@ router.post("/send-email-to-users", checkAuthentication, checkIsAdmin, sendEmail
 
 // search users by name or email
 router.get("/search-users", checkAuthentication, checkIsAdmin, searchUsers);
+router.put("/reset-report-count", checkAuthentication, checkIsAdmin, resetReportCount );
+
 module.exports = router;

@@ -199,87 +199,105 @@ const BlockedUser = () => {
 
   // For "block" or "suspend" => reason/duration
   const handleBlockOrSuspend = (actionType) => {
-    setSelectedAction(actionType); // "block" or "suspend"
+    setSelectedAction(actionType);
     setActionModalVisible(false);
-    setDurationModalVisible(true);
+
+    if (actionType === "unblock" || actionType === "unsuspend") {
+      setConfirmationMessage(
+        `Are you sure you want to ${actionType} user ${selectedUser?.reportedTo?.name}?`
+      );
+      setOnConfirm(() => async () => {
+        try {
+          await axios.put(
+            `${API_BASE_URL}/admin-update-user-status`,
+            {
+              userId: selectedUser?.reportedTo?._id,
+              action: actionType, 
+            },
+            { headers: { Authorization: `Bearer ${accessToken}` } }
+          );
+          toast.success(`User successfully ${actionType}ed`);
+          fetchReportedUsers();
+        } catch (error) {
+          toast.error(error.response?.data?.message || `Failed to ${actionType} user`);
+        } finally {
+          setConfirmationModalVisible(false);
+          setSelectedUser(null);
+          setSelectedAction("");
+        }
+      });
+      setConfirmationModalVisible(true);
+
+    } else {
+      // block / suspend => reason/duration
+      setDurationModalVisible(true);
+    }
   };
 
   // Then confirm block or suspend
   const handleSubmitAction = async () => {
     if (!selectedDuration || !actionReason.trim()) {
-      toast.error("Please select a duration and enter a reason");
+      toast.error("Please select a duration and enter a reason.");
       return;
     }
 
-    const durationText = {
-      "1w": "1 Week",
-      "1m": "1 Month",
-      "6m": "6 Months",
-      "permanent": "Permanent",
-    }[selectedDuration];
+    try {
+      // "block" or "suspend" are direct from selectedAction
+      await axios.put(
+        `${API_BASE_URL}/admin-update-user-status`,
+        {
+          userId: selectedUser?.reportedTo?._id,
+          action: selectedAction,
+          reason: actionReason,
+          duration: selectedDuration,
+          resetReports: false
+        },
+        { headers: { Authorization: `Bearer ${accessToken}` } }
+      );
 
-    const label = selectedAction === "block" ? "block" : "suspend";
-    setConfirmationMessage(
-      `Are you sure you want to ${label} user ${selectedUser.name} for ${durationText}?\nReason: "${actionReason}"?`
-    );
+      toast.success(`User ${selectedAction}ed successfully`);
+      fetchReportedUsers();
 
-    setOnConfirm(() => async () => {
-      try {
-        await axios.put(
-          "http://localhost:3000/api/dashboard/admin-update-user-status",
-          {
-            userId: selectedUser.id,
-            action: selectedAction,  // "block" or "suspend"
-            reason: actionReason,
-            duration: selectedDuration,
-            // resetReports: true if you want to reset the user’s report_count
-          },
-          { headers: { Authorization: `Bearer ${accessToken}` } }
-        );
-        toast.success(`User ${label}ed successfully`);
-        fetchBlockedUsers();
-      } catch (error) {
-        toast.error(`Failed to ${label} user`);
-      }
-      setConfirmationModalVisible(false);
       setDurationModalVisible(false);
       setSelectedUser(null);
       setSelectedAction("");
       setActionReason("");
       setSelectedDuration("");
-    });
-    setConfirmationModalVisible(true);
+
+    } catch (error) {
+      toast.error(error.response?.data?.message || `Failed to ${selectedAction} user`);
+    }
   };
 
   // =======================================================
   // 6) Reset user’s report count
   // =======================================================
   const handleResetReportCount = () => {
-    if (!selectedUser) return;
-
     setConfirmationMessage(
-      `Are you sure you want to reset report count for user ${selectedUser.name} to 0?`
+      `Are you sure you want to reset report count for user ${selectedUser?.reportedTo?.name}?`
     );
     setOnConfirm(() => async () => {
       try {
-        // Pass resetReports: true to your backend
         await axios.put(
-          "http://localhost:3000/api/dashboard/admin-update-user-status",
+          `${API_BASE_URL}/reset-report-count`, // Updated endpoint
           {
-            userId: selectedUser.id,
-            action: "unblock", // or anything valid
-            resetReports: true,
+            type: "user", // Specify type as "user"
+            id: selectedUser?.reportedTo?._id // Send the user ID
           },
           { headers: { Authorization: `Bearer ${accessToken}` } }
         );
-        toast.success("Report count reset to 0");
-        fetchBlockedUsers();
+        
+        toast.success("Report count reset successfully");
+        fetchReportedUsers(); // Refresh the data
+        
       } catch (error) {
-        toast.error("Failed to reset report count");
+        console.error('Reset report error:', error.response?.data);
+        toast.error(error.response?.data?.message || "Failed to reset report count");
+      } finally {
+        setConfirmationModalVisible(false);
+        setActionModalVisible(false);
+        setSelectedUser(null);
       }
-      setConfirmationModalVisible(false);
-      setActionModalVisible(false);
-      setSelectedUser(null);
     });
     setConfirmationModalVisible(true);
   };

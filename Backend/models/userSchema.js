@@ -96,7 +96,8 @@ const userSchema = new mongoose.Schema(
 
     last_activity: { type: Date, default: null },
     last_login: { type: Date, default: null },
-
+    // Add this field (for example, after “following”)
+    liked_posts: [{ type: mongoose.Schema.Types.ObjectId, ref: "Post" }],
     // Login activity log
     login_history: [
       {

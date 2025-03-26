@@ -892,10 +892,10 @@ const manageUserStatus = async (req, res) => {
     console.log("Step 1: Extracting data from request body.");
     const {
       userId,
-      action,       // block | suspend | delete | unblock | unsuspend
+      action,       
       reason,
-      duration,     // 1w | 1m | 6m | permanent (for block/suspend)
-      resetReports, // optional boolean
+      duration,     
+      resetReports, 
     } = req.body;
 
     console.log("Step 2: Validating action and duration.");
@@ -1906,5 +1906,6 @@ module.exports = {
   getReportedPosts,
   moderatePost,
   sendEmailToUsers,
-  searchUsers
+  searchUsers,
+  resetReportCount
 };

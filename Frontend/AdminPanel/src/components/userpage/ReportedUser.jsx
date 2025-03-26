@@ -237,16 +237,19 @@ const ReportedUser = () => {
     setOnConfirm(() => async () => {
       try {
         await axios.put(
-          `${API_BASE_URL}/admin-update-user-status`,
+          `${API_BASE_URL}/reset-report-count`, // Updated endpoint
           {
-            userId: selectedUser?.reportedTo?._id,
-            resetReports: true
+            type: "user", // Specify type as "user"
+            id: selectedUser?.reportedTo?._id // Send the user ID
           },
           { headers: { Authorization: `Bearer ${accessToken}` } }
         );
+        
         toast.success("Report count reset successfully");
-        fetchReportedUsers();
+        fetchReportedUsers(); // Refresh the data
+        
       } catch (error) {
+        console.error('Reset report error:', error.response?.data);
         toast.error(error.response?.data?.message || "Failed to reset report count");
       } finally {
         setConfirmationModalVisible(false);

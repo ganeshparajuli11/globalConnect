@@ -54,6 +54,9 @@ const InactiveUser = () => {
     reportedUsers: 0
   });
 
+  // API Base URL
+  const API_BASE_URL = "http://localhost:3000/api/dashboard";
+
   // Helper to format relative time
   const getRelativeTime = (date) => {
     if (!date) return "N/A";
@@ -85,16 +88,15 @@ const InactiveUser = () => {
     if (!accessToken) return;
     try {
       setLoading(true);
-      const response = await axios.get("http://localhost:3000/api/dashboard/get-in-active-user", {
-        headers: { Authorization: `Bearer ${accessToken}` }
-      });
+      const response = await axios.get(
+        `${API_BASE_URL}/get-in-active-user`,
+        { headers: { Authorization: `Bearer ${accessToken}` } }
+      );
 
       if (
         response.data.message === "Inactive users retrieved and status updated successfully."
       ) {
         setUserData(response.data.data);
-
-        // Example stats
         const users = response.data.data;
         setStats({
           totalUsers: users.length,
@@ -145,147 +147,129 @@ const InactiveUser = () => {
 
   // 6) Delete user
   const handleDelete = () => {
-    if (!selectedUser) return;
-    setConfirmationMessage(`Are you sure you want to delete user ${selectedUser.name}?`);
+    setConfirmationMessage(
+      `Are you sure you want to delete user ${selectedUser?.name}?`
+    );
     setOnConfirm(() => async () => {
       try {
-        await axios.delete(`http://localhost:3000/api/dashboard/delete-user/${selectedUser.id}`, {
-          headers: { Authorization: `Bearer ${accessToken}` }
-        });
+        await axios.put(
+          `${API_BASE_URL}/admin-update-user-status`,
+          {
+            userId: selectedUser?.id,
+            action: "delete",
+            reason: "User deleted by admin"
+          },
+          { headers: { Authorization: `Bearer ${accessToken}` } }
+        );
         toast.success("User deleted successfully");
         fetchInactiveUsers();
       } catch (error) {
-        toast.error("Failed to delete user");
+        toast.error(error.response?.data?.message || "Failed to delete user");
+      } finally {
+        setConfirmationModalVisible(false);
+        setActionModalVisible(false);
+        setSelectedUser(null);
       }
-      setConfirmationModalVisible(false);
-      setActionModalVisible(false);
-      setSelectedUser(null);
     });
     setConfirmationModalVisible(true);
   };
 
-  // =======================================================
-  // 7) Dynamic block/unblock, suspend/unsuspend
-  //    plus reset report count if desired
-  // =======================================================
-
-  // If user.is_blocked => show “Unblock” else “Block”
-  // If user.is_suspended => show “Unsuspend” else “Suspend”
-
-  // handleBlockOrSuspend => shows Duration/Reason if block/suspend,
-  // or direct confirm if “unblock”/“unsuspend”
+  // 7) Dynamic block/unblock, suspend/unsuspend, and reset report count
   const handleBlockOrSuspend = (actionType) => {
-    // e.g. "block", "unblock", "suspend", "unsuspend"
-    setActionModalVisible(false);
     setSelectedAction(actionType);
+    setActionModalVisible(false);
 
-    // For "unblock" / "unsuspend", skip reason/duration
     if (actionType === "unblock" || actionType === "unsuspend") {
-      const label = actionType;
-      setConfirmationMessage(`Are you sure you want to ${label} user ${selectedUser.name}?`);
+      setConfirmationMessage(
+        `Are you sure you want to ${actionType} user ${selectedUser?.name}?`
+      );
       setOnConfirm(() => async () => {
         try {
           await axios.put(
-            "http://localhost:3000/api/dashboard/admin-update-user-status",
+            `${API_BASE_URL}/admin-update-user-status`,
             {
-              userId: selectedUser.id,
-              action: actionType // "unblock" or "unsuspend"
+              userId: selectedUser?.id,
+              action: actionType,
             },
             { headers: { Authorization: `Bearer ${accessToken}` } }
           );
-          toast.success(`User successfully ${label}ed.`);
+          toast.success(`User successfully ${actionType}ed`);
           fetchInactiveUsers();
         } catch (error) {
-          toast.error(`Failed to ${label} user.`);
+          toast.error(error.response?.data?.message || `Failed to ${actionType} user`);
+        } finally {
+          setConfirmationModalVisible(false);
+          setSelectedUser(null);
+          setSelectedAction("");
         }
-        setConfirmationModalVisible(false);
-        setSelectedUser(null);
-        setSelectedAction("");
       });
       setConfirmationModalVisible(true);
     } else {
-      // "block" or "suspend" => show the reason/duration modal
+      // For block/suspend, open the reason/duration modal
       setDurationModalVisible(true);
     }
   };
 
-  // Confirm block/suspend
-  const handleSubmitAction = () => {
+  // Confirm block/suspend action with duration & reason
+  const handleSubmitAction = async () => {
     if (!selectedDuration || !actionReason.trim()) {
-      toast.error("Please select a duration and enter a reason");
+      toast.error("Please select a duration and enter a reason.");
       return;
     }
 
-    const durationMap = {
-      "1w": "1 Week",
-      "1m": "1 Month",
-      "6m": "6 Months",
-      permanent: "Permanent"
-    };
-    const durText = durationMap[selectedDuration] || "N/A";
-
-    setConfirmationMessage(
-      `Are you sure you want to ${selectedAction} user ${selectedUser.name} for ${durText}?\nReason: "${actionReason}"`
-    );
-
-    setOnConfirm(() => async () => {
-      try {
-        await axios.put(
-          "http://localhost:3000/api/dashboard/admin-update-user-status",
-          {
-            userId: selectedUser.id,
-            action: selectedAction, // "block" or "suspend"
-            reason: actionReason,
-            duration: selectedDuration,
-            // resetReports: true (if you want to zero out the user's report_count)
-          },
-          { headers: { Authorization: `Bearer ${accessToken}` } }
-        );
-        toast.success(`User ${selectedAction}ed successfully`);
-        fetchInactiveUsers();
-      } catch (error) {
-        toast.error(`Failed to ${selectedAction} user`);
-      }
-      setConfirmationModalVisible(false);
+    try {
+      await axios.put(
+        `${API_BASE_URL}/admin-update-user-status`,
+        {
+          userId: selectedUser?.id,
+          action: selectedAction,
+          reason: actionReason,
+          duration: selectedDuration,
+          resetReports: false
+        },
+        { headers: { Authorization: `Bearer ${accessToken}` } }
+      );
+      toast.success(`User ${selectedAction}ed successfully`);
+      fetchInactiveUsers();
       setDurationModalVisible(false);
       setSelectedUser(null);
       setSelectedAction("");
       setActionReason("");
       setSelectedDuration("");
-    });
-    setConfirmationModalVisible(true);
+    } catch (error) {
+      toast.error(error.response?.data?.message || `Failed to ${selectedAction} user`);
+    }
   };
 
   // Optionally reset report count
   const handleResetReportCount = () => {
-    if (!selectedUser) return;
     setConfirmationMessage(
-      `Are you sure you want to reset report count for user ${selectedUser.name}?`
+      `Are you sure you want to reset report count for user ${selectedUser?.name}?`
     );
     setOnConfirm(() => async () => {
       try {
         await axios.put(
-          "http://localhost:3000/api/dashboard/admin-update-user-status",
+          `${API_BASE_URL}/reset-report-count`,
           {
-            userId: selectedUser.id,
-            action: "block", // or any valid action
-            resetReports: true
+            type: "user",
+            id: selectedUser?.id
           },
           { headers: { Authorization: `Bearer ${accessToken}` } }
         );
-        toast.success("Report count reset to 0");
+        toast.success("Report count reset successfully");
         fetchInactiveUsers();
       } catch (error) {
-        toast.error("Failed to reset report count");
+        console.error("Reset report error:", error.response?.data);
+        toast.error(error.response?.data?.message || "Failed to reset report count");
+      } finally {
+        setConfirmationModalVisible(false);
+        setActionModalVisible(false);
+        setSelectedUser(null);
       }
-      setConfirmationModalVisible(false);
-      setActionModalVisible(false);
-      setSelectedUser(null);
     });
     setConfirmationModalVisible(true);
   };
 
-  // 8) Render
   return (
     <div className="flex h-screen">
       <ToastContainer />
@@ -367,12 +351,8 @@ const InactiveUser = () => {
                     <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600">Profile</th>
                     <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600">Name</th>
                     <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600">Email</th>
-                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600">
-                      Last Logged In
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600">
-                      Actions
-                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600">Last Logged In</th>
+                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200">
@@ -407,7 +387,6 @@ const InactiveUser = () => {
                               alt={user.name}
                               className="w-10 h-10 rounded-full object-cover ring-2 ring-gray-100"
                             />
-                            {/* Example small dot to indicate offline or something */}
                             <div className="absolute bottom-0 right-0 w-3 h-3 bg-red-500 rounded-full ring-2 ring-white"></div>
                           </div>
                         </td>
@@ -573,8 +552,8 @@ const InactiveUser = () => {
 
                       {/* Actions */}
                       <div className="space-y-3">
-                        {/* Check booleans for dynamic Block/Unblock */}
-                        {selectedUser?.is_blocked ? (
+                        {/* Dynamic Block/Unblock based on user.status */}
+                        {selectedUser?.status === "Blocked" ? (
                           <button
                             onClick={() => handleBlockOrSuspend("unblock")}
                             className="w-full flex items-center justify-between px-4 py-3 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
@@ -606,8 +585,8 @@ const InactiveUser = () => {
                           </button>
                         )}
 
-                        {/* Check booleans for dynamic Suspend/Unsuspend */}
-                        {selectedUser?.is_suspended ? (
+                        {/* Dynamic Suspend/Unsuspend based on user.status */}
+                        {selectedUser?.status === "Suspended" ? (
                           <button
                             onClick={() => handleBlockOrSuspend("unsuspend")}
                             className="w-full flex items-center justify-between px-4 py-3 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
@@ -639,7 +618,6 @@ const InactiveUser = () => {
                           </button>
                         )}
 
-                        {/* Reset Report Count */}
                         <button
                           onClick={handleResetReportCount}
                           className="w-full flex items-center justify-between px-4 py-3 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
@@ -653,7 +631,6 @@ const InactiveUser = () => {
                           </div>
                         </button>
 
-                        {/* Delete User */}
                         <button
                           onClick={handleDelete}
                           className="w-full flex items-center justify-between px-4 py-3 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"

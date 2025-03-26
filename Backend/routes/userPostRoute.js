@@ -16,7 +16,9 @@ const {
   searchPosts,
   editPost,
   deletePost,
-  getReportedPosts
+  getReportedPostsAdmin,
+  handlePostAdminAction,
+
 } = require("../controller/userPostController");
 const { uploadPostMedia } = require("../middleware/uploadMiddleware");
 const { sharePost } = require("../controller/userShareController");
@@ -33,6 +35,10 @@ router.post(
 // Define a GET route to fetch all posts
 router.get("/all", checkAuthentication, getAllPost);
 router.get("/admin/all", checkAuthentication, checkIsAdmin, getAllPostAdmin);
+router.get("/admin/reported", checkAuthentication, checkIsAdmin, getReportedPostsAdmin );
+router.put("/admin/report/action", checkAuthentication, checkIsAdmin, handlePostAdminAction );
+
+
 router.get("/admin/stats", checkAuthentication, checkIsAdmin, getPostStatsAdmin);
 router.post("/share", checkAuthentication,  sharePost);
 

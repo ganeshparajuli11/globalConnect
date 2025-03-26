@@ -12,10 +12,16 @@ const AllPost = () => {
   const [page, setPage] = useState(1);
   const limit = 5;
   const [totalCount, setTotalCount] = useState(0);
-  
+  const [searchTerm, setSearchTerm] = useState("");
+  const [filterType, setFilterType] = useState("all");
+  const [sortBy, setSortBy] = useState("newest");
+  const [dateRange, setDateRange] = useState({
+    from: "",
+    to: "",
+  });
   // For filtering by status
   const [selectedStatus, setSelectedStatus] = useState(""); // "" means all posts
-  
+
   // State for aggregated statistics
   const [stats, setStats] = useState({
     total: 0,
@@ -51,23 +57,36 @@ const AllPost = () => {
     if (accessToken) {
       const fetchPosts = async () => {
         try {
-          // Build the URL with query parameters; include status filter if selected.
-          const url = `http://localhost:3000/api/post/admin/all?page=${page}&limit=${limit}${
-            selectedStatus ? `&status=${selectedStatus}` : ""
-          }`;
+          // Build query parameters
+          const params = new URLSearchParams({
+            page: page,
+            limit: limit,
+            ...(selectedStatus && { status: selectedStatus }),
+            ...(searchTerm && { search: searchTerm }),
+            ...(filterType !== "all" && { type: filterType }),
+            ...(sortBy && { sort: sortBy }),
+            ...(dateRange.from && { from: dateRange.from }),
+            ...(dateRange.to && { to: dateRange.to }),
+          });
+
+          const url = `http://localhost:3000/api/post/admin/all?${params}`;
           const response = await axios.get(url, {
             headers: { Authorization: `Bearer ${accessToken}` },
           });
-          // Expected response: { message: "...", data: [ ... ], totalCount: <number> }
+
           setPostData(response.data.data);
           setTotalCount(response.data.totalCount || 0);
         } catch (error) {
           console.error("Error fetching posts", error);
+          toast.error("Failed to fetch posts");
         }
       };
-      fetchPosts();
+
+      // Add debounce for search term
+      const timeoutId = setTimeout(fetchPosts, 500);
+      return () => clearTimeout(timeoutId);
     }
-  }, [accessToken, page, selectedStatus]);
+  }, [accessToken, page, selectedStatus, searchTerm, filterType, sortBy, dateRange]);
 
   // Fetch aggregated post stats (for the top cards)
   useEffect(() => {
@@ -257,7 +276,94 @@ const AllPost = () => {
             <p className="text-xl font-bold text-gray-600">{stats.deleted}</p>
           </button>
         </div>
+        {/* Advanced Search & Filters */}
+        <div className="bg-white p-4 rounded-lg shadow-md mb-6">
+          <div className="flex flex-wrap gap-4">
+            {/* Search Bar */}
+            <div className="flex-1 min-w-[300px]">
+              <div className="relative">
+                <input
+                  type="text"
+                  placeholder="Search posts by title, content, or author..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="w-full pl-10 pr-4 py-2 border rounded-lg focus:outline-none focus:border-indigo-500"
+                />
+                <svg
+                  className="absolute left-3 top-2.5 h-5 w-5 text-gray-400"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+                  />
+                </svg>
+              </div>
+            </div>
 
+            {/* Filter Type */}
+            <div className="min-w-[200px]">
+              <select
+                value={filterType}
+                onChange={(e) => setFilterType(e.target.value)}
+                className="w-full p-2 border rounded-lg focus:outline-none focus:border-indigo-500"
+              >
+                <option value="all">All Types</option>
+                <option value="text">Text Posts</option>
+                <option value="image">Image Posts</option>
+                <option value="video">Video Posts</option>
+              </select>
+            </div>
+
+            {/* Sort By */}
+            <div className="min-w-[200px]">
+              <select
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value)}
+                className="w-full p-2 border rounded-lg focus:outline-none focus:border-indigo-500"
+              >
+                <option value="newest">Newest First</option>
+                <option value="oldest">Oldest First</option>
+                <option value="mostReported">Most Reported</option>
+                <option value="mostLiked">Most Liked</option>
+              </select>
+            </div>
+
+            {/* Date Range */}
+            <div className="flex gap-2 min-w-[300px]">
+              <input
+                type="date"
+                value={dateRange.from}
+                onChange={(e) => setDateRange(prev => ({ ...prev, from: e.target.value }))}
+                className="w-full p-2 border rounded-lg focus:outline-none focus:border-indigo-500"
+              />
+              <input
+                type="date"
+                value={dateRange.to}
+                onChange={(e) => setDateRange(prev => ({ ...prev, to: e.target.value }))}
+                className="w-full p-2 border rounded-lg focus:outline-none focus:border-indigo-500"
+              />
+            </div>
+
+            {/* Clear Filters Button */}
+            <button
+              onClick={() => {
+                setSearchTerm("");
+                setFilterType("all");
+                setSortBy("newest");
+                setDateRange({ from: "", to: "" });
+                setSelectedStatus("");
+              }}
+              className="px-4 py-2 bg-gray-100 text-gray-600 rounded-lg hover:bg-gray-200 focus:outline-none"
+            >
+              Clear Filters
+            </button>
+          </div>
+        </div>
         {/* Alternative Sorting Dropdown */}
         <div className="mb-4">
           <label className="mr-2 font-semibold">Sort by status:</label>

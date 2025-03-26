@@ -22,13 +22,28 @@ import {
   FaUndo,
 } from "react-icons/fa";
 
+// Reusable Stats Card Component
+const StatsCard = ({ icon: Icon, label, value, bgClass }) => {
+  return (
+    <div className={`${bgClass} rounded-lg px-6 py-4 text-white shadow-lg`}>
+      <div className="flex items-center">
+        <Icon className="text-3xl opacity-80" />
+        <div className="ml-4">
+          <p className="text-sm font-medium opacity-80">{label}</p>
+          <p className="text-2xl font-semibold">{value}</p>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const ActiveUser = () => {
   const [userData, setUserData] = useState([]);
   const [accessToken, setAccessToken] = useState(null);
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
 
-  // Search and filter states
+  // Search and pagination states
   const [searchTerm, setSearchTerm] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const [usersPerPage, setUsersPerPage] = useState(10);
@@ -43,7 +58,7 @@ const ActiveUser = () => {
   const [actionReason, setActionReason] = useState("");
   const [selectedDuration, setSelectedDuration] = useState("");
 
-  // Confirmation
+  // Confirmation modal
   const [confirmationModalVisible, setConfirmationModalVisible] = useState(false);
   const [confirmationMessage, setConfirmationMessage] = useState("");
   const [onConfirm, setOnConfirm] = useState(() => () => {});
@@ -55,6 +70,9 @@ const ActiveUser = () => {
     inactiveUsers: 0,
     reportedUsers: 0,
   });
+
+  // Define API Base URL
+  const API_BASE_URL = "http://localhost:3000/api/dashboard";
 
   // =======================================================
   // 1) Auth & Fetch Active Users
@@ -71,16 +89,13 @@ const ActiveUser = () => {
 
   const fetchActiveUsers = async () => {
     if (!accessToken) return;
-
     try {
       setLoading(true);
-      const response = await axios.get("http://localhost:3000/api/dashboard/get-active-user", {
+      const response = await axios.get(`${API_BASE_URL}/get-active-user`, {
         headers: { Authorization: `Bearer ${accessToken}` },
       });
       if (response.data.message === "Active users retrieved successfully.") {
         setUserData(response.data.data);
-
-        // Example stats
         const users = response.data.data;
         setStats({
           totalUsers: users.length,
@@ -109,7 +124,6 @@ const ActiveUser = () => {
       user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       user.email.toLowerCase().includes(searchTerm.toLowerCase())
   );
-
   const indexOfLastUser = currentPage * usersPerPage;
   const indexOfFirstUser = indexOfLastUser - usersPerPage;
   const currentUsers = filteredUsers.slice(indexOfFirstUser, indexOfLastUser);
@@ -136,56 +150,59 @@ const ActiveUser = () => {
   // 4) Delete User
   // =======================================================
   const handleDelete = () => {
-    if (!selectedUser) return;
-    setConfirmationMessage(`Are you sure you want to delete user ${selectedUser.name}?`);
+    setConfirmationMessage(
+      `Are you sure you want to delete user ${selectedUser?.name}?`
+    );
     setOnConfirm(() => async () => {
       try {
-        await axios.delete(`http://localhost:3000/api/dashboard/delete-user/${selectedUser.id}`, {
-          headers: { Authorization: `Bearer ${accessToken}` },
-        });
+        await axios.put(
+          `${API_BASE_URL}/admin-update-user-status`,
+          {
+            userId: selectedUser?.id,
+            action: "delete",
+            reason: "User deleted by admin",
+          },
+          { headers: { Authorization: `Bearer ${accessToken}` } }
+        );
         toast.success("User deleted successfully");
         fetchActiveUsers();
       } catch (error) {
-        toast.error("Failed to delete user");
+        toast.error(error.response?.data?.message || "Failed to delete user");
+      } finally {
+        setConfirmationModalVisible(false);
+        setActionModalVisible(false);
+        setSelectedUser(null);
       }
-      setConfirmationModalVisible(false);
-      setActionModalVisible(false);
-      setSelectedUser(null);
     });
     setConfirmationModalVisible(true);
   };
 
   // =======================================================
-  // 5) Block / Unblock / Suspend / Unsuspend
-  //    dynamic approach based on is_blocked or is_suspended
+  // 5) Dynamic Block/Unblock, Suspend/Unsuspend, Reset Report Count
   // =======================================================
-
-  // Show the duration modal for block/suspend
   const handleBlockOrSuspend = (actionType) => {
     setSelectedAction(actionType);
     setActionModalVisible(false);
-    // e.g. "block", "suspend", "unblock", "unsuspend"
-    if (actionType === "block" || actionType === "suspend") {
-      // Show reason/duration modal
-      setDurationModalVisible(true);
-    } else {
-      // "unblock" or "unsuspend" => direct confirmation
-      const message = `Are you sure you want to ${actionType} user ${selectedUser.name}?`;
-      setConfirmationMessage(message);
+    if (actionType === "unblock" || actionType === "unsuspend") {
+      setConfirmationMessage(
+        `Are you sure you want to ${actionType} user ${selectedUser?.name}?`
+      );
       setOnConfirm(() => async () => {
         try {
           await axios.put(
-            "http://localhost:3000/api/dashboard/admin-update-user-status",
+            `${API_BASE_URL}/admin-update-user-status`,
             {
-              userId: selectedUser.id,
-              action: actionType, // "unblock" or "unsuspend"
+              userId: selectedUser?.id,
+              action: actionType,
             },
             { headers: { Authorization: `Bearer ${accessToken}` } }
           );
-          toast.success(`User successfully ${actionType}ed.`);
+          toast.success(`User successfully ${actionType}ed`);
           fetchActiveUsers();
         } catch (error) {
-          toast.error(`Failed to ${actionType} user.`);
+          toast.error(
+            error.response?.data?.message || `Failed to ${actionType} user`
+          );
         } finally {
           setConfirmationModalVisible(false);
           setSelectedUser(null);
@@ -193,100 +210,81 @@ const ActiveUser = () => {
         }
       });
       setConfirmationModalVisible(true);
+    } else {
+      // For block or suspend actions, open the duration/reason modal
+      setDurationModalVisible(true);
     }
   };
 
-  // After reason/duration is filled, confirm blocking or suspending
-  const handleSubmitAction = () => {
+  // After reason/duration is filled, confirm block or suspend action
+  const handleSubmitAction = async () => {
     if (!selectedDuration || !actionReason.trim()) {
-      toast.error("Please select a duration and enter a reason");
+      toast.error("Please select a duration and enter a reason.");
       return;
     }
-
-    const durationMap = {
-      "1w": "1 Week",
-      "1m": "1 Month",
-      "6m": "6 Months",
-      "permanent": "Permanent",
-    };
-    const durationText = durationMap[selectedDuration] || "N/A";
-
-    setConfirmationMessage(
-      `Are you sure you want to ${selectedAction} user ${selectedUser.name} for ${durationText} with the reason:\n"${actionReason}"?`
-    );
-
-    setOnConfirm(() => async () => {
-      try {
-        await axios.put(
-          "http://localhost:3000/api/dashboard/admin-update-user-status",
-          {
-            userId: selectedUser.id,
-            action: selectedAction, // "block" or "suspend"
-            reason: actionReason,
-            duration: selectedDuration,
-            // If you want to reset the user's report_count, add: resetReports: true
-          },
-          { headers: { Authorization: `Bearer ${accessToken}` } }
-        );
-        toast.success(`User ${selectedAction}ed successfully`);
-        fetchActiveUsers();
-      } catch (error) {
-        toast.error(`Failed to ${selectedAction} user`);
-      }
-      setConfirmationModalVisible(false);
+    try {
+      await axios.put(
+        `${API_BASE_URL}/admin-update-user-status`,
+        {
+          userId: selectedUser?.id,
+          action: selectedAction,
+          reason: actionReason,
+          duration: selectedDuration,
+          resetReports: false,
+        },
+        { headers: { Authorization: `Bearer ${accessToken}` } }
+      );
+      toast.success(`User ${selectedAction}ed successfully`);
+      fetchActiveUsers();
       setDurationModalVisible(false);
       setSelectedUser(null);
       setSelectedAction("");
       setActionReason("");
       setSelectedDuration("");
-    });
-    setConfirmationModalVisible(true);
+    } catch (error) {
+      toast.error(
+        error.response?.data?.message || `Failed to ${selectedAction} user`
+      );
+    }
   };
 
-  // =======================================================
-  // 6) Reset Report Count
-  // =======================================================
   const handleResetReportCount = () => {
-    if (!selectedUser) return;
-    const message = `Are you sure you want to reset report count for ${selectedUser.name} to 0?`;
-    setConfirmationMessage(message);
+    setConfirmationMessage(
+      `Are you sure you want to reset report count for user ${selectedUser?.name}?`
+    );
     setOnConfirm(() => async () => {
       try {
-        // This expects your admin-update-user-status endpoint or a separate
-        // /reset-report-count endpoint. For example:
         await axios.put(
-          "http://localhost:3000/api/dashboard/admin-update-user-status",
+          `${API_BASE_URL}/reset-report-count`,
           {
-            userId: selectedUser.id,
-            action: "block", // or any valid action, but if you just want to reset reports:
-            resetReports: true, // so your backend sets report_count=0
+            type: "user",
+            id: selectedUser?.id,
           },
           { headers: { Authorization: `Bearer ${accessToken}` } }
         );
-        toast.success("Report count reset to 0");
+        toast.success("Report count reset successfully");
         fetchActiveUsers();
       } catch (error) {
-        toast.error("Failed to reset report count");
+        console.error("Reset report error:", error.response?.data);
+        toast.error(
+          error.response?.data?.message || "Failed to reset report count"
+        );
+      } finally {
+        setConfirmationModalVisible(false);
+        setActionModalVisible(false);
+        setSelectedUser(null);
       }
-      setConfirmationModalVisible(false);
-      setActionModalVisible(false);
-      setSelectedUser(null);
     });
     setConfirmationModalVisible(true);
   };
 
-  // =======================================================
-  // 7) Render
-  // =======================================================
   return (
     <div className="flex h-screen bg-gray-50 font-sans overflow-hidden">
       <ToastContainer />
-
       {/* Sidebar */}
       <div className="w-64 bg-white shadow-lg">
         <Sidebar />
       </div>
-
       {/* Main Content */}
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Header */}
@@ -307,52 +305,35 @@ const ActiveUser = () => {
                 </div>
               </div>
             </div>
-
-            {/* Stats Cards */}
+            {/* Dynamic Stats Cards */}
             <div className="grid grid-cols-4 gap-4 mb-6">
-              <div className="bg-gradient-to-r from-blue-500 to-blue-600 rounded-lg px-6 py-4 text-white shadow-lg">
-                <div className="flex items-center">
-                  <FaUsers className="text-3xl opacity-80" />
-                  <div className="ml-4">
-                    <p className="text-sm font-medium opacity-80">Total Users</p>
-                    <p className="text-2xl font-semibold">{stats.totalUsers}</p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="bg-gradient-to-r from-green-500 to-green-600 rounded-lg px-6 py-4 text-white shadow-lg">
-                <div className="flex items-center">
-                  <FaUserCheck className="text-3xl opacity-80" />
-                  <div className="ml-4">
-                    <p className="text-sm font-medium opacity-80">Active Users</p>
-                    <p className="text-2xl font-semibold">{stats.activeUsers}</p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="bg-gradient-to-r from-yellow-500 to-yellow-600 rounded-lg px-6 py-4 text-white shadow-lg">
-                <div className="flex items-center">
-                  <FaUserTimes className="text-3xl opacity-80" />
-                  <div className="ml-4">
-                    <p className="text-sm font-medium opacity-80">Inactive Users</p>
-                    <p className="text-2xl font-semibold">{stats.inactiveUsers}</p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="bg-gradient-to-r from-red-500 to-red-600 rounded-lg px-6 py-4 text-white shadow-lg">
-                <div className="flex items-center">
-                  <FaExclamationTriangle className="text-3xl opacity-80" />
-                  <div className="ml-4">
-                    <p className="text-sm font-medium opacity-80">Reported Users</p>
-                    <p className="text-2xl font-semibold">{stats.reportedUsers}</p>
-                  </div>
-                </div>
-              </div>
+              <StatsCard
+                icon={FaUsers}
+                label="Total Users"
+                value={stats.totalUsers}
+                bgClass="bg-gradient-to-r from-blue-500 to-blue-600"
+              />
+              <StatsCard
+                icon={FaUserCheck}
+                label="Active Users"
+                value={stats.activeUsers}
+                bgClass="bg-gradient-to-r from-green-500 to-green-600"
+              />
+              <StatsCard
+                icon={FaUserTimes}
+                label="Inactive Users"
+                value={stats.inactiveUsers}
+                bgClass="bg-gradient-to-r from-yellow-500 to-yellow-600"
+              />
+              <StatsCard
+                icon={FaExclamationTriangle}
+                label="Reported Users"
+                value={stats.reportedUsers}
+                bgClass="bg-gradient-to-r from-red-500 to-red-600"
+              />
             </div>
           </div>
         </div>
-
         {/* User Table */}
         <div className="flex-1 overflow-y-auto bg-white">
           <table className="w-full">
@@ -386,9 +367,7 @@ const ActiveUser = () => {
                     className="hover:bg-gray-50 transition-colors cursor-pointer"
                     onClick={() => handleUserClick(user)}
                   >
-                    <td className="px-6 py-4 text-sm text-gray-600">
-                      {user.s_n /* If your API returns s_n for numbering */}
-                    </td>
+                    <td className="px-6 py-4 text-sm text-gray-600">{user.s_n}</td>
                     <td className="px-6 py-4">
                       <div className="relative">
                         <img
@@ -400,7 +379,6 @@ const ActiveUser = () => {
                           alt={user.name}
                           className="w-10 h-10 rounded-full object-cover ring-2 ring-gray-100"
                         />
-                        {/* Example: user.is_online => green dot */}
                         {user.is_online && (
                           <div className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 rounded-full ring-2 ring-white"></div>
                         )}
@@ -422,7 +400,10 @@ const ActiveUser = () => {
                     </td>
                     <td className="px-6 py-4">
                       <button
-                        onClick={(e) => handleActionClick(e, user)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleActionClick(e, user);
+                        }}
                         className="text-gray-400 hover:text-gray-600 focus:outline-none"
                       >
                         <FaEllipsisV />
@@ -433,7 +414,6 @@ const ActiveUser = () => {
               )}
             </tbody>
           </table>
-
           {/* Pagination */}
           {!loading && filteredUsers.length > 0 && (
             <div className="px-6 py-4 flex items-center justify-between border-t border-gray-200">
@@ -456,14 +436,12 @@ const ActiveUser = () => {
                   entries
                 </span>
               </div>
-
               <div className="flex items-center space-x-2">
                 <span className="text-sm text-gray-700">
                   Showing {indexOfFirstUser + 1} to{" "}
                   {Math.min(indexOfLastUser, filteredUsers.length)} of{" "}
                   {filteredUsers.length} entries
                 </span>
-
                 <div className="flex items-center space-x-1">
                   <button
                     onClick={() => handlePageChange(currentPage - 1)}
@@ -476,21 +454,21 @@ const ActiveUser = () => {
                   >
                     <FaChevronLeft className="h-4 w-4" />
                   </button>
-
-                  {Array.from({ length: totalPages }, (_, i) => i + 1).map((number) => (
-                    <button
-                      key={number}
-                      onClick={() => handlePageChange(number)}
-                      className={`px-3 py-1 rounded-md ${
-                        number === currentPage
-                          ? "bg-blue-500 text-white"
-                          : "text-gray-700 hover:bg-gray-50"
-                      }`}
-                    >
-                      {number}
-                    </button>
-                  ))}
-
+                  {Array.from({ length: totalPages }, (_, i) => i + 1).map(
+                    (number) => (
+                      <button
+                        key={number}
+                        onClick={() => handlePageChange(number)}
+                        className={`px-3 py-1 rounded-md ${
+                          number === currentPage
+                            ? "bg-blue-500 text-white"
+                            : "text-gray-700 hover:bg-gray-50"
+                        }`}
+                      >
+                        {number}
+                      </button>
+                    )
+                  )}
                   <button
                     onClick={() => handlePageChange(currentPage + 1)}
                     disabled={currentPage === totalPages}
@@ -533,7 +511,6 @@ const ActiveUser = () => {
                       </button>
                     </div>
                   </div>
-
                   <div className="flex-1 px-4 py-6 sm:px-6 overflow-y-auto">
                     <div className="space-y-4">
                       {/* Info Card */}
@@ -548,115 +525,106 @@ const ActiveUser = () => {
                           className="w-16 h-16 rounded-full object-cover"
                         />
                         <div>
-                          <h3 className="font-medium text-gray-900">
-                            {selectedUser.name}
-                          </h3>
-                          <p className="text-sm text-gray-500">
-                            {selectedUser.email}
-                          </p>
+                          <h3 className="font-medium text-gray-900">{selectedUser.name}</h3>
+                          <p className="text-sm text-gray-500">{selectedUser.email}</p>
                           <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 mt-2">
                             Active
                           </span>
                         </div>
                       </div>
-
-                      {/* Check booleans for dynamic Block/Unblock */}
-                      {selectedUser.is_blocked ? (
+                      {/* Actions */}
+                      <div className="space-y-3">
+                        {selectedUser.is_blocked ? (
+                          <button
+                            onClick={() => handleBlockOrSuspend("unblock")}
+                            className="w-full flex items-center justify-between px-4 py-3 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                          >
+                            <div className="flex items-center">
+                              <FaUndo className="text-green-500 mr-3" />
+                              <div className="text-left">
+                                <div className="font-medium">Unblock User</div>
+                                <div className="text-sm text-gray-500">
+                                  Allow user to re-access the platform
+                                </div>
+                              </div>
+                            </div>
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => handleBlockOrSuspend("block")}
+                            className="w-full flex items-center justify-between px-4 py-3 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                          >
+                            <div className="flex items-center">
+                              <FaUserLock className="text-red-500 mr-3" />
+                              <div className="text-left">
+                                <div className="font-medium">Block User</div>
+                                <div className="text-sm text-gray-500">
+                                  Prevent user from accessing the platform
+                                </div>
+                              </div>
+                            </div>
+                          </button>
+                        )}
+                        {selectedUser.is_suspended ? (
+                          <button
+                            onClick={() => handleBlockOrSuspend("unsuspend")}
+                            className="w-full flex items-center justify-between px-4 py-3 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                          >
+                            <div className="flex items-center">
+                              <FaUndo className="text-green-500 mr-3" />
+                              <div className="text-left">
+                                <div className="font-medium">Unsuspend User</div>
+                                <div className="text-sm text-gray-500">
+                                  Lift suspension from the user
+                                </div>
+                              </div>
+                            </div>
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => handleBlockOrSuspend("suspend")}
+                            className="w-full flex items-center justify-between px-4 py-3 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                          >
+                            <div className="flex items-center">
+                              <FaUserClock className="text-yellow-500 mr-3" />
+                              <div className="text-left">
+                                <div className="font-medium">Suspend User</div>
+                                <div className="text-sm text-gray-500">
+                                  Temporarily restrict user access
+                                </div>
+                              </div>
+                            </div>
+                          </button>
+                        )}
                         <button
-                          onClick={() => handleBlockOrSuspend("unblock")}
+                          onClick={handleResetReportCount}
                           className="w-full flex items-center justify-between px-4 py-3 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
                         >
                           <div className="flex items-center">
-                            <FaUndo className="text-green-500 mr-3" />
+                            <FaUndo className="text-blue-500 mr-3" />
                             <div className="text-left">
-                              <div className="font-medium">Unblock User</div>
+                              <div className="font-medium">Reset Report Count</div>
                               <div className="text-sm text-gray-500">
-                                Allow user to re-access the platform
+                                Set report count to 0
                               </div>
                             </div>
                           </div>
                         </button>
-                      ) : (
                         <button
-                          onClick={() => handleBlockOrSuspend("block")}
+                          onClick={handleDelete}
                           className="w-full flex items-center justify-between px-4 py-3 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
                         >
                           <div className="flex items-center">
-                            <FaUserLock className="text-red-500 mr-3" />
+                            <FaUserMinus className="text-gray-500 mr-3" />
                             <div className="text-left">
-                              <div className="font-medium">Block User</div>
+                              <div className="font-medium">Delete User</div>
                               <div className="text-sm text-gray-500">
-                                Prevent user from accessing the platform
+                                Permanently remove user account
                               </div>
                             </div>
                           </div>
                         </button>
-                      )}
-
-                      {/* Check booleans for dynamic Suspend/Unsuspend */}
-                      {selectedUser.is_suspended ? (
-                        <button
-                          onClick={() => handleBlockOrSuspend("unsuspend")}
-                          className="w-full flex items-center justify-between px-4 py-3 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
-                        >
-                          <div className="flex items-center">
-                            <FaUndo className="text-green-500 mr-3" />
-                            <div className="text-left">
-                              <div className="font-medium">Unsuspend User</div>
-                              <div className="text-sm text-gray-500">
-                                Lift suspension from the user
-                              </div>
-                            </div>
-                          </div>
-                        </button>
-                      ) : (
-                        <button
-                          onClick={() => handleBlockOrSuspend("suspend")}
-                          className="w-full flex items-center justify-between px-4 py-3 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
-                        >
-                          <div className="flex items-center">
-                            <FaUserClock className="text-yellow-500 mr-3" />
-                            <div className="text-left">
-                              <div className="font-medium">Suspend User</div>
-                              <div className="text-sm text-gray-500">
-                                Temporarily restrict user access
-                              </div>
-                            </div>
-                          </div>
-                        </button>
-                      )}
-
-                      {/* Reset Report Count */}
-                      <button
-                        onClick={handleResetReportCount}
-                        className="w-full flex items-center justify-between px-4 py-3 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
-                      >
-                        <div className="flex items-center">
-                          <FaUndo className="text-blue-500 mr-3" />
-                          <div className="text-left">
-                            <div className="font-medium">Reset Report Count</div>
-                            <div className="text-sm text-gray-500">
-                              Set report count to 0
-                            </div>
-                          </div>
-                        </div>
-                      </button>
-
-                      {/* Delete User */}
-                      <button
-                        onClick={handleDelete}
-                        className="w-full flex items-center justify-between px-4 py-3 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
-                      >
-                        <div className="flex items-center">
-                          <FaUserMinus className="text-gray-500 mr-3" />
-                          <div className="text-left">
-                            <div className="font-medium">Delete User</div>
-                            <div className="text-sm text-gray-500">
-                              Permanently remove user account
-                            </div>
-                          </div>
-                        </div>
-                      </button>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -665,8 +633,7 @@ const ActiveUser = () => {
           </div>
         </div>
       )}
-
-      {/* Duration/Reason Modal for block / suspend */}
+      {/* Duration/Reason Modal for block/suspend */}
       {durationModalVisible && (
         <div className="fixed inset-0 overflow-hidden z-50">
           <div className="absolute inset-0 overflow-hidden">
@@ -681,8 +648,6 @@ const ActiveUser = () => {
                     <h3 className="text-lg font-medium text-gray-900 mb-4">
                       {selectedAction === "block" ? "Block" : "Suspend"} User
                     </h3>
-
-                    {/* Reason */}
                     <div className="mb-4">
                       <label className="block text-sm font-medium text-gray-700 mb-2">
                         Reason
@@ -695,8 +660,6 @@ const ActiveUser = () => {
                         rows="3"
                       />
                     </div>
-
-                    {/* Duration */}
                     <div className="mb-6">
                       <label className="block text-sm font-medium text-gray-700 mb-2">
                         Duration
@@ -728,7 +691,6 @@ const ActiveUser = () => {
                         ))}
                       </div>
                     </div>
-
                     <div className="flex space-x-3">
                       <button
                         onClick={handleSubmitAction}
@@ -754,7 +716,6 @@ const ActiveUser = () => {
           </div>
         </div>
       )}
-
       {/* Confirmation Modal */}
       {confirmationModalVisible && (
         <div className="fixed inset-0 overflow-y-auto z-50">
