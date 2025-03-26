@@ -16,6 +16,9 @@ import Button from "../../components/Button";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { userAuth } from "../../contexts/AuthContext";
 import { StatusBar } from "expo-status-bar";
+import { theme } from "../../constants/theme";
+import ScreenWrapper from "../../components/ScreenWrapper";
+import Header from "../../components/Header";
 
 const ChangePassword = () => {
      const { authToken  } = userAuth(); 
@@ -76,94 +79,98 @@ const ChangePassword = () => {
   };
 
   return (
-    <View style={styles.container}>
-       <StatusBar style="dark" />
-      {/* Header with Back Button and Title */}
-      <View style={styles.header}>
-        <BackButton size={24} />
-        <Text style={styles.headerTitle}>Change Password</Text>
-      </View>
+    <ScreenWrapper>
+      <StatusBar style="dark" />
+      <View style={styles.container}>
+        <Header title="Change Password" showBackButton={true} />
+        
+        <View style={styles.content}>
+          <View style={styles.card}>
+            {/* Current Password Field */}
+            <View style={styles.field}>
+              <Text style={styles.label}>Current Password</Text>
+              <View style={styles.inputContainer}>
+                <TextInput
+                  style={styles.input}
+                  value={currentPassword}
+                  onChangeText={setCurrentPassword}
+                  secureTextEntry={hideCurrentPassword}
+                  placeholder="Enter current password"
+                  placeholderTextColor={theme.colors.gray}
+                />
+                <TouchableOpacity
+                  onPress={() => setHideCurrentPassword(!hideCurrentPassword)}
+                  style={styles.eyeIcon}
+                >
+                  <Icon
+                    name={hideCurrentPassword ? "eye-off" : "eye"}
+                    size={20}
+                    color={theme.colors.gray}
+                  />
+                </TouchableOpacity>
+              </View>
+            </View>
 
-      {/* Current Password Field */}
-      <View style={styles.field}>
-        <Text style={styles.label}>Current Password</Text>
-        <View style={styles.inputContainer}>
-          <TextInput
-            style={styles.input}
-            value={currentPassword}
-            onChangeText={setCurrentPassword}
-            secureTextEntry={hideCurrentPassword}
-            placeholder="Enter current password"
-            placeholderTextColor="#999"
+            {/* New Password Field */}
+            <View style={styles.field}>
+              <Text style={styles.label}>New Password</Text>
+              <View style={styles.inputContainer}>
+                <TextInput
+                  style={styles.input}
+                  value={newPassword}
+                  onChangeText={setNewPassword}
+                  secureTextEntry={hideNewPassword}
+                  placeholder="Enter new password"
+                  placeholderTextColor={theme.colors.gray}
+                />
+                <TouchableOpacity
+                  onPress={() => setHideNewPassword(!hideNewPassword)}
+                  style={styles.eyeIcon}
+                >
+                  <Icon
+                    name={hideNewPassword ? "eye-off" : "eye"}
+                    size={20}
+                    color={theme.colors.gray}
+                  />
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            {/* Confirm Password Field */}
+            <View style={[styles.field, styles.lastField]}>
+              <Text style={styles.label}>Confirm Password</Text>
+              <View style={styles.inputContainer}>
+                <TextInput
+                  style={styles.input}
+                  value={confirmPassword}
+                  onChangeText={setConfirmPassword}
+                  secureTextEntry={hideConfirmPassword}
+                  placeholder="Confirm new password"
+                  placeholderTextColor={theme.colors.gray}
+                />
+                <TouchableOpacity
+                  onPress={() => setHideConfirmPassword(!hideConfirmPassword)}
+                  style={styles.eyeIcon}
+                >
+                  <Icon
+                    name={hideConfirmPassword ? "eye-off" : "eye"}
+                    size={20}
+                    color={theme.colors.gray}
+                  />
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+
+          <Button
+            title="Change Password"
+            onPress={handleChangePassword}
+            buttonStyle={styles.button}
+            textStyle={styles.buttonText}
           />
-          <TouchableOpacity
-            onPress={() => setHideCurrentPassword(!hideCurrentPassword)}
-          >
-            <Icon
-              name={hideCurrentPassword ? "eye-off" : "eye"}
-              size={20}
-              color="#888"
-            />
-          </TouchableOpacity>
         </View>
       </View>
-
-      {/* New Password Field */}
-      <View style={styles.field}>
-        <Text style={styles.label}>New Password</Text>
-        <View style={styles.inputContainer}>
-          <TextInput
-            style={styles.input}
-            value={newPassword}
-            onChangeText={setNewPassword}
-            secureTextEntry={hideNewPassword}
-            placeholder="Enter new password"
-            placeholderTextColor="#999"
-          />
-          <TouchableOpacity
-            onPress={() => setHideNewPassword(!hideNewPassword)}
-          >
-            <Icon
-              name={hideNewPassword ? "eye-off" : "eye"}
-              size={20}
-              color="#888"
-            />
-          </TouchableOpacity>
-        </View>
-      </View>
-
-      {/* Confirm Password Field */}
-      <View style={styles.field}>
-        <Text style={styles.label}>Confirm Password</Text>
-        <View style={styles.inputContainer}>
-          <TextInput
-            style={styles.input}
-            value={confirmPassword}
-            onChangeText={setConfirmPassword}
-            secureTextEntry={hideConfirmPassword}
-            placeholder="Confirm new password"
-            placeholderTextColor="#999"
-          />
-          <TouchableOpacity
-            onPress={() => setHideConfirmPassword(!hideConfirmPassword)}
-          >
-            <Icon
-              name={hideConfirmPassword ? "eye-off" : "eye"}
-              size={20}
-              color="#888"
-            />
-          </TouchableOpacity>
-        </View>
-      </View>
-
-      {/* Change Password Button using Custom Button Component */}
-      <Button
-        title="Change Password"
-        onPress={handleChangePassword}
-        buttonStyle={styles.customButton}
-        textStyle={styles.customButtonText}
-      />
-    </View>
+    </ScreenWrapper>
   );
 };
 
@@ -172,51 +179,69 @@ export default ChangePassword;
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#F7F8FA",
-    padding: 16,
   },
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 24,
-  },
-  headerTitle: {
+  content: {
     flex: 1,
-    textAlign: "center",
-    fontSize: 24,
-    fontWeight: "700",
-    color: "#000",
-    marginRight: 32, // Provides space to balance the back button on the left
+    paddingHorizontal: 16,
+    paddingTop: 20,
+  },
+  card: {
+    backgroundColor: theme.colors.white,
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 24,
+    shadowColor: "#000",
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.05,
+    shadowRadius: 3.84,
+    elevation: 5,
   },
   field: {
     marginBottom: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(0,0,0,0.05)",
+    paddingBottom: 20,
+  },
+  lastField: {
+    marginBottom: 0,
+    borderBottomWidth: 0,
+    paddingBottom: 0,
   },
   label: {
-    fontSize: 16,
-    color: "#000",
-    marginBottom: 5,
+    fontSize: 14,
+    fontWeight: "600",
+    color: theme.colors.textLight,
+    marginBottom: 8,
   },
   inputContainer: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#fff",
-    borderWidth: 1,
-    borderColor: "#ccc",
+    backgroundColor: theme.colors.background,
     borderRadius: 8,
-    paddingHorizontal: 10,
+    borderWidth: 1,
+    borderColor: "rgba(0,0,0,0.1)",
   },
   input: {
     flex: 1,
     height: 48,
+    paddingHorizontal: 16,
     fontSize: 16,
-    color: "#000",
+    color: theme.colors.text,
   },
-  // Optional custom styles for the Button component
-  customButton: {
-    marginTop: 10,
+  eyeIcon: {
+    padding: 12,
   },
-  customButtonText: {
-    fontSize: 18,
-    fontWeight: "700",
+  button: {
+    marginTop: 'auto',
+    marginBottom: 30,
+    borderRadius: 12,
+    height: 56,
+  },
+  buttonText: {
+    fontSize: 16,
+    fontWeight: "600",
   },
 });

@@ -29,8 +29,8 @@ axios.interceptors.response.use(
 
 const Setting = () => {
   const router = useRouter();
-  const auth = userAuth(); 
-  const { logout } = auth; 
+  const auth = userAuth();
+  const { logout } = auth;
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
 
@@ -48,21 +48,66 @@ const Setting = () => {
 
   const handleLogout = async () => {
     try {
-        setIsLoading(true);
-        
-        // Remove authToken from AsyncStorage
-        await AsyncStorage.removeItem("authToken");
+      setIsLoading(true);
 
-        // Navigate to login screen
-        router.replace("/login");
+      // Remove authToken from AsyncStorage
+      await AsyncStorage.removeItem("authToken");
+
+      // Navigate to login screen
+      router.replace("/login");
     } catch (error) {
-        console.error("Logout Error:", error);
-        Alert.alert("Error", "Failed to logout. Please try again.");
+      console.error("Logout Error:", error);
+      Alert.alert("Error", "Failed to logout. Please try again.");
     } finally {
-        setIsLoading(false);
+      setIsLoading(false);
     }
-};
-
+  };
+  const settingsGroups = [
+    {
+      title: "Account",
+      options: [
+        {
+          title: "Change Password",
+          route: "/changePassword",
+        },
+        {
+          title: "Update Profile",
+          route: "/updateProfile",
+        },
+        {
+          title: "Handle Account",
+          route: "/handleAccount",
+        },
+        {
+          title: "Destination",
+          route: "/destination",
+        },
+      ],
+    },
+    {
+      title: "Privacy & Safety",
+      options: [
+        {
+          title: "Blocked Users",
+          route: "/blockedUser",
+        },
+        
+      ],
+    },
+    {
+      title: "About",
+      options: [
+        {
+          title: "Privacy Policy",
+          route: "/privacyPolicy",
+        },
+        {
+          title: "Terms and Conditions",
+          route: "/termsAndCondition",
+        },
+      ],
+    },
+  ];
 
   return (
     <ScreenWrapper>
@@ -75,73 +120,42 @@ const Setting = () => {
               <Text>Loading...</Text>
             </View>
           ) : (
-            <>
-              <TouchableOpacity
-                style={styles.option}
-                onPress={() => router.push("/changePassword")}
-              >
-                <Text style={styles.optionText}>Change Password</Text>
-              </TouchableOpacity>
+            <View style={styles.content}>
+              {settingsGroups.map((group, groupIndex) => (
+                <View key={group.title} style={styles.groupContainer}>
+                  <Text style={styles.groupTitle}>{group.title}</Text>
+                  <View style={styles.optionsContainer}>
+                    {group.options.map((option, index) => (
+                      <TouchableOpacity
+                        key={option.route}
+                        style={[
+                          styles.option,
+                          index === group.options.length - 1 && styles.lastOption,
+                        ]}
+                        onPress={() => router.push(option.route)}
+                      >
+                        <Text style={styles.optionText}>{option.title}</Text>
+                        <Text style={styles.chevron}>›</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                </View>
+              ))}
 
               <TouchableOpacity
-                style={styles.option}
-                onPress={() => router.push("/privacyPolicy")}
-              >
-                <Text style={styles.optionText}>Privacy Policy</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.option}
-                onPress={() => router.push("/termsAndCondition")}
-              >
-                <Text style={styles.optionText}>Terms and Conditions</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.option}
-                onPress={() => router.push("/destination")}
-              >
-                <Text style={styles.optionText}>Destination</Text>
-              </TouchableOpacity>
-
-              <View style={styles.option}>
-                <Text style={styles.optionText}>Notifications</Text>
-                <Switch
-                  value={notificationsEnabled}
-                  onValueChange={toggleNotifications}
-                />
-              </View>
-
-              <TouchableOpacity
-                style={styles.option}
-                onPress={() => router.push("/updateProfile")}
-              >
-                <Text style={styles.optionText}>Update Profile</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.option}
-                onPress={() => router.push("/blockedUser")}
-              >
-                <Text style={styles.optionText}>Blocked</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.option}
-                onPress={confirmLogout} // ✅ Call confirmLogout instead
+                style={styles.logoutButton}
+                onPress={confirmLogout}
                 disabled={isLoading}
               >
-                <Text style={styles.optionText}>Logout</Text>
+                <Text style={styles.logoutText}>Logout</Text>
               </TouchableOpacity>
-            </>
+            </View>
           )}
         </View>
       </View>
     </ScreenWrapper>
   );
 };
-
-export default Setting;
 
 const styles = StyleSheet.create({
   container: {
@@ -150,23 +164,83 @@ const styles = StyleSheet.create({
   },
   body: {
     flex: 1,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
+  },
+  content: {
+    flex: 1,
+    paddingTop: 12,
   },
   loadingContainer: {
+    flex: 1,
     justifyContent: "center",
     alignItems: "center",
+  },
+  groupContainer: {
+    marginBottom: 24,
+  },
+  groupTitle: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: theme.colors.textLight,
+    marginLeft: 16,
+    marginBottom: 8,
+    textTransform: "uppercase",
+  },
+  optionsContainer: {
+    backgroundColor: theme.colors.white,
+    borderRadius: 12,
+    marginHorizontal: 16,
+    shadowColor: "#000",
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.05,
+    shadowRadius: 3.84,
+    elevation: 5,
   },
   option: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    paddingVertical: 15,
+    paddingVertical: 16,
+    paddingHorizontal: 16,
     borderBottomWidth: 1,
-    borderBottomColor: "#ddd",
+    borderBottomColor: "rgba(0,0,0,0.05)",
+  },
+  lastOption: {
+    borderBottomWidth: 0,
   },
   optionText: {
     fontSize: 16,
-    color: "#000",
+    color: theme.colors.text,
+    fontWeight: "500",
+  },
+  chevron: {
+    fontSize: 20,
+    color: theme.colors.gray,
+  },
+  logoutButton: {
+    backgroundColor: theme.colors.white,
+    marginHorizontal: 16,
+    borderRadius: 12,
+    padding: 16,
+    marginTop: "auto",
+    marginBottom: 30,
+    shadowColor: "#000",
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.05,
+    shadowRadius: 3.84,
+    elevation: 5,
+  },
+  logoutText: {
+    color: theme.colors.danger,
+    textAlign: "center",
+    fontSize: 16,
+    fontWeight: "600",
   },
 });
+
+export default Setting;

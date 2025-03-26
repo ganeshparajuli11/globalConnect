@@ -24,6 +24,7 @@ import Message from "./components/message/Message";
 import ChatPage from "./components/message/ChatPage";
 import AdminManagement from "./components/admin/AdminManagement";
 import SendEmail from "./components/email/SendEmail";
+import ReportedPost from "./components/post/ReportedPost";
 
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -96,6 +97,7 @@ function App() {
 
 
         <Route path="/user/active" element={<ActiveUser />} />
+        <Route path="/posts/report" element={<ReportedPost />} />
         <Route path="/user/inActive" element={<InActiveUser />} />
         <Route path="/user/blocked" element={<BlockedUser />} />
         <Route path="/user/reported" element={<ReportedUser />} />

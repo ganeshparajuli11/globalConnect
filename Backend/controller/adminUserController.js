@@ -11,7 +11,7 @@ const initializeInactiveUsersCleanup = () => {
   setInterval(async () => {
     try {
       const thirtyDaysAgo = moment().subtract(30, "days").toDate();
-      
+
       await User.updateMany(
         {
           last_activity: { $lt: thirtyDaysAgo },
@@ -23,7 +23,7 @@ const initializeInactiveUsersCleanup = () => {
           $set: { status: "Long-term Inactive" }
         }
       );
-      
+
       console.log("✅ Updated long-term inactive users status");
     } catch (error) {
       console.error("❌ Error in inactive users cleanup job:", error);
@@ -77,7 +77,7 @@ const getUserStats = async (req, res) => {
     const postStats = {
       totalPosts: await Post.countDocuments({ status: { $ne: "Deleted" } }),
       activePosts: await Post.countDocuments({ status: "Active" }),
-      reportedPosts: await Post.countDocuments({ 
+      reportedPosts: await Post.countDocuments({
         'reports.0': { $exists: true },
         status: { $ne: "Deleted" }
       }),
@@ -89,7 +89,7 @@ const getUserStats = async (req, res) => {
     };
 
     // 3. Engagement Metrics
-    const posts = await Post.find({ 
+    const posts = await Post.find({
       status: "Active",
       createdAt: { $gte: thirtyDaysAgo }
     });
@@ -107,7 +107,7 @@ const getUserStats = async (req, res) => {
     });
 
     const postAnalytics = {
-      engagement: posts.length ? 
+      engagement: posts.length ?
         Math.round(((totalLikes + totalComments + totalShares) / (posts.length * Math.max(totalViews, 1))) * 100) : 0,
       avgLikes: posts.length ? Math.round(totalLikes / posts.length) : 0,
       avgComments: posts.length ? Math.round(totalComments / posts.length) : 0,
@@ -154,11 +154,13 @@ const getUserStats = async (req, res) => {
         $project: {
           _id: 1,
           title: { $ifNull: ["$text_content", ""] },
-          thumbnail: { $cond: {
-            if: { $gt: [{ $size: "$media" }, 0] },
-            then: { $arrayElemAt: ["$media.media_path", 0] },
-            else: null
-          }},
+          thumbnail: {
+            $cond: {
+              if: { $gt: [{ $size: "$media" }, 0] },
+              then: { $arrayElemAt: ["$media.media_path", 0] },
+              else: null
+            }
+          },
           likes: { $size: { $ifNull: ["$likes", []] } },
           comments: { $size: { $ifNull: ["$comments", []] } },
           shares: { $ifNull: ["$shares", 0] },
@@ -235,7 +237,7 @@ const getUserStats = async (req, res) => {
     // 6. Popular Tags
     const popularTags = await Post.aggregate([
       {
-        $match: { 
+        $match: {
           status: { $ne: "Deleted" },
           tags: { $exists: true, $ne: [] }
         }
@@ -313,7 +315,7 @@ const getUserStats = async (req, res) => {
           _id: 1,
           title: { $ifNull: ["$text_content", ""] },
           content: "$text_content",
-          thumbnail: { 
+          thumbnail: {
             $cond: {
               if: { $gt: [{ $size: "$media" }, 0] },
               then: { $arrayElemAt: ["$media.media_path", 0] },
@@ -352,9 +354,9 @@ const getUserStats = async (req, res) => {
 
   } catch (error) {
     console.error("Error retrieving dashboard statistics:", error);
-    return res.status(500).json({ 
+    return res.status(500).json({
       message: "Error retrieving dashboard statistics",
-      error: error.message 
+      error: error.message
     });
   }
 };
@@ -885,174 +887,242 @@ const sendEmail = async (email, subject, message) => {
 };
 
 
-// Controller to block/suspend/delete user
 const manageUserStatus = async (req, res) => {
   try {
+    console.log("Step 1: Extracting data from request body.");
     const {
       userId,
-      action,       // block | suspend | delete
+      action,       // block | suspend | delete | unblock | unsuspend
       reason,
-      duration,     // 1w | 1m | 6m | permanent (required if block/suspend)
+      duration,     // 1w | 1m | 6m | permanent (for block/suspend)
       resetReports, // optional boolean
     } = req.body;
 
-    const validActions = ["block", "suspend", "delete"];
+    console.log("Step 2: Validating action and duration.");
+    const validActions = ["block", "suspend", "delete", "unblock", "unsuspend"];
     const validDurations = ["1w", "1m", "6m", "permanent"];
 
-    // Validate action
     if (!validActions.includes(action)) {
-      return res.status(400).json({ message: "Invalid action." });
+      return res.status(400).json({ message: "Invalid action type." });
     }
-
-    // If block or suspend, duration is required
     if ((action === "block" || action === "suspend") && !validDurations.includes(duration)) {
-      return res
-        .status(400)
-        .json({ message: "Invalid or missing duration for block/suspend." });
+      return res.status(400).json({ message: "Invalid or missing duration." });
     }
 
-    // Find user
+    console.log("Step 3: Finding user by ID:", userId);
     const user = await User.findById(userId);
     if (!user) {
+      console.log("User not found, returning 404.");
       return res.status(404).json({ message: "User not found." });
     }
+    console.log("User found:", user.email);
 
-    let updatedStatus;
+    const updateFields = {};
+    let updatedStatus = "";
     let unblockDate = null;
 
-    // Calculate the unblock date if block or suspend
-    if (duration === "1w") {
-      unblockDate = moment().add(1, "weeks").toDate();
-    } else if (duration === "1m") {
-      unblockDate = moment().add(1, "months").toDate();
-    } else if (duration === "6m") {
-      unblockDate = moment().add(6, "months").toDate();
-    } else if (duration === "permanent") {
-      unblockDate = null; // indefinite
+    // Step 4: If blocking or suspending, calculate the unblock date
+    if (["block", "suspend"].includes(action)) {
+      console.log("Step 4: Calculating unblock date for block/suspend action.");
+      if (duration === "1w") unblockDate = moment().add(1, "weeks").toDate();
+      else if (duration === "1m") unblockDate = moment().add(1, "months").toDate();
+      else if (duration === "6m") unblockDate = moment().add(6, "months").toDate();
+      else if (duration === "permanent") unblockDate = null;
     }
 
-    // Build update fields
-    const updateFields = {};
+    console.log("Step 5: Building update fields based on action:", action);
+    switch (action) {
+      case "block":
+        updatedStatus = "Blocked";
+        updateFields.is_blocked = true;
+        updateFields.block_reason = reason || "No reason provided";
+        updateFields.unblock_date = unblockDate;
+        // Clear suspension if blocking
+        updateFields.is_suspended = false;
+        updateFields.suspend_reason = null;
+        updateFields.suspended_until = null;
+        updateFields.status = "Blocked";
+        break;
 
-    // Switch on action
-    if (action === "block") {
-      updatedStatus = "Blocked";
-      updateFields.is_blocked = true;
-      updateFields.block_reason = reason || "No reason provided";
-      updateFields.unblock_date = unblockDate;
-      // Also ensure user is not suspended if we are blocking them
-      updateFields.is_suspended = false;
-      updateFields.suspend_reason = null;
-      updateFields.suspended_until = null;
-      // Optionally set user.status = "Blocked" if you like
+      case "suspend":
+        updatedStatus = "Suspended";
+        updateFields.is_suspended = true;
+        updateFields.suspend_reason = reason || "No reason provided";
+        updateFields.suspended_until = unblockDate;
+        // Clear block if suspending
+        updateFields.is_blocked = false;
+        updateFields.block_reason = null;
+        updateFields.unblock_date = null;
+        updateFields.status = "Suspended";
+        break;
 
-    } else if (action === "suspend") {
-      updatedStatus = "Suspended";
-      updateFields.is_suspended = true;
-      updateFields.suspend_reason = reason || "No reason provided";
-      updateFields.suspended_until = unblockDate;
-      // Also ensure user is not blocked if we are suspending them
-      updateFields.is_blocked = false;
-      updateFields.block_reason = null;
-      updateFields.unblock_date = null;
-      // Optionally set user.status = "Suspended"
+      case "unblock":
+        updatedStatus = "Active";
+        updateFields.is_blocked = false;
+        updateFields.block_reason = null;
+        updateFields.unblock_date = null;
+        updateFields.status = "Active";
+        break;
 
-      updateFields.status = "Suspended";
+      case "unsuspend":
+        updatedStatus = "Active";
+        updateFields.is_suspended = false;
+        updateFields.suspend_reason = null;
+        updateFields.suspended_until = null;
+        updateFields.status = "Active";
+        break;
 
-    } else if (action === "delete") {
-      updatedStatus = "Deleted";
-      updateFields.is_deleted = true;
-      updateFields.delete_reason = reason || "No reason provided";
-      // Optionally set user.status = "Deleted"
-      updateFields.status = "Deleted";
-      // Make sure to remove block/suspend if you prefer
-      updateFields.is_blocked = false;
-      updateFields.is_suspended = false;
+      case "delete":
+        updatedStatus = "Deleted";
+        updateFields.is_deleted = true;
+        updateFields.deleted_at = new Date();
+        updateFields.status = "Deleted";
+        updateFields.delete_reason = reason || "User deleted by admin";
+        // Clear block/suspend
+        updateFields.is_blocked = false;
+        updateFields.is_suspended = false;
+        updateFields.block_reason = null;
+        updateFields.suspend_reason = null;
+        updateFields.unblock_date = null;
+        updateFields.suspended_until = null;
+        break;
     }
 
-    // Optionally reset the user's reported_count or report_count
     if (resetReports === true) {
-      updateFields.report_count = 0; 
-      // or updateFields.reported_count = 0 if your schema uses that
+      console.log("Step 6: Resetting user's report count as requested.");
+      updateFields.report_count = 0;
+      updateFields.reported_count = 0;
     }
 
-    // Perform the update
+    // Step 7: Apply the updates
+    console.log("Step 7: Updating user with new fields:", updateFields);
     await User.findByIdAndUpdate(userId, updateFields, { new: true });
 
-    // Send email
+    // Step 8: Prepare the HTML email
+    console.log("Step 8: Composing HTML email content.");
     const emailSubject = `Your account has been ${updatedStatus}`;
     const emailHTML = `
+      <!DOCTYPE html>
       <html lang="en">
       <head>
-          <meta charset="UTF-8">
-          <meta name="viewport" content="width=device-width, initial-scale=1.0">
-          <title>Account Status Update</title>
-          <style>
-              body {
-                  font-family: Arial, sans-serif;
-                  background-color: #f4f4f9;
-                  margin: 0;
-                  padding: 0;
-              }
-              .email-container {
-                  max-width: 600px;
-                  margin: 20px auto;
-                  background-color: #ffffff;
-                  border-radius: 8px;
-                  box-shadow: 0 0 15px rgba(0, 0, 0, 0.1);
-                  padding: 30px;
-              }
-              h1 {
-                  font-size: 22px;
-                  color: #333333;
-              }
-              p {
-                  font-size: 16px;
-                  color: #555555;
-                  line-height: 1.6;
-              }
-              .email-footer {
-                  margin-top: 40px;
-                  text-align: center;
-              }
-              .footer-logo {
-                  font-size: 24px;
-                  font-weight: bold;
-              }
-              .footer-logo span {
-                  color: #4F46E5; /* Global color */
-              }
-              .footer-logo .black {
-                  color: #000000; /* Connect color */
-              }
-              .email-footer p {
-                  color: #888888;
-                  font-size: 14px;
-              }
-          </style>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+        <title>Account Status Update</title>
+        <style>
+          body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f4f4f9;
+            margin: 0;
+            padding: 0;
+          }
+          .email-container {
+            max-width: 600px;
+            margin: 40px auto;
+            background: #ffffff;
+            border-radius: 10px;
+            overflow: hidden;
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.08);
+          }
+          .header {
+            background: linear-gradient(135deg, #4F46E5, #3B82F6);
+            padding: 30px 20px;
+            color: #ffffff;
+            text-align: center;
+          }
+          .header h1 {
+            margin: 0;
+            font-size: 24px;
+          }
+          .content {
+            padding: 30px 25px;
+            color: #333333;
+          }
+          .content h2 {
+            margin-top: 0;
+            color: #4F46E5;
+          }
+          .reason-box {
+            background: #f1f5ff;
+            border-left: 5px solid #4F46E5;
+            padding: 15px;
+            margin: 20px 0;
+            font-style: italic;
+          }
+          .footer {
+            background: #f9fafb;
+            padding: 20px;
+            text-align: center;
+            font-size: 13px;
+            color: #888;
+          }
+          .logo {
+            font-size: 22px;
+            font-weight: bold;
+            margin-bottom: 5px;
+          }
+          .logo span:first-child {
+            color: #4F46E5;
+          }
+          .logo span:last-child {
+            color: #000;
+          }
+        </style>
       </head>
       <body>
-          <div class="email-container">
-              <h1>Your account status has been updated</h1>
-              <p>Dear <strong>${user.name}</strong>,</p>
-              <p>Your account has been <strong>${updatedStatus}</strong> for the following reason:</p>
-              <blockquote style="background-color: #f9f9f9; padding: 10px; border-left: 5px solid #4F46E5; font-style: italic; margin-top: 20px;">
-                  ${reason || "No reason provided"}
-              </blockquote>
-              <p>If you have any questions, please contact support.</p>
-              <div class="email-footer">
-                  <div class="footer-logo">
-                      <span>Global</span><span class="black">Connect</span>
-                  </div>
-                  <p>&copy; 2025 GlobalConnect. All rights reserved.</p>
-              </div>
+        <div class="email-container">
+          <div class="header">
+            <h1>Account ${updatedStatus}</h1>
           </div>
+          <div class="content">
+            <h2>Hello ${user.name},</h2>
+            <p>Your account has been <strong>${updatedStatus}</strong>${
+              reason ? ` for the following reason:` : "."
+            }</p>
+            ${
+              reason
+                ? `<div class="reason-box">${reason}</div>`
+                : ""
+            }
+            ${
+              unblockDate
+                ? `<p>This action is effective until <strong>${moment(unblockDate).format("MMMM D, YYYY")}</strong>.</p>`
+                : ""
+            }
+            <p>If you believe this was a mistake or have any questions, feel free to reach out to our support team.</p>
+            <p>Thank you,<br/>The <strong>GlobalConnect</strong> Team</p>
+          </div>
+          <div class="footer">
+            <div class="logo">
+              <span>Global</span><span>Connect</span>
+            </div>
+            <p>&copy; ${new Date().getFullYear()} GlobalConnect. All rights reserved.</p>
+          </div>
+        </div>
       </body>
       </html>
     `;
 
-    await sendEmail(user.email, emailSubject, emailHTML);
+    // Step 9: Configure transporter and send email
+    console.log("Step 9: Configuring Nodemailer transporter.");
+    const transporter = nodemailer.createTransport({
+      service: "Gmail",
+      auth: {
+        user: process.env.EMAIL,
+        pass: process.env.EMAIL_PASSWORD,
+      },
+    });
 
+    console.log("Step 10: Sending email to:", user.email);
+    await transporter.sendMail({
+      from: process.env.EMAIL,
+      to: user.email,
+      subject: emailSubject,
+      html: emailHTML,
+    });
+    console.log("Email sent successfully.");
+
+    // Step 11: Respond to the client
+    console.log("Step 11: Sending success response.");
     return res.status(200).json({
       message: `User has been ${updatedStatus} successfully.`,
       data: {
@@ -1071,6 +1141,8 @@ const manageUserStatus = async (req, res) => {
     });
   }
 };
+
+
 const removeSuspensionOrBlock = async (req, res) => {
   try {
     const { userId, status } = req.body; // "Blocked" or "Suspended"
@@ -1167,13 +1239,13 @@ const getPostStats = async (req, res) => {
 
     // Basic post counts
     const totalPosts = await Post.countDocuments({ is_deleted: false });
-    const activePosts = await Post.countDocuments({ 
-      is_deleted: false, 
-      is_blocked: false 
+    const activePosts = await Post.countDocuments({
+      is_deleted: false,
+      is_blocked: false
     });
-    const reportedPosts = await Post.countDocuments({ 
+    const reportedPosts = await Post.countDocuments({
       reported_count: { $gt: 0 },
-      is_deleted: false 
+      is_deleted: false
     });
     const deletedPosts = await Post.countDocuments({ is_deleted: true });
     const todayPosts = await Post.countDocuments({
@@ -1182,7 +1254,7 @@ const getPostStats = async (req, res) => {
     });
 
     // Get engagement metrics
-    const posts = await Post.find({ 
+    const posts = await Post.find({
       is_deleted: false,
       createdAt: { $gte: monthAgo.toDate() }
     });
@@ -1206,7 +1278,7 @@ const getPostStats = async (req, res) => {
     const avgViews = posts.length ? Math.round(totalViews / posts.length) : 0;
 
     // Calculate engagement rate
-    const engagement = posts.length ? 
+    const engagement = posts.length ?
       Math.round(((totalLikes + totalComments + totalShares) / (posts.length * totalViews)) * 100) : 0;
 
     // Get trending posts (last 7 days, sorted by engagement)
@@ -1287,7 +1359,7 @@ const getPostStats = async (req, res) => {
     // Get popular tags
     const popularTags = await Post.aggregate([
       {
-        $match: { 
+        $match: {
           is_deleted: false,
           tags: { $exists: true, $ne: [] }
         }
@@ -1492,7 +1564,7 @@ const getReportedPosts = async (req, res) => {
 const moderatePost = async (req, res) => {
   try {
     const { postId, action, reason } = req.body;
-    
+
     if (!['approve', 'block', 'delete'].includes(action)) {
       return res.status(400).json({ message: "Invalid action specified" });
     }
@@ -1707,9 +1779,9 @@ const searchUsers = async (req, res) => {
         { email: { $regex: query, $options: 'i' } }
       ]
     })
-    .select('name email profile_image')
-    .limit(10) // Limit results for better performance
-    .lean();
+      .select('name email profile_image')
+      .limit(10) // Limit results for better performance
+      .lean();
 
     res.status(200).json({
       message: "Users found successfully",
@@ -1730,8 +1802,93 @@ const searchUsers = async (req, res) => {
   }
 };
 
-// http://localhost:3000/api/dashboard/users/all
 
+const resetReportCount = async (req, res) => {
+  try {
+    const { type, id } = req.body;
+
+    if (!type || !id) {
+      return res.status(400).json({
+        message: "Type and ID are required"
+      });
+    }
+
+    if (!["user", "post"].includes(type)) {
+      return res.status(400).json({
+        message: "Invalid type. Must be 'user' or 'post'"
+      });
+    }
+
+    let updatedDoc;
+    let message;
+
+    if (type === "user") {
+      // Reset user report count
+      updatedDoc = await User.findByIdAndUpdate(
+        id,
+        {
+          $set: { 
+            reported_count: 0,
+            report_count: 0 // Update both fields to ensure compatibility
+          }
+        },
+        { new: true }
+      );
+
+      if (!updatedDoc) {
+        return res.status(404).json({
+          message: "User not found"
+        });
+      }
+
+      // Also clear any associated reports in ReportUser collection
+      await ReportUser.deleteMany({ user_id: id });
+      
+      message = "User report count has been reset successfully";
+
+    } else {
+      // Reset post report count
+      updatedDoc = await Post.findByIdAndUpdate(
+        id,
+        {
+          $set: { 
+            reported_count: 0,
+            report_count: 0
+          }
+        },
+        { new: true }
+      );
+
+      if (!updatedDoc) {
+        return res.status(404).json({
+          message: "Post not found"
+        });
+      }
+
+      // Also clear any associated reports in ReportPost collection
+      await ReportPost.deleteMany({ post_id: id });
+      
+      message = "Post report count has been reset successfully";
+    }
+
+    // Send success response
+    res.status(200).json({
+      message,
+      data: {
+        id: updatedDoc._id,
+        type,
+        newReportCount: 0
+      }
+    });
+
+  } catch (error) {
+    console.error("Error resetting report count:", error);
+    res.status(500).json({
+      message: "Failed to reset report count",
+      error: error.message
+    });
+  }
+};
 
 module.exports = {
   getUserDashboard,

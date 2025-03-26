@@ -15,66 +15,83 @@ import { NavLink, useNavigate, useLocation } from "react-router-dom";
 import axios from "axios";
 
 const Sidebar = ({ setIsAuthenticated }) => {
+  const API_BASE_URL = "http://localhost:3000";
   const navigate = useNavigate();
   const location = useLocation();
-  const [activeMenu, setActiveMenu] = useState(""); // For sections with toggles
-  const [accessToken, setAccessToken] = useState(null);
-  const [getUserData, setUserData] = useState({
-    name: "",
-    email: "",
-    role: "",
-  });
-  const [showLogoutDialog, setShowLogoutDialog] = useState(false);
+
+  // Tracks open/close status of submenus
+  const [activeMenu, setActiveMenu] = useState("");
+
+  // Collapsed sidebar toggle
   const [isCollapsed, setIsCollapsed] = useState(false);
 
-  // Toggle function for sections with submenus (except Admin Management)
-  const toggleMenu = (menu) => {
-    setActiveMenu(activeMenu === menu ? "" : menu);
-  };
+  // For controlling the logout dialog
+  const [showLogoutDialog, setShowLogoutDialog] = useState(false);
 
+  // Stores user data
+  const [userData, setUserData] = useState({
+    id: "",
+    name: "",
+    email: "",
+    profile_image: "",
+    role: "Admin", // or "userData.status" if you want to store user status
+  });
+
+  // Fetch the token once (on mount), and fetch user info
   useEffect(() => {
     const token = localStorage.getItem("access_token");
     if (token) {
-      setAccessToken(token);
+      // Fetch user data once here
+      axios
+        .get(`${API_BASE_URL}/api/dashboard/getUserinfo`, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        })
+        .then((res) => {
+          const user = res.data?.data?.user;
+          if (user) {
+            setUserData({
+              id: user.id,
+              name: user.name?.trim() ?? "",
+              email: user.email,
+              profile_image: user.profile_image,
+              role: "Admin", // Replace with user.role or user.status if needed
+            });
+          }
+        })
+        .catch((error) => {
+          console.error("Error fetching user data:", error);
+        });
     }
   }, []);
 
+  // Keep submenus open based on URL path
+  useEffect(() => {
+    if (location.pathname.startsWith("/user")) {
+      setActiveMenu("Users");
+    } else if (location.pathname.startsWith("/posts")) {
+      setActiveMenu("Posts");
+    } else if (location.pathname.startsWith("/allCategory") || location.pathname.startsWith("/categories")) {
+      setActiveMenu("Categories");
+    } else if (location.pathname.startsWith("/notification")) {
+      setActiveMenu("Notifications");
+    }
+  }, [location.pathname]);
+
+  // Toggle a submenu open/close
+  const toggleMenu = (menuTitle) => {
+    setActiveMenu(activeMenu === menuTitle ? "" : menuTitle);
+  };
+
+  // Handle logout
   const handleLogout = () => {
     localStorage.removeItem("access_token");
     setIsAuthenticated(false);
     navigate("/login");
   };
 
-  useEffect(() => {
-    if (accessToken) {
-      axios
-        .get("http://localhost:3000/api/dashboard/getUserinfo", {
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-          },
-        })
-        .then((res) => {
-          setUserData(res.data.data);
-        })
-        .catch((error) => {
-          console.error("Error fetching user stats:", error);
-        });
-    }
-  }, [accessToken]);
-
-  // Keep sidebar toggles open for certain sections
-  useEffect(() => {
-    if (location.pathname.startsWith("/user")) {
-      setActiveMenu("users");
-    } else if (location.pathname.startsWith("/posts")) {
-      setActiveMenu("posts");
-    } else if (location.pathname.startsWith("/categories")) {
-      setActiveMenu("categories");
-    } else if (location.pathname.startsWith("/notifications")) {
-      setActiveMenu("notifications");
-    }
-  }, [location.pathname]);
-
+  // Menu items structure
   const menuItems = [
     {
       title: "Dashboard",
@@ -143,19 +160,34 @@ const Sidebar = ({ setIsAuthenticated }) => {
     },
   ];
 
+  // Fallback image generator if the profile image fails
+  const handleImageError = (e) => {
+    // If the image is *already* using the fallback URL, stop here.
+    if (e.target.src.includes("/api/avatar?name=")) {
+      return;
+    }
+  
+    // Otherwise, switch to the fallback URL. Trim the user’s name to remove trailing spaces.
+    e.target.src = `${API_BASE_URL}/api/avatar?name=${encodeURIComponent(userData.name.trim())}`;
+  };
+  
+
   return (
     <div
-      className={`h-screen bg-white border-r border-gray-200 transition-all duration-300 ease-in-out ${
+      className={`h-screen flex flex-col justify-between bg-white border-r border-gray-200 transition-all duration-300 ${
         isCollapsed ? "w-20" : "w-64"
       }`}
     >
-      {/* Header */}
+      {/* SIDEBAR HEADER */}
       <div className="flex items-center justify-between h-16 px-4 border-b border-gray-200">
+        {/* Brand / Title */}
         {!isCollapsed && (
           <div className="text-xl font-bold bg-gradient-to-r from-blue-600 to-blue-800 bg-clip-text text-transparent">
             Admin Panel
           </div>
         )}
+
+        {/* Collapse/Expand Button */}
         <button
           onClick={() => setIsCollapsed(!isCollapsed)}
           className="p-2 rounded-lg hover:bg-gray-100 text-gray-500 transition-colors"
@@ -164,109 +196,146 @@ const Sidebar = ({ setIsAuthenticated }) => {
         </button>
       </div>
 
-      {/* Main Navigation - Adjust height to accommodate new profile design */}
-      <div className="overflow-y-auto h-[calc(100vh-64px)] pb-16">
-        {/* Menu Items */}
-        {menuItems.map((item, index) => (
-          <div key={index}>
-            {item.submenu ? (
-              <>
-                <div
-                  onClick={() => toggleMenu(item.title)}
-                  className={`flex items-center justify-between px-4 py-3 cursor-pointer hover:bg-gray-50 transition-colors ${
-                    activeMenu === item.title ? "bg-blue-50" : ""
-                  }`}
-                >
-                  <div className="flex items-center space-x-3">
-                    <span className={`text-lg ${activeMenu === item.title ? "text-blue-600" : "text-gray-500"}`}>
-                      {item.icon}
-                    </span>
-                    {!isCollapsed && (
-                      <span className={activeMenu === item.title ? "font-medium text-blue-600" : "text-gray-700"}>
-                        {item.title}
-                      </span>
-                    )}
-                  </div>
+      {/* MAIN MENU - scrollable area */}
+      <div className="overflow-y-auto flex-1">
+        {menuItems.map((item, index) =>
+          item.submenu ? (
+            <div key={index}>
+              {/* Submenu parent */}
+              <div
+                onClick={() => toggleMenu(item.title)}
+                className={`flex items-center justify-between px-4 py-3 cursor-pointer hover:bg-gray-50 transition-colors ${
+                  activeMenu === item.title ? "bg-blue-50" : ""
+                }`}
+              >
+                <div className="flex items-center space-x-3">
+                  <span
+                    className={`text-lg ${
+                      activeMenu === item.title ? "text-blue-600" : "text-gray-500"
+                    }`}
+                  >
+                    {item.icon}
+                  </span>
                   {!isCollapsed && (
-                    <span className={`transition-transform duration-200 ${activeMenu === item.title ? "text-blue-600" : "text-gray-400"}`}>
-                      {activeMenu === item.title ? <BiChevronRight className="rotate-90" /> : <BiChevronRight />}
+                    <span
+                      className={
+                        activeMenu === item.title
+                          ? "font-medium text-blue-600"
+                          : "text-gray-700"
+                      }
+                    >
+                      {item.title}
                     </span>
                   )}
                 </div>
-                {activeMenu === item.title && !isCollapsed && (
-                  <div className="bg-gray-50">
-                    {item.submenuItems.map((subItem, subIndex) => (
-                      <NavLink
-                        key={subIndex}
-                        to={subItem.path}
-                        className={({ isActive }) =>
-                          `block py-2 px-12 hover:bg-gray-100 transition-colors ${
-                            isActive
-                              ? "text-blue-600 font-medium bg-blue-50"
-                              : "text-gray-600"
-                          }`
-                        }
-                      >
-                        {subItem.title}
-                      </NavLink>
-                    ))}
-                  </div>
-                )}
-              </>
-            ) : (
-              <NavLink
-                to={item.path}
-                className={({ isActive }) =>
-                  `flex items-center px-4 py-3 hover:bg-gray-50 transition-colors ${
-                    isActive
-                      ? "bg-blue-50 text-blue-600 font-medium"
-                      : "text-gray-700"
-                  }`
-                }
-              >
-                <span className={`text-lg ${location.pathname === item.path ? "text-blue-600" : "text-gray-500"}`}>
-                  {item.icon}
-                </span>
-                {!isCollapsed && <span className="ml-3">{item.title}</span>}
-              </NavLink>
-            )}
-          </div>
-        ))}
-
-        {/* User Profile - Fixed at bottom */}
-        <div className="fixed bottom-0 left-0 w-inherit bg-gray-50 border-t border-gray-200">
-          <div className={`${isCollapsed ? 'w-20' : 'w-64'} transition-all duration-300`}>
-            <div className="p-3 group relative">
-              <div className="flex items-center space-x-3">
-                <div className="relative">
-                  <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg flex items-center justify-center text-white text-lg font-medium shadow-sm">
-                    {getUserData.name ? getUserData.name.charAt(0).toUpperCase() : "U"}
-                  </div>
-                  {/* Logout Button as a small icon on the avatar */}
-                  <button
-                    onClick={() => setShowLogoutDialog(true)}
-                    className="absolute -top-1 -right-1 w-5 h-5 bg-white rounded-full shadow-md flex items-center justify-center hover:bg-gray-100 transition-colors border border-gray-200"
-                  >
-                    <BiLogOut className="text-red-500 text-sm" />
-                  </button>
-                </div>
+                {/* Chevron for submenu */}
                 {!isCollapsed && (
-                  <div className="flex-1 min-w-0">
-                    <div className="font-medium text-gray-900 truncate">
-                      {getUserData.name || "User"}
-                    </div>
-                    <div className="text-xs text-blue-600 bg-blue-50 rounded-full px-2 py-0.5 inline-block">
-                      {getUserData.role || "Role"}
-                    </div>
-                  </div>
+                  <span
+                    className={`transition-transform duration-200 ${
+                      activeMenu === item.title ? "rotate-90 text-blue-600" : "text-gray-400"
+                    }`}
+                  >
+                    <BiChevronRight />
+                  </span>
                 )}
               </div>
+              {/* Submenu items */}
+              {activeMenu === item.title && !isCollapsed && (
+                <div className="bg-gray-50">
+                  {item.submenuItems.map((subItem, subIndex) => (
+                    <NavLink
+                      key={subIndex}
+                      to={subItem.path}
+                      className={({ isActive }) =>
+                        `block py-2 px-12 hover:bg-gray-100 transition-colors ${
+                          isActive
+                            ? "text-blue-600 font-medium bg-blue-50"
+                            : "text-gray-600"
+                        }`
+                      }
+                    >
+                      {subItem.title}
+                    </NavLink>
+                  ))}
+                </div>
+              )}
             </div>
+          ) : (
+            // Normal menu item
+            <NavLink
+              key={index}
+              to={item.path}
+              end
+              className={({ isActive }) =>
+                `flex items-center px-4 py-3 hover:bg-gray-50 transition-colors ${
+                  isActive ? "bg-blue-50 text-blue-600 font-medium" : "text-gray-700"
+                }`
+              }
+            >
+              <span
+                className={`text-lg ${
+                  location.pathname === item.path ? "text-blue-600" : "text-gray-500"
+                }`}
+              >
+                {item.icon}
+              </span>
+              {!isCollapsed && <span className="ml-3">{item.title}</span>}
+            </NavLink>
+          )
+        )}
+      </div>
+
+      {/* USER PROFILE SECTION */}
+      <div className="border-t border-gray-200">
+        {/* "inherit" width is tricky; let's ensure it spans entire sidebar width */}
+        <div
+          className={`flex items-center justify-between p-3 ${
+            isCollapsed ? "w-20" : "w-64"
+          } transition-all duration-300`}
+        >
+          {/* Avatar + Name/Role */}
+          <div className="flex items-center space-x-3">
+            {/* Avatar */}
+            <div>
+              {userData.profile_image ? (
+                <img
+                  src={`${API_BASE_URL}${userData.profile_image}`}
+                  alt={userData.name}
+                  className="w-10 h-10 rounded-lg object-cover shadow-sm"
+                  onError={handleImageError}
+                />
+              ) : (
+                <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg flex items-center justify-center text-white text-lg font-medium shadow-sm">
+                  {userData.name ? userData.name.charAt(0).toUpperCase() : "U"}
+                </div>
+              )}
+            </div>
+
+            {/* Name and Role, only if not collapsed */}
+            {!isCollapsed && (
+              <div className="leading-tight">
+                <div className="text-sm font-semibold text-gray-900">
+                  {userData.name || "User"}
+                </div>
+                
+              </div>
+            )}
           </div>
+
+          {/* Logout Icon - only if not collapsed */}
+          {!isCollapsed && (
+            <button
+              onClick={() => setShowLogoutDialog(true)}
+              className="p-2 rounded-full hover:bg-gray-100 text-gray-500 transition-colors"
+              title="Logout"
+            >
+              <BiLogOut size={18} />
+            </button>
+          )}
         </div>
       </div>
 
-      {/* Logout Dialog - More elegant design */}
+      {/* LOGOUT DIALOG */}
       {showLogoutDialog && (
         <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-30 z-50">
           <div className="bg-white rounded-2xl p-6 w-[320px] shadow-xl transform transition-all scale-100">

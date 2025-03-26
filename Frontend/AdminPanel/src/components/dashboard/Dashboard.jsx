@@ -4,8 +4,8 @@ import { reactLocalStorage } from "reactjs-localstorage";
 import axios from "axios";
 import UserBar from "../userpage/UserBar";
 import { useNavigate } from "react-router-dom";
-import { 
-  FaSearch, FaBell, FaFilter, FaEllipsisV, 
+import {
+  FaSearch, FaBell, FaFilter, FaEllipsisV,
   FaExclamationTriangle, FaUserShield, FaChartBar,
   FaCalendarAlt, FaDownload, FaNewspaper, FaChartLine,
   FaHashtag, FaComments, FaShare, FaHeart, FaEye,
@@ -59,7 +59,7 @@ const Dashboard = () => {
   const [reportedPosts, setReportedPosts] = useState([]);
   const [stats, setStats] = useState(null);
   const [error, setError] = useState(null);
-
+  const API_BASE_URL = 'http://localhost:3000';
   useEffect(() => {
     const token = reactLocalStorage.get("access_token");
     if (token) {
@@ -87,10 +87,10 @@ const Dashboard = () => {
           },
         }
       );
-      
+
       if (response.data && response.data.data) {
         const stats = response.data.data;
-        
+
         // Set user stats
         setUserStats({
           totalUsers: stats.userStats.totalUsers || 0,
@@ -165,10 +165,10 @@ const Dashboard = () => {
   };
 
   const handleExportData = () => {
-    const csvContent = reportedUsers.map(user => 
+    const csvContent = reportedUsers.map(user =>
       Object.values(user).join(',')
     ).join('\n');
-    
+
     const blob = new Blob([csvContent], { type: 'text/csv' });
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -202,7 +202,7 @@ const Dashboard = () => {
                 />
               </div>
             </div>
-            
+
             <div className="flex items-center space-x-4">
               <div className="relative">
                 <button
@@ -216,7 +216,7 @@ const Dashboard = () => {
                     </span>
                   )}
                 </button>
-                
+
                 {showNotifications && (
                   <div className="absolute right-0 mt-2 w-80 bg-white rounded-lg shadow-lg z-50 border">
                     <div className="p-4">
@@ -233,7 +233,7 @@ const Dashboard = () => {
                   </div>
                 )}
               </div>
-              
+
               <button className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
                 <FaUserShield className="mr-2" />
                 Admin Actions
@@ -244,10 +244,10 @@ const Dashboard = () => {
 
         {/* Main Content */}
         <div className="p-6 overflow-y-auto h-[calc(100vh-4rem)]">
-          <UserBar 
-            stats={userStats} 
-            loading={loading} 
-            error={error} 
+          <UserBar
+            stats={userStats}
+            loading={loading}
+            error={error}
           />
 
           {/* Post Analytics Overview */}
@@ -336,10 +336,10 @@ const Dashboard = () => {
               </div>
               <div className="space-y-4">
                 {postStats.trendingPosts.map((post, index) => (
-                  <div 
-                    key={post._id} 
+                  <div
+                    key={post._id}
                     className="flex items-center justify-between p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-all cursor-pointer"
-                    onClick={() => navigate(`/post/${post._id}`)}
+                    onClick={() => navigate(`/posts/${post._id}`)}
                   >
                     <div className="flex items-center space-x-4">
                       <div className="flex-shrink-0 h-16 w-16">
@@ -353,8 +353,8 @@ const Dashboard = () => {
                         />
                       </div>
                       <div className="flex-1 min-w-0">
-                        <div className="text-sm font-medium text-gray-900 line-clamp-2" 
-                             dangerouslySetInnerHTML={{ __html: post.title }} />
+                        <div className="text-sm font-medium text-gray-900 line-clamp-2"
+                          dangerouslySetInnerHTML={{ __html: post.title }} />
                         <div className="flex items-center space-x-4 mt-2">
                           <div className="flex items-center text-sm text-gray-500">
                             <FaHeart className="mr-1 text-red-500" size={12} />
@@ -439,7 +439,7 @@ const Dashboard = () => {
                       Reported Users Management
                     </h2>
                   </div>
-                  
+
                   <div className="flex items-center space-x-4">
                     <select
                       className="bg-gray-100 border-none rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -451,7 +451,7 @@ const Dashboard = () => {
                       <option value="week">This Week</option>
                       <option value="month">This Month</option>
                     </select>
-                    
+
                     <button
                       onClick={handleExportData}
                       className="flex items-center px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
@@ -507,8 +507,15 @@ const Dashboard = () => {
                                 <div className="flex-shrink-0 h-10 w-10">
                                   <img
                                     className="h-10 w-10 rounded-full object-cover"
-                                    src={user.profile_image || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name)}`}
-                                    alt=""
+                                    src={
+                                      user.profile_image
+                                        ? `${API_BASE_URL}/${user.profile_image}`
+                                        : `${API_BASE_URL}/api/avatar?name=${encodeURIComponent(user.name)}`
+                                    }
+                                    alt={user.name}
+                                    onError={(e) => {
+                                      e.target.src = `${API_BASE_URL}/api/avatar?name=${encodeURIComponent(user.name)}`;
+                                    }}
                                   />
                                 </div>
                                 <div className="ml-4">
@@ -523,9 +530,8 @@ const Dashboard = () => {
                               </div>
                             </td>
                             <td className="px-6 py-4">
-                              <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                                user.status === 'Blocked' ? 'bg-red-100 text-red-800' : 'bg-yellow-100 text-yellow-800'
-                              }`}>
+                              <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${user.status === 'Blocked' ? 'bg-red-100 text-red-800' : 'bg-yellow-100 text-yellow-800'
+                                }`}>
                                 {user.status}
                               </span>
                             </td>
@@ -550,7 +556,7 @@ const Dashboard = () => {
                   <h2 className="text-xl font-bold text-gray-800 flex items-center">
                     <FaFlag className="mr-2 text-red-500" /> Reported Posts
                   </h2>
-                  <button className="flex items-center px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700">
+                  <button className="flex items-center px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700" onClick={() => navigate('/reported-posts')}>
                     <FaFlag className="mr-2" /> Review All
                   </button>
                 </div>
@@ -562,10 +568,10 @@ const Dashboard = () => {
                 ) : (
                   <div className="space-y-4">
                     {reportedPosts.map((post) => (
-                      <div 
-                        key={post._id} 
+                      <div
+                        key={post._id}
                         className="border rounded-lg p-4 hover:bg-gray-50 transition-all cursor-pointer"
-                        onClick={() => navigate(`/post/${post._id}`)}
+                        onClick={() => navigate(`/posts/${post._id}`)}
                       >
                         <div className="flex justify-between items-start">
                           <div className="flex items-start space-x-4">
@@ -578,11 +584,11 @@ const Dashboard = () => {
                               }}
                             />
                             <div>
-                              <div 
+                              <div
                                 className="text-sm font-medium text-gray-900 line-clamp-2 mb-1"
                                 dangerouslySetInnerHTML={{ __html: post.title }}
                               />
-                              <div 
+                              <div
                                 className="text-sm text-gray-500 line-clamp-2"
                                 dangerouslySetInnerHTML={{ __html: post.content }}
                               />
@@ -601,18 +607,17 @@ const Dashboard = () => {
                                 <span className="px-2 py-1 bg-red-100 text-red-800 rounded-full text-xs">
                                   {post.reportCount} reports
                                 </span>
-                                <span className={`px-2 py-1 rounded-full text-xs ${
-                                  post.status === 'Active' ? 'bg-green-100 text-green-800' :
-                                  post.status === 'Blocked' ? 'bg-red-100 text-red-800' :
-                                  'bg-yellow-100 text-yellow-800'
-                                }`}>
+                                <span className={`px-2 py-1 rounded-full text-xs ${post.status === 'Active' ? 'bg-green-100 text-green-800' :
+                                    post.status === 'Blocked' ? 'bg-red-100 text-red-800' :
+                                      'bg-yellow-100 text-yellow-800'
+                                  }`}>
                                   {post.status}
                                 </span>
                               </div>
                             </div>
                           </div>
                           <div className="flex space-x-2">
-                            <button 
+                            <button
                               className="p-2 text-green-600 hover:bg-green-50 rounded"
                               onClick={(e) => {
                                 e.stopPropagation();
@@ -621,7 +626,7 @@ const Dashboard = () => {
                             >
                               <FaCheck size={16} />
                             </button>
-                            <button 
+                            <button
                               className="p-2 text-red-600 hover:bg-red-50 rounded"
                               onClick={(e) => {
                                 e.stopPropagation();

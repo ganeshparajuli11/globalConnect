@@ -4,11 +4,30 @@ import { toast, ToastContainer } from "react-toastify";
 import axios from "axios";
 import { reactLocalStorage } from "reactjs-localstorage";
 
+// Helper to format a stored DOB (string) into YYYY-MM-DD for <input type="date" />
+function formatDateForInput(dateString) {
+  if (!dateString) return "";
+  const dateObj = new Date(dateString);
+  const year = dateObj.getFullYear();
+  const month = String(dateObj.getMonth() + 1).padStart(2, "0");
+  const day = String(dateObj.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+// Helper to format a stored DOB (string) into a more readable display (MM/DD/YYYY)
+function formatDateForDisplay(dateString) {
+  if (!dateString) return "";
+  const dateObj = new Date(dateString);
+  return dateObj.toLocaleDateString(); 
+  // Adjust locale or formatting as needed, e.g. en-GB for DD/MM/YYYY
+}
+
 const AdminManagement = () => {
   // State for admins list
   const [admins, setAdmins] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
-  // Get token from local storage
+
+  // Token from local storage
   const [token, setToken] = useState("");
 
   // Modal states
@@ -27,6 +46,7 @@ const AdminManagement = () => {
     dob: "",
     profileImage: null,
   });
+
   // When editing, hold the id of the admin being edited
   const [editingAdminId, setEditingAdminId] = useState(null);
 
@@ -52,46 +72,63 @@ const AdminManagement = () => {
     }
   };
 
+  // Fetch admins when token is available
   useEffect(() => {
     if (token) {
       fetchAdmins();
     }
   }, [token]);
 
-  // Handlers for modal open/close
+  // Handlers for opening/closing "Add Admin" modal
   const openAddModal = () => {
-    setAdminForm({ name: "", email: "", password: "", dob: "", profileImage: null });
+    setAdminForm({
+      name: "",
+      email: "",
+      password: "",
+      dob: "",
+      profileImage: null,
+    });
     setIsAddModalOpen(true);
   };
-
   const closeAddModal = () => {
     setIsAddModalOpen(false);
-    setAdminForm({ name: "", email: "", password: "", dob: "", profileImage: null });
+    setAdminForm({
+      name: "",
+      email: "",
+      password: "",
+      dob: "",
+      profileImage: null,
+    });
   };
 
+  // Handlers for opening/closing "Edit Admin" modal
   const openEditModal = (admin) => {
     setEditingAdminId(admin.id);
     setAdminForm({
       name: admin.name,
       email: admin.email,
-      password: "",
-      dob: admin.dob,
+      password: "", // leave blank so user can choose whether to change it
+      dob: formatDateForInput(admin.dob), // format for <input type="date" />
       profileImage: null,
     });
     setIsEditModalOpen(true);
   };
-
   const closeEditModal = () => {
     setIsEditModalOpen(false);
     setEditingAdminId(null);
-    setAdminForm({ name: "", email: "", password: "", dob: "", profileImage: null });
+    setAdminForm({
+      name: "",
+      email: "",
+      password: "",
+      dob: "",
+      profileImage: null,
+    });
   };
 
   // Form change handlers
   const handleFormChange = (e) => {
     setAdminForm({ ...adminForm, [e.target.name]: e.target.value });
   };
-
   const handleFileChange = (e) => {
     setAdminForm({ ...adminForm, profileImage: e.target.files[0] });
   };
@@ -107,15 +144,20 @@ const AdminManagement = () => {
     if (adminForm.profileImage) {
       formData.append("profile_image", adminForm.profileImage);
     }
+
     setConfirmationMessage(`Are you sure you want to add admin ${adminForm.name}?`);
     setConfirmationAction(() => async () => {
       try {
-        const res = await axios.post("http://localhost:3000/api/users/admin/signup", formData, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "multipart/form-data",
-          },
-        });
+        const res = await axios.post(
+          "http://localhost:3000/api/users/admin/signup",
+          formData,
+          {
+            headers: {
+              Authorization: `Bearer ${token}`,
+              "Content-Type": "multipart/form-data",
+            },
+          }
+        );
         toast.success(res.data.message);
         closeAddModal();
         fetchAdmins();
@@ -135,6 +177,7 @@ const AdminManagement = () => {
     const formData = new FormData();
     formData.append("name", adminForm.name);
     formData.append("email", adminForm.email);
+    // Only append password if user actually typed something
     if (adminForm.password) {
       formData.append("password", adminForm.password);
     }
@@ -142,9 +185,12 @@ const AdminManagement = () => {
     if (adminForm.profileImage) {
       formData.append("profile_image", adminForm.profileImage);
     }
+
     setConfirmationMessage(`Are you sure you want to update admin ${adminForm.name}?`);
     setConfirmationAction(() => async () => {
       try {
+        // IMPORTANT: The route should match your backend's
+        // e.g. router.put("/admin/edit/:adminId", ...)
         const res = await axios.put(
           `http://localhost:3000/api/users/admin/edit/${editingAdminId}`,
           formData,
@@ -155,6 +201,7 @@ const AdminManagement = () => {
             },
           }
         );
+
         toast.success(res.data.message);
         closeEditModal();
         fetchAdmins();
@@ -178,9 +225,10 @@ const AdminManagement = () => {
     setConfirmationMessage(`Are you sure you want to delete this admin?`);
     setConfirmationAction(() => async () => {
       try {
-        const res = await axios.delete(`http://localhost:3000/api/users/admin/remove/${adminId}`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
+        const res = await axios.delete(
+          `http://localhost:3000/api/users/admin/remove/${adminId}`,
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
         toast.success(res.data.message);
         fetchAdmins();
         setIsConfirmationOpen(false);
@@ -198,9 +246,11 @@ const AdminManagement = () => {
       <ToastContainer />
       {/* Sidebar */}
       <Sidebar />
+
       {/* Main Content */}
       <div className="flex-1 p-6 bg-gray-50">
         <h1 className="text-2xl font-bold mb-6">Admin Management</h1>
+
         <div className="flex justify-end mb-6">
           <button
             onClick={openAddModal}
@@ -209,6 +259,7 @@ const AdminManagement = () => {
             Create New Admin
           </button>
         </div>
+
         {/* Admins Table */}
         <div className="overflow-x-auto bg-white shadow rounded">
           <table className="min-w-full">
@@ -219,13 +270,14 @@ const AdminManagement = () => {
                 <th className="py-3 px-4 border-b text-left">Email</th>
                 <th className="py-3 px-4 border-b text-left">Role</th>
                 <th className="py-3 px-4 border-b text-left">Verified</th>
+                <th className="py-3 px-4 border-b text-left">DOB</th>
                 <th className="py-3 px-4 border-b text-center">Actions</th>
               </tr>
             </thead>
             <tbody>
               {isLoading ? (
                 <tr>
-                  <td colSpan="6" className="text-center py-4">
+                  <td colSpan="7" className="text-center py-4">
                     Loading...
                   </td>
                 </tr>
@@ -235,7 +287,7 @@ const AdminManagement = () => {
                     <td className="py-3 px-4 border-b">
                       <img
                         src={
-                          admin.profile_image.startsWith("http")
+                          admin.profile_image?.startsWith("http")
                             ? admin.profile_image
                             : `http://localhost:3000/${admin.profile_image}`
                         }
@@ -246,7 +298,13 @@ const AdminManagement = () => {
                     <td className="py-3 px-4 border-b">{admin.name}</td>
                     <td className="py-3 px-4 border-b">{admin.email}</td>
                     <td className="py-3 px-4 border-b">{admin.role}</td>
-                    <td className="py-3 px-4 border-b">{admin.verified ? "Yes" : "No"}</td>
+                    <td className="py-3 px-4 border-b">
+                      {admin.verified ? "Yes" : "No"}
+                    </td>
+                    {/* Display DOB in a friendly format */}
+                    <td className="py-3 px-4 border-b">
+                      {formatDateForDisplay(admin.dob)}
+                    </td>
                     <td className="py-3 px-4 border-b text-center">
                       <button
                         onClick={() => openEditModal(admin)}
@@ -399,7 +457,7 @@ const AdminManagement = () => {
                     value={adminForm.dob}
                     onChange={handleFormChange}
                     className="w-full border px-3 py-2 rounded"
-                    required
+          
                   />
                 </div>
                 <div className="mb-4">
@@ -455,7 +513,6 @@ const AdminManagement = () => {
             </div>
           </div>
         )}
-
       </div>
     </div>
   );

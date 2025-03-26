@@ -24,6 +24,7 @@ const ReportedUser = () => {
   const [accessToken, setAccessToken] = useState(null);
   const [userData, setUserData] = useState([]);
   const [loading, setLoading] = useState(true);
+  const API_BASE_URL = "http://localhost:3000/api/dashboard";
 
   // Search & Pagination
   const [searchTerm, setSearchTerm] = useState("");
@@ -51,7 +52,7 @@ const ReportedUser = () => {
 
   // Action handling
   const [selectedUser, setSelectedUser] = useState(null);
-  const [selectedAction, setSelectedAction] = useState(""); // "block" | "unblock" | "suspend" | "unsuspend" | "delete" | "resetReport"
+  const [selectedAction, setSelectedAction] = useState(""); 
   const [actionReason, setActionReason] = useState("");
   const [selectedDuration, setSelectedDuration] = useState("");
   const [confirmationMessage, setConfirmationMessage] = useState("");
@@ -76,7 +77,7 @@ const ReportedUser = () => {
     try {
       setLoading(true);
       const response = await axios.get(
-        "http://localhost:3000/api/dashboard/get-all-reported-user",
+        `${API_BASE_URL}/get-all-reported-user`,
         {
           headers: { Authorization: `Bearer ${accessToken}` },
         }
@@ -137,82 +138,29 @@ const ReportedUser = () => {
     setCurrentPage(pageNumber);
   };
 
-  // ========== DETAIL MODAL ==========
-  // When a user row is clicked, we show the detail modal with report reasons, etc.
+  // ===== Detail Modal
   const handleViewDetails = (reportItem) => {
-    setSelectedReport(reportItem); // entire item: { reportedTo, reportedCount, reportCategoryDetails, reportedBy, ... }
+    setSelectedReport(reportItem);
     setDetailModalVisible(true);
   };
 
-  // ========== ACTIONS MODAL (3 dots) ==========
+  // ===== Action Modal (3 dots)
   const handleActionClick = (e, reportItem) => {
-    e.stopPropagation(); // prevents row click
-    setSelectedUser(reportItem); // same structure as selectedReport
+    e.stopPropagation();
+    setSelectedUser(reportItem);
     setActionModalVisible(true);
   };
 
-  // Delete user action
-  const handleDelete = () => {
-    setConfirmationMessage(
-      `Are you sure you want to delete user ${selectedUser?.reportedTo?.name}?`
-    );
-    setOnConfirm(() => async () => {
-      try {
-        await axios.delete(
-          `http://localhost:3000/api/dashboard/delete-user/${selectedUser?.reportedTo?._id}`,
-          {
-            headers: { Authorization: `Bearer ${accessToken}` },
-          }
-        );
-        toast.success("User deleted successfully");
-        fetchReportedUsers();
-      } catch (error) {
-        toast.error("Failed to delete user");
-      } finally {
-        setConfirmationModalVisible(false);
-        setActionModalVisible(false);
-        setSelectedUser(null);
-      }
-    });
-    setConfirmationModalVisible(true);
-  };
-
-  // Reset report count to zero
-  const handleResetReportCount = () => {
-    setConfirmationMessage(
-      `Are you sure you want to reset report count for user ${selectedUser?.reportedTo?.name} to 0?`
-    );
-    setOnConfirm(() => async () => {
-      try {
-        // Example: PUT request to reset report count
-        await axios.put(
-          "http://localhost:3000/api/dashboard/reset-report-count",
-          { userId: selectedUser?.reportedTo?._id },
-          { headers: { Authorization: `Bearer ${accessToken}` } }
-        );
-        toast.success("Report count reset to 0.");
-        fetchReportedUsers();
-      } catch (error) {
-        toast.error("Failed to reset report count");
-      } finally {
-        setConfirmationModalVisible(false);
-        setActionModalVisible(false);
-        setSelectedUser(null);
-      }
-    });
-    setConfirmationModalVisible(true);
-  };
-
-  // Determine if user is currently blocked or suspended
   const isBlocked = selectedUser?.reportedTo?.is_blocked;
   const isSuspended = selectedUser?.reportedTo?.is_suspended;
 
-  // For block/unblock or suspend/unsuspend => open reason/duration or immediate confirm
+  // ===== handleBlockOrSuspend
+  // For block/suspend we open reason/duration modal
+  // For unblock/unsuspend we do direct confirm
   const handleBlockOrSuspend = (actionType) => {
     setSelectedAction(actionType);
     setActionModalVisible(false);
 
-    // If unblocking or unsuspending, skip duration modal
     if (actionType === "unblock" || actionType === "unsuspend") {
       setConfirmationMessage(
         `Are you sure you want to ${actionType} user ${selectedUser?.reportedTo?.name}?`
@@ -220,17 +168,17 @@ const ReportedUser = () => {
       setOnConfirm(() => async () => {
         try {
           await axios.put(
-            "http://localhost:3000/api/dashboard/admin-update-user-status",
+            `${API_BASE_URL}/admin-update-user-status`,
             {
               userId: selectedUser?.reportedTo?._id,
-              action: actionType,
+              action: actionType, 
             },
             { headers: { Authorization: `Bearer ${accessToken}` } }
           );
-          toast.success(`User successfully ${actionType}ed.`);
+          toast.success(`User successfully ${actionType}ed`);
           fetchReportedUsers();
         } catch (error) {
-          toast.error(`Failed to ${actionType} user.`);
+          toast.error(error.response?.data?.message || `Failed to ${actionType} user`);
         } finally {
           setConfirmationModalVisible(false);
           setSelectedUser(null);
@@ -238,53 +186,101 @@ const ReportedUser = () => {
         }
       });
       setConfirmationModalVisible(true);
+
     } else {
-      // block or suspend => reason/duration
+      // block / suspend => reason/duration
       setDurationModalVisible(true);
     }
   };
 
-  // Confirm block/suspend
-  const handleSubmitAction = () => {
+  // ===== handleSubmitAction
+  // Called after the admin picks reason/duration for block/suspend
+  const handleSubmitAction = async () => {
     if (!selectedDuration || !actionReason.trim()) {
       toast.error("Please select a duration and enter a reason.");
       return;
     }
-    const durationText = {
-      "1w": "1 Week",
-      "1m": "1 Month",
-      "6m": "6 Months",
-      "permanent": "Permanent",
-    }[selectedDuration];
 
+    try {
+      // "block" or "suspend" are direct from selectedAction
+      await axios.put(
+        `${API_BASE_URL}/admin-update-user-status`,
+        {
+          userId: selectedUser?.reportedTo?._id,
+          action: selectedAction,
+          reason: actionReason,
+          duration: selectedDuration,
+          resetReports: false
+        },
+        { headers: { Authorization: `Bearer ${accessToken}` } }
+      );
+
+      toast.success(`User ${selectedAction}ed successfully`);
+      fetchReportedUsers();
+
+      setDurationModalVisible(false);
+      setSelectedUser(null);
+      setSelectedAction("");
+      setActionReason("");
+      setSelectedDuration("");
+
+    } catch (error) {
+      toast.error(error.response?.data?.message || `Failed to ${selectedAction} user`);
+    }
+  };
+
+  // ===== handleResetReportCount
+  const handleResetReportCount = () => {
     setConfirmationMessage(
-      `Are you sure you want to ${selectedAction} user ${
-        selectedUser?.reportedTo?.name
-      } for ${durationText} with the reason:\n"${actionReason}"?`
+      `Are you sure you want to reset report count for user ${selectedUser?.reportedTo?.name}?`
     );
     setOnConfirm(() => async () => {
       try {
         await axios.put(
-          "http://localhost:3000/api/dashboard/admin-update-user-status",
+          `${API_BASE_URL}/admin-update-user-status`,
           {
             userId: selectedUser?.reportedTo?._id,
-            action: selectedAction, // "block" or "suspend"
-            reason: actionReason,
-            duration: selectedDuration,
+            resetReports: true
           },
           { headers: { Authorization: `Bearer ${accessToken}` } }
         );
-        toast.success(`User ${selectedAction}ed successfully`);
+        toast.success("Report count reset successfully");
         fetchReportedUsers();
       } catch (error) {
-        toast.error(`Failed to ${selectedAction} user`);
+        toast.error(error.response?.data?.message || "Failed to reset report count");
       } finally {
         setConfirmationModalVisible(false);
-        setDurationModalVisible(false);
+        setActionModalVisible(false);
         setSelectedUser(null);
-        setSelectedAction("");
-        setActionReason("");
-        setSelectedDuration("");
+      }
+    });
+    setConfirmationModalVisible(true);
+  };
+
+  // ===== handleDelete
+  const handleDelete = () => {
+    setConfirmationMessage(
+      `Are you sure you want to delete user ${selectedUser?.reportedTo?.name}?`
+    );
+    setOnConfirm(() => async () => {
+      try {
+        await axios.put(
+          `${API_BASE_URL}/admin-update-user-status`,
+          {
+            userId: selectedUser?.reportedTo?._id,
+            action: "delete",
+            reason: "User deleted by admin"
+          },
+          { headers: { Authorization: `Bearer ${accessToken}` } }
+        );
+        toast.success("User deleted successfully");
+        fetchReportedUsers();
+      } catch (error) {
+        toast.error(error.response?.data?.message || "Failed to delete user");
+      } finally {
+        setConfirmationModalVisible(false);
+        setActionModalVisible(false);
+        setSelectedUser(null);
       }
     });
     setConfirmationModalVisible(true);
@@ -425,7 +421,7 @@ const ReportedUser = () => {
                         <tr
                           key={index}
                           className="hover:bg-gray-50 transition-colors cursor-pointer"
-                          onClick={() => handleViewDetails(item)} // Show detail modal
+                          onClick={() => handleViewDetails(item)}
                         >
                           <td className="px-6 py-4 text-sm text-gray-600">
                             {indexOfFirstUser + index + 1}
@@ -452,7 +448,6 @@ const ReportedUser = () => {
                             {user.email}
                           </td>
                           <td className="px-6 py-4">
-                            {/* If you have booleans for block/suspend, show that. Otherwise use user.status */}
                             {user.is_blocked ? (
                               <span className="px-2 py-1 bg-red-100 text-red-600 text-xs rounded-full">
                                 Blocked
@@ -515,7 +510,6 @@ const ReportedUser = () => {
                     {Math.min(indexOfLastUser, filteredUsers.length)} of{" "}
                     {filteredUsers.length} entries
                   </span>
-
                   <div className="flex items-center space-x-1">
                     <button
                       onClick={() => handlePageChange(currentPage - 1)}
@@ -562,7 +556,7 @@ const ReportedUser = () => {
         </div>
       </div>
 
-      {/* === DETAIL MODAL (Show reported reasons, reportedBy, etc.) === */}
+      {/* === DETAIL MODAL === */}
       {detailModalVisible && selectedReport && (
         <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 z-50">
           <div className="bg-white rounded-lg shadow-lg p-6 w-11/12 md:w-3/4 lg:w-1/2 overflow-y-auto max-h-full">
@@ -780,9 +774,7 @@ const ReportedUser = () => {
                         <div className="flex items-center">
                           <FaUndo className="text-blue-500 mr-3" />
                           <div className="text-left">
-                            <div className="font-medium">
-                              Reset Report Count
-                            </div>
+                            <div className="font-medium">Reset Report Count</div>
                             <div className="text-sm text-gray-500">
                               Set report count to 0
                             </div>
@@ -814,7 +806,7 @@ const ReportedUser = () => {
         </div>
       )}
 
-      {/* Duration/Reason Modal (Block/Suspend flow) */}
+      {/* Duration/Reason Modal */}
       {durationModalVisible && (
         <div className="fixed inset-0 overflow-hidden z-50">
           <div className="absolute inset-0 overflow-hidden">

@@ -15,7 +15,8 @@ const {
   getPostStatsAdmin,
   searchPosts,
   editPost,
-  deletePost
+  deletePost,
+  getReportedPosts
 } = require("../controller/userPostController");
 const { uploadPostMedia } = require("../middleware/uploadMiddleware");
 const { sharePost } = require("../controller/userShareController");
@@ -34,6 +35,8 @@ router.get("/all", checkAuthentication, getAllPost);
 router.get("/admin/all", checkAuthentication, checkIsAdmin, getAllPostAdmin);
 router.get("/admin/stats", checkAuthentication, checkIsAdmin, getPostStatsAdmin);
 router.post("/share", checkAuthentication,  sharePost);
+
+
 
 
 // Edit post route - must be placed before /:postId to avoid route conflicts
