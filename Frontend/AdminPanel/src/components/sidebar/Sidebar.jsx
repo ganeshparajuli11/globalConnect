@@ -34,14 +34,13 @@ const Sidebar = ({ setIsAuthenticated }) => {
     name: "",
     email: "",
     profile_image: "",
-    role: "Admin", // or "userData.status" if you want to store user status
+    role: "", // Changed from hardcoded "Admin" to empty string
   });
 
   // Fetch the token once (on mount), and fetch user info
   useEffect(() => {
     const token = localStorage.getItem("access_token");
     if (token) {
-      // Fetch user data once here
       axios
         .get(`${API_BASE_URL}/api/dashboard/getUserinfo`, {
           headers: {
@@ -49,14 +48,15 @@ const Sidebar = ({ setIsAuthenticated }) => {
           },
         })
         .then((res) => {
-          const user = res.data?.data?.user;
-          if (user) {
+          // The response structure is different, update the data extraction
+          const userData = res.data?.data?.user;
+          if (userData) {
             setUserData({
-              id: user.id,
-              name: user.name?.trim() ?? "",
-              email: user.email,
-              profile_image: user.profile_image,
-              role: "Admin", // Replace with user.role or user.status if needed
+              id: userData.id,
+              name: userData.name?.trim() ?? "",
+              email: userData.email,
+              profile_image: userData.profile_image,
+              role: userData.role || "", // Now correctly accessing the role
             });
           }
         })
@@ -65,6 +65,8 @@ const Sidebar = ({ setIsAuthenticated }) => {
         });
     }
   }, []);
+
+
 
   // Keep submenus open based on URL path
   useEffect(() => {
@@ -108,6 +110,7 @@ const Sidebar = ({ setIsAuthenticated }) => {
         { title: "Inactive Users", path: "/user/inActive" },
         { title: "Blocked Users", path: "/user/blocked" },
         { title: "Reported Users", path: "/user/reported" },
+        { title: "Verify Users", path: "/user/verify" }, // Add this new item
       ],
     },
     {
@@ -125,7 +128,6 @@ const Sidebar = ({ setIsAuthenticated }) => {
       submenu: true,
       submenuItems: [
         { title: "All Categories", path: "/allCategory" },
-        { title: "Blocked Categories", path: "/categories/blocked" },
       ],
     },
     {
@@ -158,7 +160,13 @@ const Sidebar = ({ setIsAuthenticated }) => {
       icon: <FaUserShield />,
       path: "/admin",
     },
-  ];
+  ].filter(item => {
+    // Remove Admin Management tab if user is not superadmin
+    if (item.title === "Admin Management") {
+      return userData.role === "superadmin";
+    }
+    return true;
+  });;
 
   // Fallback image generator if the profile image fails
   const handleImageError = (e) => {
@@ -166,17 +174,16 @@ const Sidebar = ({ setIsAuthenticated }) => {
     if (e.target.src.includes("/api/avatar?name=")) {
       return;
     }
-  
+
     // Otherwise, switch to the fallback URL. Trim the user’s name to remove trailing spaces.
     e.target.src = `${API_BASE_URL}/api/avatar?name=${encodeURIComponent(userData.name.trim())}`;
   };
-  
+
 
   return (
     <div
-      className={`h-screen flex flex-col justify-between bg-white border-r border-gray-200 transition-all duration-300 ${
-        isCollapsed ? "w-20" : "w-64"
-      }`}
+      className={`h-screen flex flex-col justify-between bg-white border-r border-gray-200 transition-all duration-300 ${isCollapsed ? "w-20" : "w-64"
+        }`}
     >
       {/* SIDEBAR HEADER */}
       <div className="flex items-center justify-between h-16 px-4 border-b border-gray-200">
@@ -204,15 +211,13 @@ const Sidebar = ({ setIsAuthenticated }) => {
               {/* Submenu parent */}
               <div
                 onClick={() => toggleMenu(item.title)}
-                className={`flex items-center justify-between px-4 py-3 cursor-pointer hover:bg-gray-50 transition-colors ${
-                  activeMenu === item.title ? "bg-blue-50" : ""
-                }`}
+                className={`flex items-center justify-between px-4 py-3 cursor-pointer hover:bg-gray-50 transition-colors ${activeMenu === item.title ? "bg-blue-50" : ""
+                  }`}
               >
                 <div className="flex items-center space-x-3">
                   <span
-                    className={`text-lg ${
-                      activeMenu === item.title ? "text-blue-600" : "text-gray-500"
-                    }`}
+                    className={`text-lg ${activeMenu === item.title ? "text-blue-600" : "text-gray-500"
+                      }`}
                   >
                     {item.icon}
                   </span>
@@ -231,9 +236,8 @@ const Sidebar = ({ setIsAuthenticated }) => {
                 {/* Chevron for submenu */}
                 {!isCollapsed && (
                   <span
-                    className={`transition-transform duration-200 ${
-                      activeMenu === item.title ? "rotate-90 text-blue-600" : "text-gray-400"
-                    }`}
+                    className={`transition-transform duration-200 ${activeMenu === item.title ? "rotate-90 text-blue-600" : "text-gray-400"
+                      }`}
                   >
                     <BiChevronRight />
                   </span>
@@ -247,10 +251,9 @@ const Sidebar = ({ setIsAuthenticated }) => {
                       key={subIndex}
                       to={subItem.path}
                       className={({ isActive }) =>
-                        `block py-2 px-12 hover:bg-gray-100 transition-colors ${
-                          isActive
-                            ? "text-blue-600 font-medium bg-blue-50"
-                            : "text-gray-600"
+                        `block py-2 px-12 hover:bg-gray-100 transition-colors ${isActive
+                          ? "text-blue-600 font-medium bg-blue-50"
+                          : "text-gray-600"
                         }`
                       }
                     >
@@ -267,15 +270,13 @@ const Sidebar = ({ setIsAuthenticated }) => {
               to={item.path}
               end
               className={({ isActive }) =>
-                `flex items-center px-4 py-3 hover:bg-gray-50 transition-colors ${
-                  isActive ? "bg-blue-50 text-blue-600 font-medium" : "text-gray-700"
+                `flex items-center px-4 py-3 hover:bg-gray-50 transition-colors ${isActive ? "bg-blue-50 text-blue-600 font-medium" : "text-gray-700"
                 }`
               }
             >
               <span
-                className={`text-lg ${
-                  location.pathname === item.path ? "text-blue-600" : "text-gray-500"
-                }`}
+                className={`text-lg ${location.pathname === item.path ? "text-blue-600" : "text-gray-500"
+                  }`}
               >
                 {item.icon}
               </span>
@@ -289,9 +290,8 @@ const Sidebar = ({ setIsAuthenticated }) => {
       <div className="border-t border-gray-200">
         {/* "inherit" width is tricky; let's ensure it spans entire sidebar width */}
         <div
-          className={`flex items-center justify-between p-3 ${
-            isCollapsed ? "w-20" : "w-64"
-          } transition-all duration-300`}
+          className={`flex items-center justify-between p-3 ${isCollapsed ? "w-20" : "w-64"
+            } transition-all duration-300`}
         >
           {/* Avatar + Name/Role */}
           <div className="flex items-center space-x-3">
@@ -317,7 +317,9 @@ const Sidebar = ({ setIsAuthenticated }) => {
                 <div className="text-sm font-semibold text-gray-900">
                   {userData.name || "User"}
                 </div>
-                
+                <div className="text-xs text-gray-500 capitalize">
+                  {userData.role || "Loading..."}
+                </div>
               </div>
             )}
           </div>

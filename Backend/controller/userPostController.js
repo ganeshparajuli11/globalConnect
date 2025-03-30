@@ -1,5 +1,5 @@
 const Post = require("../models/postSchema");
-
+const mongoose = require("mongoose");
 const { comment } = require("../models/commentSchema");
 const Category = require("../models/categorySchema");
 const User = require("../models/userSchema");
@@ -61,10 +61,11 @@ async function createPost(req, res) {
     });
   }
 }
-// Get all posts based on query/interest logic
+
+// Get all posts based on query/interest/search logic
 const getAllPost = async (req, res) => {
   try {
-    let { page = 1, limit = 5, category = "" } = req.query;
+    let { page = 1, limit = 5, category = "", search = "" } = req.query;
     page = parseInt(page);
     limit = parseInt(limit);
 
@@ -79,133 +80,111 @@ const getAllPost = async (req, res) => {
     }
 
     const currentDate = new Date();
-    // Base query: exclude blocked, under review posts, and ensure suspension (if any) has expired.
-    // Also filter out posts that have 5 or more reports.
-    let baseQuery = {
-      isBlocked: false,
-      isUnderReview: false,
-      "reports.4": { $exists: false }, // if 5th report exists then skip this post
-      $or: [
-        { isSuspended: false },
-        {
-          isSuspended: true,
-          $and: [
-            { suspended_until: { $ne: null } },
-            { suspended_until: { $lte: currentDate } },
+
+    const pipeline = [
+      {
+        $lookup: {
+          from: 'users',
+          localField: 'user_id',
+          foreignField: '_id',
+          as: 'author'
+        }
+      },
+      { $unwind: '$author' },
+      {
+        $match: {
+          status: 'Active',
+          isBlocked: false,
+          isUnderReview: false,
+          "reports.4": { $exists: false },
+
+          $or: [
+            { isSuspended: false },
+            {
+              isSuspended: true,
+              suspended_until: { $lt: currentDate }
+            }
           ],
-        },
-      ],
-    };
 
-    // Apply category filtering if provided (and not "All")
-    if (category && category !== "All") {
-      // If the category value contains a comma, assume multiple IDs are provided
-      if (category.includes(",")) {
-        const categoryArray = category.split(","); // e.g. "cat1,cat2,cat3"
-        baseQuery.category_id = { $in: categoryArray };
-      } else {
-        baseQuery.category_id = category;
+          'author.is_blocked': false,
+          'author.is_deactivate': false,
+          'author.is_deleted': false,
+          $or: [
+            { 'author.is_suspended': false },
+            {
+              'author.is_suspended': true,
+              'author.suspended_until': { $lt: currentDate }
+            }
+          ]
+        }
       }
-    }
+    ];
 
-    // When a specific category is provided (other than "All")
-    if (category && category !== "All") {
-      let posts = await Post.find(baseQuery)
-        .populate({
-          path: "user_id",
-          select: "name profile_image verified reported_count", // include verified field
-          match: { reported_count: { $lt: 4 } },
-        })
-        .populate("category_id")
-        .sort({ createdAt: -1 })
-        .skip((page - 1) * limit)
-        .limit(limit);
+    // ✅ Add category and search filters
+    if (category || search) {
+      const additionalMatch = {};
 
-      posts = posts.filter((post) => post.user_id);
-      return res.status(200).json({
-        message: "Posts retrieved successfully.",
-        data: formatPosts(posts),
-      });
-    } else {
-      // Use interest-based or general logic
-      const interestQuery = {
-        ...baseQuery,
-        $or: [
-          { category_id: { $in: user.preferred_categories } },
-          { user_id: { $in: user.following } },
-        ],
-      };
-
-      const isNewUser = user.preferred_categories.length === 0 && user.following.length === 0;
-      if (!isNewUser) {
-        const interestLimit = Math.ceil(limit * 0.7);
-        const generalLimit = limit - interestLimit;
-
-        let interestBasedPosts = await Post.find(interestQuery)
-          .populate({
-            path: "user_id",
-            select: "name profile_image verified reported_count",
-            match: { reported_count: { $lt: 4 } },
-          })
-          .populate("category_id")
-          .sort({ createdAt: -1 })
-          .skip((page - 1) * interestLimit)
-          .limit(interestLimit);
-
-        interestBasedPosts = interestBasedPosts.filter((post) => post.user_id);
-        const interestPostIds = interestBasedPosts.map((post) => post._id);
-
-        let generalPosts = await Post.find({
-          ...baseQuery,
-          _id: { $nin: interestPostIds },
-        })
-          .populate({
-            path: "user_id",
-            select: "name profile_image verified reported_count",
-            match: { reported_count: { $lt: 4 } },
-          })
-          .populate("category_id")
-          .sort({ createdAt: -1 })
-          .skip((page - 1) * generalLimit)
-          .limit(generalLimit);
-
-        generalPosts = generalPosts.filter((post) => post.user_id);
-        const combinedPosts = [...interestBasedPosts, ...generalPosts];
-        const uniquePosts = combinedPosts
-          .filter(
-            (post, index, self) =>
-              index === self.findIndex((p) => p._id.toString() === post._id.toString())
-          )
-          .sort((a, b) => b.createdAt - a.createdAt);
-
-        return res.status(200).json({
-          message: "Posts retrieved successfully.",
-          data: formatPosts(uniquePosts),
-        });
+      if (category && category !== "All") {
+        const catArray = category
+          .split(",")
+          .map(c => new mongoose.Types.ObjectId(c.trim())); // ✅ Correct use
+        additionalMatch.category_id = catArray.length > 1 ? { $in: catArray } : catArray[0];
       }
 
-      // Fallback for new users
-      let posts = await Post.find(baseQuery)
-        .populate({
-          path: "user_id",
-          select: "name profile_image verified reported_count",
-          match: { reported_count: { $lt: 4 } },
-        })
-        .populate("category_id")
-        .sort({ createdAt: -1 })
-        .skip((page - 1) * limit)
-        .limit(limit);
-      posts = posts.filter((post) => post.user_id);
-      return res.status(200).json({
-        message: "Posts retrieved successfully.",
-        data: formatPosts(posts),
-      });
+      if (search && search.trim() !== "") {
+        additionalMatch.$or = [
+          { text_content: { $regex: search, $options: "i" } },
+          { "author.name": { $regex: search, $options: "i" } }
+        ];
+      }
+
+      pipeline.push({ $match: additionalMatch });
     }
+
+    // ✅ Sorting and pagination
+    pipeline.push(
+      { $sort: { createdAt: -1 } },
+      { $skip: (page - 1) * limit },
+      { $limit: limit }
+    );
+
+    const posts = await Post.aggregate(pipeline);
+
+    await Post.populate(posts, [
+      { path: "category_id", select: "name" },
+      { path: "comments", select: "text user_id createdAt" }
+    ]);
+
+    const formattedPosts = posts.map(post => ({
+      id: post._id,
+      user: {
+        id: post.author._id,
+        name: post.author.name,
+        profile_image: post.author.profile_image || "https://via.placeholder.com/40",
+        verified: post.author.verified
+      },
+      type: post.category_id?.name || "Unknown Category",
+      time: post.createdAt,
+      content: post.text_content || "No content available",
+      media: post.media?.map(m => m.media_path) || [],
+      liked: post.likes?.includes(userId) || false,
+      likeCount: post.likes?.length || 0,
+      commentCount: post.comments?.length || 0,
+      shareCount: post.shares || 0
+    }));
+
+    return res.status(200).json({
+      message: "Posts retrieved successfully.",
+      data: formattedPosts
+    });
+
   } catch (error) {
     console.error("Error retrieving posts:", error);
     return res.status(500).json({ message: "Failed to retrieve posts." });
   }
 };
+
+
 
 // Function to format posts
 const formatPosts = (posts) => {
@@ -892,7 +871,7 @@ const likeUnlikePost = async (req, res) => {
     let liked = false;
     if (post.likes.includes(userId)) {
       // User already liked => unlike
-      
+
       // Remove the like from the post document
       post.likes = post.likes.filter(
         (id) => id.toString() !== userId.toString()
@@ -904,7 +883,7 @@ const likeUnlikePost = async (req, res) => {
       liked = false;
       // Decrement user's likes_given (if maintained)
       user.likes_given = Math.max((user.likes_given || 0) - 1, 0);
-      
+
       // Update post owner’s likes_received if needed.
       const postOwner = await User.findById(post.user_id);
       if (postOwner) {
@@ -913,7 +892,7 @@ const likeUnlikePost = async (req, res) => {
       }
     } else {
       // Not previously liked => add like
-      
+
       post.likes.push(userId);
       // Add postId into user's liked_posts if not already added.
       if (!user.liked_posts.includes(postId)) {
@@ -921,7 +900,7 @@ const likeUnlikePost = async (req, res) => {
       }
       liked = true;
       user.likes_given = (user.likes_given || 0) + 1;
-      
+
       // Update post owner’s likes_received.
       const postOwner = await User.findById(post.user_id);
       if (postOwner) {
@@ -934,7 +913,7 @@ const likeUnlikePost = async (req, res) => {
     await post.save();
     await user.save();
 
-    
+
     // For instance, if the user has liked 7 or more posts from a certain category,
     // we add that category to preferred_categories.
     const likedPostIds = user.liked_posts;

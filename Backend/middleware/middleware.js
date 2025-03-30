@@ -35,7 +35,6 @@ const checkAuthentication = (req, res, next) => {
   }
 };
 
-// console.log("User role in checkIsAdmin outside:", req.user?.role);
 // Middleware to check if the user is an admin
 const checkIsAdmin = (req, res, next) => {
   console.log("User role in checkIsAdmin:", req.user?.role);
@@ -64,18 +63,70 @@ const bothUser = (req, res, next) => {
   }
 };
 
+const checkIsSuperAdmin = (req, res, next) => {
+  console.log("User role in checkIsSuperAdmin:", req.user?.role);
+  if (req.user?.role === "superadmin") {
+    next();
+  } else {
+    res.status(403).json({ 
+      success: false,
+      message: "Access denied: Super Admins only.",
+      code: "UNAUTHORIZED_ACCESS" 
+    });
+  }
+};
+
 const checkUserStatus = async (req, res, next) => {
   try {
     // Assume req.user is already set after token verification
     const user = await User.findById(req.user.id);
-    if (user.is_blocked || user.is_suspended) {
-      return res.status(403).json({
-        message:
-          "Your account has been blocked or suspended. Please contact support.",
+    
+    // Check if user exists
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    // Check if account is marked for deletion and past deletion date
+    if (user.is_deleted && user.deleted_at && user.deleted_at < new Date()) {
+      return res.status(401).json({
+        message: "Account has been permanently deleted. Please create a new account.",
+        code: "ACCOUNT_DELETED"
       });
     }
+
+    // Check if account was marked for deletion but user logged in before deletion date
+    if (user.is_deleted && user.deleted_at && user.deleted_at > new Date()) {
+      // Reactivate account
+      user.is_deleted = false;
+      user.deleted_at = null;
+      user.status = "Active";
+      user.moderation_history.push({
+        action: "Login",
+        note: "Account deletion cancelled by user login",
+        date: new Date(),
+        admin: user._id
+      });
+      await user.save();
+    }
+
+    // Check for blocked or suspended status
+    if (user.is_blocked || user.is_suspended) {
+      return res.status(403).json({
+        message: "Your account has been blocked or suspended. Please contact support."
+      });
+    }
+
+    // Check deactivation status
+    if (user.is_deactivate) {
+      // Reactivate account on login
+      user.is_deactivate = false;
+      user.deactivate_date = null;
+      await user.save();
+    }
+
     next();
   } catch (error) {
+    console.error("Error checking user status:", error);
     next(error);
   }
 };
@@ -98,6 +149,7 @@ const checkDOBUpdated = async (req, res, next) => {
   }
 };
 
+
 module.exports = {
   checkAuthentication,
   checkIsAdmin,
@@ -105,4 +157,5 @@ module.exports = {
   bothUser,
   checkUserStatus,
   checkDOBUpdated,
+  checkIsSuperAdmin
 };

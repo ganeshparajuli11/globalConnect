@@ -1,6 +1,6 @@
 const express = require('express');
 const { checkAuthentication, checkIsUser, bothUser, checkDOBUpdated } = require('../middleware/middleware');
-const { getUserProfile, sendOTP, verifyOTP, resetPassword, changePassword, updateProfileImage, getFollowCounts, getUserProfileById, getFollowingOrFollowers, sendProfileUpdateOTP, updateUserProfile, blockUnblockUser, getBlockedUsers, searchUser, getUserProfileForMobile, getSelfProfileForMobile, updateDOB } = require('../controller/userSelfController');
+const { getUserProfile, sendOTP, verifyOTP, resetPassword, changePassword, updateProfileImage, getFollowCounts, getUserProfileById, getFollowingOrFollowers, sendProfileUpdateOTP, updateUserProfile, blockUnblockUser, getBlockedUsers, searchUser, getUserProfileForMobile, getSelfProfileForMobile, updateDOB, initiateAccountDeletion, deactivateAccount } = require('../controller/userSelfController');
 const { uploadProfileImage } = require('../middleware/uploadMiddleware');
 const router = express.Router();
 
@@ -31,6 +31,12 @@ router.get('/follow-counts', checkAuthentication, checkIsUser, getFollowCounts);
 router.put('/block-unblock', checkAuthentication,checkIsUser, blockUnblockUser);
 router.get('/get-blocked', checkAuthentication,checkIsUser, getBlockedUsers);
 router.get('/search', checkAuthentication,checkIsUser, searchUser);
+router.post('/deleteAccount', checkAuthentication,checkIsUser,initiateAccountDeletion);
+router.post('/deactivate', checkAuthentication,checkIsUser,deactivateAccount);
+
+
+
+
 
 router.put("/update-dob", checkAuthentication, updateDOB);
 // Endpoint to check if DOB is updated

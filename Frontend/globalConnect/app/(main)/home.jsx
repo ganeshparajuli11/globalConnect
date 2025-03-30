@@ -1,40 +1,53 @@
 import React, { useState, useEffect } from "react";
-import { 
-  StyleSheet, 
-  Text, 
-  View, 
-  FlatList, 
-  ActivityIndicator, 
-  TouchableOpacity 
+import {
+  StyleSheet,
+  Text,
+  View,
+  FlatList,
+  ActivityIndicator,
+  TouchableOpacity
 } from "react-native";
 import BottomNav from "../../components/bottomNav";
 import { theme } from "../../constants/theme";
 import ScreenWrapper from "../../components/ScreenWrapper";
 import { hp, wp } from "../../helpers/common";
 import { useRouter } from "expo-router";
-import { useFetchPosts } from "../../services/postServices";
+import { useFetchPosts, useSearchPosts } from "../../services/postServices";
 import PostCard from "../../components/PostCard";
 import { StatusBar } from "expo-status-bar";
 import SearchBar from "../../components/SearchBar";
 import SortCategory from "../../components/SortCategory";
 import UserCard from "../../components/UserCard";
 import { useSearchUsers } from "../../services/useSearchUsers";
-import { useSearchPosts } from "../../services/useSearchPosts";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { updateUserLocation } from "../../services/getLocationService";
 import DobCard from "../../components/DobCard";
 import { checkDOB, updateDOB } from "../../services/dobService";
 import { userAuth } from "../../contexts/AuthContext";
+import { useCallback } from "react";
 
 
 const Home = () => {
   const router = useRouter();
-  const {authToken, refreshUserProfile} = userAuth()
+  const { authToken, refreshUserProfile } = userAuth()
 
-// if(!authToken){
-//   router.replace("/login")
-// }
+  // if(!authToken){
+  //   router.replace("/login")
+  // }
+  const handleShareError = (error) => {
+    // Only log non-socket related errors
+    if (!error?.error?.includes('getIO is not a function')) {
+      console.error('Share error:', error);
+    }
 
+    // For socket-specific errors, just log a debug message
+    if (error?.error?.includes('getIO is not function')) {
+      console.debug('Socket sharing temporarily unavailable');
+    }
+
+    // Return false to prevent further error propagation
+    return false;
+  };
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("All");
   const [searchType, setSearchType] = useState("users");
@@ -44,7 +57,26 @@ const Home = () => {
   // Hooks for posts & search
   const { posts, fetchPosts, loading, hasMore, page, resetPosts } = useFetchPosts(selectedCategory);
   const { users, loading: searchUserLoading } = useSearchUsers(searchQuery);
-  const { posts: searchPosts, loading: searchPostLoading } = useSearchPosts(searchQuery);
+  const {
+    posts: searchPosts,
+    loading: searchPostLoading,
+    fetchSearchPosts,
+    hasMore: searchHasMore,
+    page: searchPage
+  } = useSearchPosts(searchQuery);
+  // Update search effects
+  useEffect(() => {
+    if (searchQuery.trim() && searchType === "posts") {
+      fetchSearchPosts(searchQuery, 1, true);
+    }
+  }, [searchQuery, searchType]);
+
+  const handleLoadMoreSearchPosts = useCallback(() => {
+    if (searchHasMore && !searchPostLoading && searchType === "posts") {
+      fetchSearchPosts(searchQuery, searchPage, false);
+    }
+  }, [searchHasMore, searchPostLoading, searchQuery, searchPage, searchType]);
+
 
   // When category changes, reset posts and fetch fresh data
   useEffect(() => {
@@ -55,13 +87,19 @@ const Home = () => {
 
   const isSearching = searchQuery.trim().length > 0;
   const searchLoading = searchType === "users" ? searchUserLoading : searchPostLoading;
+  const handleSearchTypeChange = (type) => {
+    setSearchType(type);
+    if (type === "posts" && searchQuery.trim()) {
+      fetchSearchPosts(searchQuery);
+    }
+  };
 
   const renderSearchToggle = () => {
     return (
       <View style={styles.toggleContainer}>
         <TouchableOpacity
           style={[styles.toggleButton, searchType === "users" && styles.activeToggle]}
-          onPress={() => setSearchType("users")}
+          onPress={() => handleSearchTypeChange("users")}
         >
           <Text style={[styles.toggleText, searchType === "users" && styles.activeToggleText]}>
             Users
@@ -69,7 +107,7 @@ const Home = () => {
         </TouchableOpacity>
         <TouchableOpacity
           style={[styles.toggleButton, searchType === "posts" && styles.activeToggle]}
-          onPress={() => setSearchType("posts")}
+          onPress={() => handleSearchTypeChange("posts")}
         >
           <Text style={[styles.toggleText, searchType === "posts" && styles.activeToggleText]}>
             Posts
@@ -149,7 +187,7 @@ const Home = () => {
               showsVerticalScrollIndicator={false}
               contentContainerStyle={styles.listStyle}
               keyExtractor={(item) => item._id}
-              renderItem={({ item }) => <UserCard user={item} onFollowToggle={() => {}} />}
+              renderItem={({ item }) => <UserCard user={item} onFollowToggle={() => { }} />}
               ListEmptyComponent={
                 !searchLoading && (
                   <View style={styles.emptyContainer}>
@@ -168,16 +206,29 @@ const Home = () => {
               contentContainerStyle={styles.listStyle}
               keyExtractor={(item) => item.id}
               renderItem={({ item }) => <PostCard item={item} router={router} />}
+              onEndReached={handleLoadMoreSearchPosts}
+              onEndReachedThreshold={0.5}
+              onShareError={handleShareError}
               ListEmptyComponent={
-                !searchLoading && (
+                !searchPostLoading && (
                   <View style={styles.emptyContainer}>
                     <Text style={styles.emptyText}>No posts found</Text>
                   </View>
                 )
               }
-              ListFooterComponent={
-                searchLoading && <ActivityIndicator style={{ marginVertical: 30 }} size="large" />
-              }
+              ListFooterComponent={() => {
+                if (searchPostLoading) {
+                  return <ActivityIndicator style={{ marginVertical: 30 }} size="large" />;
+                }
+                if (!searchHasMore && searchPosts.length > 0) {
+                  return (
+                    <View style={styles.footerContainer}>
+                      <Text style={styles.footerText}>No more posts available</Text>
+                    </View>
+                  );
+                }
+                return null;
+              }}
             />
           )
         ) : (
@@ -188,7 +239,18 @@ const Home = () => {
               showsVerticalScrollIndicator={false}
               contentContainerStyle={styles.listStyle}
               keyExtractor={(item) => item.id}
-              renderItem={({ item }) => <PostCard item={item} router={router} />}
+              renderItem={({ item }) => <PostCard
+                item={{
+                  ...item,
+                  user: {
+                    id: item.user?._id || item.user?.id, // Handle both formats
+                    name: item.user?.name,
+                    profile_image: item.user?.profile_image
+                  }
+                }}
+                router={router}
+                onShareError={handleShareError}
+              />}
               onEndReached={() => {
                 if (hasMore && !loading) {
                   fetchPosts(page, false);

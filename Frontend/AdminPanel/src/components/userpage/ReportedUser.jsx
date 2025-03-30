@@ -19,6 +19,7 @@ import {
 } from "react-icons/fa";
 
 import Sidebar from "../sidebar/Sidebar";
+import UserManagementComponent from "./UserManagementComponent";
 
 const ReportedUser = () => {
   const [accessToken, setAccessToken] = useState(null);
@@ -43,20 +44,9 @@ const ReportedUser = () => {
   const [detailModalVisible, setDetailModalVisible] = useState(false);
   const [selectedReport, setSelectedReport] = useState(null);
 
-  // Action Side-Drawer
-  const [actionModalVisible, setActionModalVisible] = useState(false);
-
-  // Duration/Reason Modal & Confirmation
-  const [durationModalVisible, setDurationModalVisible] = useState(false);
-  const [confirmationModalVisible, setConfirmationModalVisible] = useState(false);
-
-  // Action handling
+  // Action Modal state using the reusable component
   const [selectedUser, setSelectedUser] = useState(null);
-  const [selectedAction, setSelectedAction] = useState(""); 
-  const [actionReason, setActionReason] = useState("");
-  const [selectedDuration, setSelectedDuration] = useState("");
-  const [confirmationMessage, setConfirmationMessage] = useState("");
-  const [onConfirm, setOnConfirm] = useState(() => () => {});
+  const [actionModalVisible, setActionModalVisible] = useState(false);
 
   const navigate = useNavigate();
 
@@ -87,7 +77,6 @@ const ReportedUser = () => {
         const data = response.data.data;
         setUserData(data);
 
-        // Example stats calculations:
         const total = data.length;
         const blockedCount = data.filter(
           (item) => item.reportedTo?.is_blocked
@@ -95,8 +84,6 @@ const ReportedUser = () => {
         const suspendedCount = data.filter(
           (item) => item.reportedTo?.is_suspended
         ).length;
-
-        // This counts each record in "data" as a reported user.
         const reportedCount = total;
 
         setStats({
@@ -154,140 +141,8 @@ const ReportedUser = () => {
   const isBlocked = selectedUser?.reportedTo?.is_blocked;
   const isSuspended = selectedUser?.reportedTo?.is_suspended;
 
-  // ===== handleBlockOrSuspend
-  // For block/suspend we open reason/duration modal
-  // For unblock/unsuspend we do direct confirm
-  const handleBlockOrSuspend = (actionType) => {
-    setSelectedAction(actionType);
-    setActionModalVisible(false);
-
-    if (actionType === "unblock" || actionType === "unsuspend") {
-      setConfirmationMessage(
-        `Are you sure you want to ${actionType} user ${selectedUser?.reportedTo?.name}?`
-      );
-      setOnConfirm(() => async () => {
-        try {
-          await axios.put(
-            `${API_BASE_URL}/admin-update-user-status`,
-            {
-              userId: selectedUser?.reportedTo?._id,
-              action: actionType, 
-            },
-            { headers: { Authorization: `Bearer ${accessToken}` } }
-          );
-          toast.success(`User successfully ${actionType}ed`);
-          fetchReportedUsers();
-        } catch (error) {
-          toast.error(error.response?.data?.message || `Failed to ${actionType} user`);
-        } finally {
-          setConfirmationModalVisible(false);
-          setSelectedUser(null);
-          setSelectedAction("");
-        }
-      });
-      setConfirmationModalVisible(true);
-
-    } else {
-      // block / suspend => reason/duration
-      setDurationModalVisible(true);
-    }
-  };
-
-  // ===== handleSubmitAction
-  // Called after the admin picks reason/duration for block/suspend
-  const handleSubmitAction = async () => {
-    if (!selectedDuration || !actionReason.trim()) {
-      toast.error("Please select a duration and enter a reason.");
-      return;
-    }
-
-    try {
-      // "block" or "suspend" are direct from selectedAction
-      await axios.put(
-        `${API_BASE_URL}/admin-update-user-status`,
-        {
-          userId: selectedUser?.reportedTo?._id,
-          action: selectedAction,
-          reason: actionReason,
-          duration: selectedDuration,
-          resetReports: false
-        },
-        { headers: { Authorization: `Bearer ${accessToken}` } }
-      );
-
-      toast.success(`User ${selectedAction}ed successfully`);
-      fetchReportedUsers();
-
-      setDurationModalVisible(false);
-      setSelectedUser(null);
-      setSelectedAction("");
-      setActionReason("");
-      setSelectedDuration("");
-
-    } catch (error) {
-      toast.error(error.response?.data?.message || `Failed to ${selectedAction} user`);
-    }
-  };
-
-  // ===== handleResetReportCount
-  const handleResetReportCount = () => {
-    setConfirmationMessage(
-      `Are you sure you want to reset report count for user ${selectedUser?.reportedTo?.name}?`
-    );
-    setOnConfirm(() => async () => {
-      try {
-        await axios.put(
-          `${API_BASE_URL}/reset-report-count`, // Updated endpoint
-          {
-            type: "user", // Specify type as "user"
-            id: selectedUser?.reportedTo?._id // Send the user ID
-          },
-          { headers: { Authorization: `Bearer ${accessToken}` } }
-        );
-        
-        toast.success("Report count reset successfully");
-        fetchReportedUsers(); // Refresh the data
-        
-      } catch (error) {
-        console.error('Reset report error:', error.response?.data);
-        toast.error(error.response?.data?.message || "Failed to reset report count");
-      } finally {
-        setConfirmationModalVisible(false);
-        setActionModalVisible(false);
-        setSelectedUser(null);
-      }
-    });
-    setConfirmationModalVisible(true);
-  };
-
-  // ===== handleDelete
-  const handleDelete = () => {
-    setConfirmationMessage(
-      `Are you sure you want to delete user ${selectedUser?.reportedTo?.name}?`
-    );
-    setOnConfirm(() => async () => {
-      try {
-        await axios.put(
-          `${API_BASE_URL}/admin-update-user-status`,
-          {
-            userId: selectedUser?.reportedTo?._id,
-            action: "delete",
-            reason: "User deleted by admin"
-          },
-          { headers: { Authorization: `Bearer ${accessToken}` } }
-        );
-        toast.success("User deleted successfully");
-        fetchReportedUsers();
-      } catch (error) {
-        toast.error(error.response?.data?.message || "Failed to delete user");
-      } finally {
-        setConfirmationModalVisible(false);
-        setActionModalVisible(false);
-        setSelectedUser(null);
-      }
-    });
-    setConfirmationModalVisible(true);
-  };
+  // Inline action side-drawer code has been removed.
+  // Instead, the reusable UserManagementComponent will be rendered when actionModalVisible is true.
 
   return (
     <div className="flex h-screen">
@@ -303,7 +158,6 @@ const ReportedUser = () => {
         {/* Header */}
         <div className="fixed top-0 right-0 left-64 bg-white shadow-sm z-20">
           <div className="px-6 py-4">
-            {/* Title & Search */}
             <div className="flex items-center justify-between mb-4">
               <h1 className="text-2xl font-semibold text-gray-800">
                 Reported Users
@@ -559,375 +413,18 @@ const ReportedUser = () => {
         </div>
       </div>
 
-      {/* === DETAIL MODAL === */}
-      {detailModalVisible && selectedReport && (
-        <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 z-50">
-          <div className="bg-white rounded-lg shadow-lg p-6 w-11/12 md:w-3/4 lg:w-1/2 overflow-y-auto max-h-full">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-2xl font-bold">Reported User Details</h2>
-              <button
-                className="text-gray-600"
-                onClick={() => setDetailModalVisible(false)}
-              >
-                <FaTimes />
-              </button>
-            </div>
-
-            {/* Basic Info */}
-            <div className="flex items-center space-x-4 mb-4">
-              <img
-                src={
-                  selectedReport.reportedTo?.profile_image
-                    ? `http://localhost:3000/${selectedReport.reportedTo.profile_image}`
-                    : "https://via.placeholder.com/80"
-                }
-                alt={selectedReport.reportedTo?.name}
-                className="w-24 h-24 rounded-full object-cover"
-              />
-              <div>
-                <h3 className="text-xl font-semibold">
-                  {selectedReport.reportedTo?.name}
-                </h3>
-                <p className="text-gray-600">
-                  {selectedReport.reportedTo?.email}
-                </p>
-                <p className="text-gray-500 text-sm">
-                  Status: {selectedReport.reportedTo?.status}
-                </p>
-              </div>
-            </div>
-
-            {/* Report Count */}
-            <div className="mb-4">
-              <p>
-                <span className="font-semibold">Report Count:</span>{" "}
-                {selectedReport.reportedCount}
-              </p>
-            </div>
-
-            {/* Reported Reasons */}
-            <div className="mb-4">
-              <h4 className="font-semibold mb-2">Report Reasons:</h4>
-              {selectedReport.reportCategoryDetails?.length > 0 ? (
-                <ul className="list-disc list-inside">
-                  {selectedReport.reportCategoryDetails.map((cat, idx) => (
-                    <li key={idx} className="mb-2">
-                      <strong>{cat.report_title}:</strong> {cat.description}
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <p className="text-sm text-gray-500">No report reasons found.</p>
-              )}
-            </div>
-
-            {/* Reported By */}
-            <div className="mb-4">
-              <h4 className="font-semibold mb-2">Reported By:</h4>
-              {selectedReport.reportedBy?.length > 0 ? (
-                <ul>
-                  {selectedReport.reportedBy.map((reporter, idx) => (
-                    <li key={idx} className="flex items-center space-x-2 mb-2">
-                      <img
-                        src={
-                          reporter.profile_image
-                            ? `http://localhost:3000/${reporter.profile_image}`
-                            : "https://via.placeholder.com/40"
-                        }
-                        alt={reporter.name}
-                        className="w-10 h-10 rounded-full object-cover"
-                      />
-                      <div>
-                        <p className="font-medium">{reporter.name}</p>
-                        <p className="text-sm text-gray-600">{reporter.email}</p>
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <p className="text-sm text-gray-500">No reporters found.</p>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* === ACTION SIDE-DRAWER === */}
+      {/* Render the reusable UserManagementComponent for user actions */}
       {actionModalVisible && selectedUser && (
-        <div className="fixed inset-0 overflow-hidden z-50">
-          <div className="absolute inset-0 overflow-hidden">
-            <div
-              className="absolute inset-0 bg-gray-500 bg-opacity-75 transition-opacity"
-              onClick={() => setActionModalVisible(false)}
-            />
-            <div className="fixed inset-y-0 right-0 pl-10 max-w-full flex">
-              <div className="w-screen max-w-md">
-                <div className="h-full flex flex-col bg-white shadow-xl">
-                  <div className="px-4 py-6 bg-gray-50 sm:px-6">
-                    <div className="flex items-center justify-between">
-                      <h2 className="text-lg font-medium text-gray-900">
-                        Manage Reported User: {selectedUser?.reportedTo?.name}
-                      </h2>
-                      <button
-                        onClick={() => setActionModalVisible(false)}
-                        className="rounded-md text-gray-400 hover:text-gray-500 focus:outline-none"
-                      >
-                        <FaTimes className="h-6 w-6" />
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="flex-1 px-4 py-6 sm:px-6 overflow-y-auto">
-                    <div className="space-y-4">
-                      {/* Info Card */}
-                      <div className="flex items-center space-x-4 p-4 bg-gray-50 rounded-lg">
-                        <img
-                          src={
-                            selectedUser?.reportedTo?.profile_image
-                              ? `http://localhost:3000/${selectedUser.reportedTo.profile_image}`
-                              : "https://via.placeholder.com/80"
-                          }
-                          alt={selectedUser?.reportedTo?.name}
-                          className="w-16 h-16 rounded-full object-cover"
-                        />
-                        <div>
-                          <h3 className="font-medium text-gray-900">
-                            {selectedUser?.reportedTo?.name}
-                          </h3>
-                          <p className="text-sm text-gray-500">
-                            {selectedUser?.reportedTo?.email}
-                          </p>
-                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800 mt-2">
-                            Reported
-                          </span>
-                        </div>
-                      </div>
-
-                      {/* Dynamic Block/Unblock */}
-                      {isBlocked ? (
-                        <button
-                          onClick={() => handleBlockOrSuspend("unblock")}
-                          className="w-full flex items-center justify-between px-4 py-3 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
-                        >
-                          <div className="flex items-center">
-                            <FaUndo className="text-green-500 mr-3" />
-                            <div className="text-left">
-                              <div className="font-medium">Unblock User</div>
-                              <div className="text-sm text-gray-500">
-                                Allow user to re-access the platform
-                              </div>
-                            </div>
-                          </div>
-                        </button>
-                      ) : (
-                        <button
-                          onClick={() => handleBlockOrSuspend("block")}
-                          className="w-full flex items-center justify-between px-4 py-3 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
-                        >
-                          <div className="flex items-center">
-                            <FaUserLock className="text-red-500 mr-3" />
-                            <div className="text-left">
-                              <div className="font-medium">Block User</div>
-                              <div className="text-sm text-gray-500">
-                                Prevent user from accessing the platform
-                              </div>
-                            </div>
-                          </div>
-                        </button>
-                      )}
-
-                      {/* Dynamic Suspend/Unsuspend */}
-                      {isSuspended ? (
-                        <button
-                          onClick={() => handleBlockOrSuspend("unsuspend")}
-                          className="w-full flex items-center justify-between px-4 py-3 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
-                        >
-                          <div className="flex items-center">
-                            <FaUndo className="text-green-500 mr-3" />
-                            <div className="text-left">
-                              <div className="font-medium">Unsuspend User</div>
-                              <div className="text-sm text-gray-500">
-                                Lift suspension from the user
-                              </div>
-                            </div>
-                          </div>
-                        </button>
-                      ) : (
-                        <button
-                          onClick={() => handleBlockOrSuspend("suspend")}
-                          className="w-full flex items-center justify-between px-4 py-3 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
-                        >
-                          <div className="flex items-center">
-                            <FaUserClock className="text-yellow-500 mr-3" />
-                            <div className="text-left">
-                              <div className="font-medium">Suspend User</div>
-                              <div className="text-sm text-gray-500">
-                                Temporarily restrict user access
-                              </div>
-                            </div>
-                          </div>
-                        </button>
-                      )}
-
-                      {/* Reset Report Count */}
-                      <button
-                        onClick={handleResetReportCount}
-                        className="w-full flex items-center justify-between px-4 py-3 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
-                      >
-                        <div className="flex items-center">
-                          <FaUndo className="text-blue-500 mr-3" />
-                          <div className="text-left">
-                            <div className="font-medium">Reset Report Count</div>
-                            <div className="text-sm text-gray-500">
-                              Set report count to 0
-                            </div>
-                          </div>
-                        </div>
-                      </button>
-
-                      {/* Delete User */}
-                      <button
-                        onClick={handleDelete}
-                        className="w-full flex items-center justify-between px-4 py-3 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
-                      >
-                        <div className="flex items-center">
-                          <FaUserMinus className="text-gray-500 mr-3" />
-                          <div className="text-left">
-                            <div className="font-medium">Delete User</div>
-                            <div className="text-sm text-gray-500">
-                              Permanently remove user account
-                            </div>
-                          </div>
-                        </div>
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Duration/Reason Modal */}
-      {durationModalVisible && (
-        <div className="fixed inset-0 overflow-hidden z-50">
-          <div className="absolute inset-0 overflow-hidden">
-            <div
-              className="absolute inset-0 bg-gray-500 bg-opacity-75 transition-opacity"
-              onClick={() => setDurationModalVisible(false)}
-            />
-            <div className="absolute inset-x-0 bottom-0 max-w-full flex justify-center">
-              <div className="w-full max-w-lg">
-                <div className="bg-white rounded-t-xl shadow-xl">
-                  <div className="px-4 py-5 sm:p-6">
-                    <h3 className="text-lg font-medium text-gray-900 mb-4">
-                      {selectedAction === "block" ? "Block" : "Suspend"} User
-                    </h3>
-
-                    <div className="mb-4">
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Reason
-                      </label>
-                      <textarea
-                        value={actionReason}
-                        onChange={(e) => setActionReason(e.target.value)}
-                        placeholder={`Why are you ${selectedAction}ing this user?`}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        rows="3"
-                      />
-                    </div>
-
-                    <div className="mb-6">
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Duration
-                      </label>
-                      <div className="grid grid-cols-2 gap-3">
-                        {[
-                          { value: "1w", label: "1 Week" },
-                          { value: "1m", label: "1 Month" },
-                          { value: "6m", label: "6 Months" },
-                          { value: "permanent", label: "Permanent" },
-                        ].map((option) => (
-                          <label
-                            key={option.value}
-                            className={`flex items-center justify-center px-4 py-2 rounded-lg cursor-pointer border transition-all ${
-                              selectedDuration === option.value
-                                ? "border-blue-500 bg-blue-50 text-blue-700"
-                                : "border-gray-200 hover:border-gray-300"
-                            }`}
-                          >
-                            <input
-                              type="radio"
-                              value={option.value}
-                              checked={selectedDuration === option.value}
-                              onChange={(e) => setSelectedDuration(e.target.value)}
-                              className="hidden"
-                            />
-                            {option.label}
-                          </label>
-                        ))}
-                      </div>
-                    </div>
-
-                    <div className="flex space-x-3">
-                      <button
-                        onClick={handleSubmitAction}
-                        className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-                      >
-                        Confirm
-                      </button>
-                      <button
-                        onClick={() => {
-                          setDurationModalVisible(false);
-                          setActionReason("");
-                          setSelectedDuration("");
-                        }}
-                        className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
-                      >
-                        Cancel
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Confirmation Modal */}
-      {confirmationModalVisible && (
-        <div className="fixed inset-0 overflow-y-auto z-50">
-          <div className="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center">
-            <div
-              className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity"
-              onClick={() => setConfirmationModalVisible(false)}
-            />
-            <div className="inline-block w-full max-w-md p-6 my-8 overflow-hidden text-left align-middle transition-all transform bg-white shadow-xl rounded-lg">
-              <h3 className="text-lg font-medium text-gray-900 mb-4">
-                Confirm Action
-              </h3>
-              <p className="text-sm text-gray-500 mb-6 whitespace-pre-line">
-                {confirmationMessage}
-              </p>
-              <div className="flex space-x-3">
-                <button
-                  onClick={() => onConfirm()}
-                  className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
-                >
-                  Confirm
-                </button>
-                <button
-                  onClick={() => setConfirmationModalVisible(false)}
-                  className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
-                >
-                  Cancel
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
+        <UserManagementComponent
+          selectedUser={selectedUser}
+          setSelectedUser={setSelectedUser}
+          fetchUserData={fetchReportedUsers}
+          fetchActiveUsers={fetchReportedUsers}
+          API_BASE_URL={API_BASE_URL}
+          accessToken={accessToken}
+          isVisible={actionModalVisible}
+          setIsVisible={setActionModalVisible}
+        />
       )}
     </div>
   );

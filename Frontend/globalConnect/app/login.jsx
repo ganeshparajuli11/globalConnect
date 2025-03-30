@@ -22,7 +22,7 @@ import { theme } from "../constants/theme";
 import { hp, wp } from "../helpers/common";
 import { userAuth } from "../contexts/AuthContext";
 import { useFocusEffect } from "@react-navigation/native";
-
+import AsyncStorage from '@react-native-async-storage/async-storage';
 // --- Axios interceptor to suppress error popups after logout ---
 axios.interceptors.response.use(
   (response) => response,
@@ -34,7 +34,19 @@ axios.interceptors.response.use(
     return Promise.reject(error);
   }
 );
-
+// Update the axios interceptor
+axios.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    // Handle 401 errors silently
+    if (error.response && error.response.status === 401) {
+      console.warn("Token expired or invalid - redirecting to login");
+      return Promise.reject(error);
+    }
+    // For other errors, let them propagate
+    return Promise.reject(error);
+  }
+);
 const Login = () => {
   const ip = config.API_IP;
   const [email, setEmail] = useState("");

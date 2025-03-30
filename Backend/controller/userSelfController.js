@@ -799,6 +799,149 @@ const getSelfProfileForMobile = async (req, res) => {
 };
 
 
+// Add these controllers after existing controllers
+
+const deactivateAccount = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const user = await User.findById(userId);
+
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    if (user.is_deactivate) {
+      return res.status(400).json({ message: "Account is already deactivated" });
+    }
+
+    // Update deactivation status and date
+    user.is_deactivate = true;
+    user.deactivate_date = new Date();
+    user.last_activity = new Date();
+    
+    // Add to moderation history for tracking
+    user.moderation_history.push({
+      action: "Login",
+      note: "Account deactivated by user",
+      date: new Date(),
+      admin: userId // Self-initiated action
+    });
+
+    // Send email notification
+    const transporter = nodemailer.createTransport({
+      service: "Gmail",
+      auth: {
+        user: process.env.EMAIL,
+        pass: process.env.EMAIL_PASSWORD,
+      },
+    });
+
+    const mailOptions = {
+      from: process.env.EMAIL,
+      to: user.email,
+      subject: "Account Deactivation Confirmation",
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 20px auto; padding: 20px; border: 1px solid #ddd; border-radius: 10px;">
+          <h2 style="color: #5B37B7; margin-bottom: 20px;">Account Deactivation</h2>
+          <p>Hello ${user.name},</p>
+          <p>Your GlobalConnect account has been deactivated as requested. Here's what you need to know:</p>
+          <ul>
+            <li>Your profile will be hidden from other users</li>
+            <li>Your posts will not be visible to others</li>
+            <li>You can reactivate your account at any time by logging in</li>
+          </ul>
+          <p>If you didn't request this action, please contact our support team immediately.</p>
+          <p style="margin-top: 20px;">Best regards,<br>The GlobalConnect Team</p>
+        </div>
+      `
+    };
+
+    await transporter.sendMail(mailOptions);
+    await user.save();
+
+    return res.status(200).json({
+      message: "Account has been deactivated successfully. You can reactivate it by logging in again.",
+      deactivationDate: user.deactivate_date
+    });
+
+  } catch (error) {
+    console.error("Error deactivating account:", error);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+};
+
+const initiateAccountDeletion = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const user = await User.findById(userId);
+
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    // Set deletion date to 15 days from now
+    const deletionDate = new Date();
+    deletionDate.setDate(deletionDate.getDate() + 15);
+
+    // Mark account for deletion
+    user.is_deleted = true;
+    user.deleted_at = deletionDate;
+    user.status = "Under Review"; // Change status to indicate pending deletion
+
+    // Add to moderation history
+    user.moderation_history.push({
+      action: "Login",
+      note: "Account deletion initiated by user",
+      date: new Date(),
+      admin: userId // Self-initiated action
+    });
+
+    await user.save();
+
+    // Send email notification
+    const transporter = nodemailer.createTransport({
+      service: "Gmail",
+      auth: {
+        user: process.env.EMAIL,
+        pass: process.env.EMAIL_PASSWORD,
+      },
+    });
+
+    const mailOptions = {
+      from: process.env.EMAIL,
+      to: user.email,
+      subject: "Account Deletion Initiated",
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 20px auto; padding: 20px; border: 1px solid #ddd; border-radius: 10px;">
+          <h2 style="color: #FF3B30; margin-bottom: 20px;">Account Deletion Request</h2>
+          <p>Hello ${user.name},</p>
+          <p>We've received your request to delete your GlobalConnect account. Your account is scheduled for permanent deletion on:</p>
+          <p style="font-weight: bold; color: #FF3B30; font-size: 16px;">${deletionDate.toLocaleDateString()}</p>
+          <p>If you change your mind, you can cancel the deletion process by simply logging into your account before this date.</p>
+          <p>Please note:</p>
+          <ul>
+            <li>All your data will be permanently deleted</li>
+            <li>This action cannot be undone after the deletion date</li>
+            <li>Your content will be removed from GlobalConnect</li>
+          </ul>
+          <p style="margin-top: 20px;">If you didn't request this deletion, please log in immediately and secure your account.</p>
+          <p style="margin-top: 20px;">Best regards,<br>The GlobalConnect Team</p>
+        </div>
+      `
+    };
+
+    await transporter.sendMail(mailOptions);
+
+    return res.status(200).json({
+      message: "Account deletion initiated. Your account will be permanently deleted in 15 days unless you log in again.",
+      deletionDate: deletionDate
+    });
+  } catch (error) {
+    console.error("Error initiating account deletion:", error);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+};
+
 
 
 module.exports = {
@@ -818,5 +961,7 @@ module.exports = {
   blockUnblockUser,
   getUserProfileForMobile,
   getSelfProfileForMobile,
-  updateDOB
+  updateDOB,
+  deactivateAccount,
+  initiateAccountDeletion
 };

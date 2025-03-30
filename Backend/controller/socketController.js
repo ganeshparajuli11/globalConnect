@@ -3,6 +3,15 @@ const { sendExpoPushNotification } = require("./pushTokenController"); // Assumi
 let onlineUsers = new Map(); // Track online users
 let ioInstance; // Store the Socket.IO instance
 
+
+const getIO = () => {
+  if (!io) {
+      throw new Error('Socket.io not initialized');
+  }
+  return io;
+};
+
+
 const handleConnection = (io, socket) => {
   console.log("A user connected:", socket.id);
 
@@ -155,4 +164,4 @@ const initSocket = (io) => {
   }, 30000);
 };
 
-module.exports = { initSocket, sendRealTimeNotification, sendRealTimeMessage };
+module.exports = { initSocket, sendRealTimeNotification, sendRealTimeMessage, };

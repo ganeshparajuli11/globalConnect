@@ -63,25 +63,27 @@ const getUserDetails = async (req, res) => {
     }));
 
     // Build the user response
-    const userResponse = {
-      id: userDetails._id,
-      username: userDetails.username,
-      name: userDetails.name,
-      email: userDetails.email,
-      bio: userDetails.bio,
-      profile_image: userDetails.profile_image,
-      dob: userDetails.dob,
-      gender: userDetails.gender,
-      location: userDetails.current_location,
-      destination: userDetails.destination_country,
-      followersCount: userDetails.followers ? userDetails.followers.length : 0,
-      followingCount: userDetails.following ? userDetails.following.length : 0,
-      postsCount: userDetails.posts_count || 0,
-      likesReceived: userDetails.likes_received || 0,
-      status: userDetails.status,
-      isBlocked: userDetails.is_blocked,
-      isSuspended: userDetails.status === "Suspended",
-    };
+// In the userResponse object, add the role field:
+const userResponse = {
+  id: userDetails._id,
+  username: userDetails.username,
+  name: userDetails.name,
+  email: userDetails.email,
+  bio: userDetails.bio,
+  profile_image: userDetails.profile_image,
+  role: userDetails.role, // Add this line
+  dob: userDetails.dob,
+  gender: userDetails.gender,
+  location: userDetails.current_location,
+  destination: userDetails.destination_country,
+  followersCount: userDetails.followers ? userDetails.followers.length : 0,
+  followingCount: userDetails.following ? userDetails.following.length : 0,
+  postsCount: userDetails.posts_count || 0,
+  likesReceived: userDetails.likes_received || 0,
+  status: userDetails.status,
+  isBlocked: userDetails.is_blocked,
+  isSuspended: userDetails.status === "Suspended",
+};
 
     res.status(200).json({
       data: {

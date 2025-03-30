@@ -101,7 +101,7 @@ const AllCategory = () => {
   const handleToggleCategory = async (categoryId) => {
     try {
       await axios.patch(
-        `http://192.168.18.105:3000/api/category/status/${categoryId}`
+        `http://localhost:3000/api/category/status/${categoryId}`
       );
       setCategories(
         categories.map((category) =>

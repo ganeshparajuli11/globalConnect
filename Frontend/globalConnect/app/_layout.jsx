@@ -8,6 +8,7 @@ import * as Notifications from "expo-notifications";
 import { AuthProvider, userAuth } from "../contexts/AuthContext";
 import config from "../constants/config";
 import { SocketProvider } from "./SocketProvider";
+import * as Location from "expo-location";
 
 const ip = config.API_IP;
 
@@ -19,6 +20,44 @@ Notifications.setNotificationHandler({
     shouldSetBadge: false,
   }),
 });
+
+// Updated location request function
+const requestLocationWithFallback = async () => {
+  try {
+    const lastDenied = await AsyncStorage.getItem('locationPermissionDenied');
+    const now = new Date().getTime();
+    
+    // If previously denied and within 7 days, don't ask again
+    if (lastDenied && (now - JSON.parse(lastDenied)) < 7 * 24 * 60 * 60 * 1000) {
+      console.log('Skipping location request - recently denied');
+      return null;
+    }
+
+    const { status: existingStatus } = await Location.getPermissionsAsync();
+
+    if (existingStatus === 'denied') {
+      await AsyncStorage.setItem('locationPermissionDenied', JSON.stringify(now));
+      return null;
+    }
+
+    if (existingStatus !== 'granted') {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        await AsyncStorage.setItem('locationPermissionDenied', JSON.stringify(now));
+        return null;
+      }
+    }
+
+    const location = await Location.getCurrentPositionAsync({
+      accuracy: Location.Accuracy.Reduced // Use reduced accuracy
+    }).catch(() => null);
+
+    return location;
+  } catch (error) {
+    // Silently handle any errors
+    return null;
+  }
+};
 
 const MainLayout = () => {
   const { user, setUserData, setAuth } = userAuth();
@@ -36,7 +75,6 @@ const MainLayout = () => {
   // Helper: Register push token if not set
   const registerPushToken = async (token, authToken) => {
     try {
-      // Send token to API endpoint to update the user's expoPushToken
       const endpoint = `http://${ip}:3000/api/register/`;
       const response = await axios.post(
         endpoint,
@@ -45,10 +83,14 @@ const MainLayout = () => {
       );
       console.log("✅ Push token updated:", response.data);
     } catch (error) {
-      console.error("❌ Error updating push token:", error?.response?.data || error.message);
+      console.error(
+        "❌ Error updating push token:",
+        error?.response?.data || error.message
+      );
     }
   };
 
+  // Update the useEffect where tokens are checked
   useEffect(() => {
     const checkToken = async () => {
       try {
@@ -56,6 +98,22 @@ const MainLayout = () => {
 
         const token = await AsyncStorage.getItem("authToken");
         if (token) {
+          // Handle location request silently
+          requestLocationWithFallback()
+            .then((location) => {
+              if (location) {
+                AsyncStorage.setItem(
+                  "lastKnownLocation",
+                  JSON.stringify({
+                    latitude: location.coords.latitude,
+                    longitude: location.coords.longitude,
+                    timestamp: new Date().getTime(),
+                  })
+                ).catch(() => {}); // Ignore storage errors
+              }
+            })
+            .catch(() => {}); // Ignore any location errors
+
           const endpoint = `http://${ip}:3000/api/dashboard/getUserData`;
           const response = await axios.get(endpoint, {
             headers: { Authorization: `Bearer ${token}` },
@@ -73,8 +131,10 @@ const MainLayout = () => {
             );
 
             // Check if expoPushToken is missing or invalid, then register one.
-            if (!userData.expoPushToken || !userData.expoPushToken.startsWith("ExponentPushToken")) {
-              // Request permission and get the Expo push token
+            if (
+              !userData.expoPushToken ||
+              !userData.expoPushToken.startsWith("ExponentPushToken")
+            ) {
               const { status: existingStatus } = await Notifications.getPermissionsAsync();
               let finalStatus = existingStatus;
               if (existingStatus !== "granted") {
@@ -82,7 +142,10 @@ const MainLayout = () => {
                 finalStatus = status;
               }
               if (finalStatus !== "granted") {
-                Alert.alert("Push Notifications", "Failed to get push token for push notifications!");
+                Alert.alert(
+                  "Push Notifications",
+                  "Failed to get push token for push notifications!"
+                );
               } else {
                 const tokenResponse = await Notifications.getExpoPushTokenAsync();
                 console.log("Expo push token:", tokenResponse.data);
@@ -119,42 +182,20 @@ const MainLayout = () => {
     checkToken();
   }, [isMounted]);
 
-  // **Notification Listener (Foreground and Background)**
+  // Notification listeners for foreground and background
   useEffect(() => {
-    // This listener is fired whenever a notification is received while the app is foregrounded
-    notificationListener.current = Notifications.addNotificationReceivedListener(
-      (notification) => {
+    notificationListener.current =
+      Notifications.addNotificationReceivedListener((notification) => {
         console.log("Notification received in foreground:", notification);
-        // Handle the notification here (e.g., show an alert, update UI)
-        // Alert.alert(
-        //   notification.request.content.title,
-        //   notification.request.content.body
-        // );
-        // Example: Navigate to a specific screen based on notification data
-      //   if (notification.request.content.data.screen === "chat") {
-      //     router.push("/chat");
-      //   }else{
-      //     router.push("/home");
-      // }}
-      }
-    );
+      });
 
-    // This listener is fired whenever a user taps on or interacts with a notification (works when app is foregrounded, backgrounded, or killed)
-    responseListener.current = Notifications.addNotificationResponseReceivedListener(
-      (response) => {
+    responseListener.current =
+      Notifications.addNotificationResponseReceivedListener((response) => {
         console.log("Notification response received:", response);
-        // Handle the user's interaction with the notification here
-        // Example: Navigate to a specific screen based on notification data
-        // if (response.notification.request.content.data.screen === "chat") {
-        //   router.push("/chat");
-        // }
-      }
-    );
+      });
 
     return () => {
-      Notifications.removeNotificationSubscription(
-        notificationListener.current
-      );
+      Notifications.removeNotificationSubscription(notificationListener.current);
       Notifications.removeNotificationSubscription(responseListener.current);
     };
   }, [router]);
@@ -178,43 +219,50 @@ const MainLayout = () => {
     >
       <Stack.Screen
         name="(main)"
-        options={{
-          headerShown: false,
-          animation: "none",
-        }}
+        options={{ headerShown: false, animation: "none" }}
       />
       <Stack.Screen
         name="(auth)"
-        options={{
-          headerShown: false,
-          animation: "none",
-        }}
+        options={{ headerShown: false, animation: "none" }}
       />
       <Stack.Screen
         name="(setting)"
-        options={{
-          headerShown: false,
-          animation: "none",
-        }}
+        options={{ headerShown: false, animation: "none" }}
       />
       <Stack.Screen
         name="postDetails"
-        options={{
-          presentation: "modal",
-          animation: "fade",
-        }}
+        options={{ presentation: "modal", animation: "fade" }}
       />
     </Stack>
   );
 };
 
-// Ignore specific LogBox warnings
+// Function to request location later if needed
+const requestLocationLater = async () => {
+  try {
+    const lastRequest = await AsyncStorage.getItem("lastLocationRequest");
+    const now = new Date().getTime();
+
+    // Only ask again after 7 days
+    if (!lastRequest || now - JSON.parse(lastRequest) > 7 * 24 * 60 * 60 * 1000) {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      await AsyncStorage.setItem("lastLocationRequest", JSON.stringify(now));
+      return status === "granted";
+    }
+    return false;
+  } catch (error) {
+    console.log("Location permission request delayed");
+    return false;
+  }
+};
+
 LogBox.ignoreLogs([
   "Warning: TNodeChildrenRenderer",
   "Warning: bound renderChildren",
   "Warning: TNodeChildrenRenderer",
   "Warning: MemoizedTNodeRenderer",
   "Warning: TRenderEngineProvider",
+  "Permission to access location was denied" // Added this line
 ]);
 
 const Layout = () => {

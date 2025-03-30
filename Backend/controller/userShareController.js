@@ -1,13 +1,21 @@
 const User = require("../models/userSchema");
 const Post = require("../models/postSchema");
 const Message = require("../models/messageSchema");
-const { onlineUsers } = require("./socketController");
+const { onlineUsers, getIO } = require("./socketController");
 
 // Share a post with a followed user
 const sharePost = async (req, res) => {
     try {
         const { postId, recipientId } = req.body;
         const senderId = req.user.id;
+
+        // Validate request data
+        if (!postId || !recipientId) {
+            return res.status(400).json({ 
+                success: false, 
+                message: "Post ID and recipient ID are required" 
+            });
+        }
 
         // Validate post exists and get post with user details
         const post = await Post.findById(postId);
@@ -27,12 +35,18 @@ const sharePost = async (req, res) => {
 
         // Check if sender follows recipient
         if (!sender.following.includes(recipientId)) {
-            return res.status(403).json({ success: false, message: "You can only share with users you follow" });
+            return res.status(403).json({ 
+                success: false, 
+                message: "You can only share with users you follow" 
+            });
         }
 
         // Check if recipient has blocked sender
         if (recipient.blocked_users.includes(senderId)) {
-            return res.status(403).json({ success: false, message: "Cannot share post with this user" });
+            return res.status(403).json({ 
+                success: false, 
+                message: "Cannot share post with this user" 
+            });
         }
 
         // Create a new message with the shared post
@@ -47,7 +61,7 @@ const sharePost = async (req, res) => {
 
         await message.save();
 
-        // Prepare the message data for socket emission
+        // Prepare the message payload
         const messagePayload = {
             senderId,
             receiverId: recipientId,
@@ -64,30 +78,23 @@ const sharePost = async (req, res) => {
             }
         };
 
-        // Get recipient's socket ID
+        // Get socket instance and recipient's socket ID
+        const io = getIO();
         const recipientSocketId = onlineUsers.get(recipientId);
-        
-        // Check if recipient is online and socket exists
-        if (recipientSocketId && req.io) {
-            const recipientSocket = req.io.sockets.sockets.get(recipientSocketId);
-            if (recipientSocket && recipientSocket.connected) {
-                console.log(`✅ Delivering shared post message to socket: ${recipientSocketId}`);
-                req.io.to(recipientSocketId).emit("receiveMessage", messagePayload);
-                
-                // Send notification
-                req.io.to(recipientSocketId).emit("receiveNotification", {
-                    type: "shared_post",
-                    message: `${sender.name} shared a post with you`,
-                    postId: post._id,
-                    senderId: senderId,
-                    timestamp: message.timestamp
-                });
-            } else {
-                console.log(`⚠️ Recipient socket ${recipientSocketId} exists but is not connected`);
-                onlineUsers.delete(recipientId); // Clean up stale socket
-            }
-        } else {
-            console.log(`⚠️ Recipient ${recipientId} is offline. Message stored in database.`);
+
+        // Emit socket events if recipient is online
+        if (io && recipientSocketId) {
+            // Emit message event
+            io.to(recipientSocketId).emit("receiveMessage", messagePayload);
+
+            // Emit notification event
+            io.to(recipientSocketId).emit("receiveNotification", {
+                type: "shared_post",
+                message: `${sender.name} shared a post with you`,
+                postId: post._id,
+                senderId: senderId,
+                timestamp: message.timestamp
+            });
         }
 
         // Update post share count
@@ -113,5 +120,6 @@ const sharePost = async (req, res) => {
         });
     }
 };
+
 
 module.exports = { sharePost };

@@ -3,6 +3,7 @@ const {
   checkAuthentication,
   checkIsAdmin,
   checkIsUser,
+  checkIsSuperAdmin,
 } = require("../middleware/middleware");
 const { uploadProfileImage } = require("../middleware/uploadMiddleware");
 const { signup, getAllAdmins, adminSignup, loginAdmin, login, updateDestinationCountry, removeAdmin, editAdminDetails } = require("../controller/userAuthenticationController");
@@ -13,7 +14,7 @@ const router = express.Router();
 router.post("/signup", signup);
 
 router.get("/allAdmin", getAllAdmins);
-router.delete("/admin/remove/:adminId",checkAuthentication, removeAdmin);
+router.delete("/admin/remove/:adminId",checkAuthentication,checkIsAdmin,checkIsSuperAdmin, removeAdmin);
 router.put("/admin/edit/:adminId",uploadProfileImage.single("profile_image"),checkAuthentication,  editAdminDetails);
 
 
@@ -21,7 +22,7 @@ router.put("/admin/edit/:adminId",uploadProfileImage.single("profile_image"),che
 
 // Admin signup route with profile image upload
 router.post(
-  "/admin/signup",
+  "/admin/signup",checkAuthentication,checkIsAdmin,checkIsSuperAdmin,
   uploadProfileImage.single("profile_image"),
   adminSignup
 );

@@ -10,7 +10,6 @@ import {
   StyleSheet,
   Platform,
   StatusBar,
-  Animated,
   Dimensions,
   Keyboard
 } from "react-native";
@@ -24,14 +23,11 @@ import config from "../../constants/config";
 import moment from "moment";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 
-const { width } = Dimensions.get("window");
+// Add network constants
+const MAX_RETRIES = 3;
+const RETRY_DELAY = 3000;
 
-// Modified conversation types without groups
-const conversationTypes = [
-  { id: "all", label: "All" },
-  { id: "unread", label: "Unread" },
-  { id: "friends", label: "Friends" }
-];
+const { width } = Dimensions.get("window");
 
 const MessagePage = () => {
   const ip = config.API_IP;
@@ -39,34 +35,12 @@ const MessagePage = () => {
   const { chatList, loading, fetchChatList } = useFetchChatList();
   const [searchQuery, setSearchQuery] = useState("");
   const [filteredChats, setFilteredChats] = useState([]);
-  const [activeTab, setActiveTab] = useState("all");
   const [error, setError] = useState(null);
   const [showSearchBar, setShowSearchBar] = useState(false);
-  const searchBarAnim = useState(new Animated.Value(0))[0];
   const searchInputRef = useRef(null);
-  const [keyboardVisible, setKeyboardVisible] = useState(false);
-  const flatListRef = useRef(null);
 
-  // Keep track of keyboard visibility
-  useEffect(() => {
-    const keyboardDidShowListener = Keyboard.addListener(
-      'keyboardDidShow',
-      () => {
-        setKeyboardVisible(true);
-      }
-    );
-    const keyboardDidHideListener = Keyboard.addListener(
-      'keyboardDidHide',
-      () => {
-        setKeyboardVisible(false);
-      }
-    );
-
-    return () => {
-      keyboardDidHideListener.remove();
-      keyboardDidShowListener.remove();
-    };
-  }, []);
+  const [retryCount, setRetryCount] = useState(0);
+  const [isRetrying, setIsRetrying] = useState(false);
 
   useEffect(() => {
     setFilteredChats(chatList);
@@ -83,63 +57,44 @@ const MessagePage = () => {
     }
   }, [searchQuery, chatList]);
 
+  // Modified fetch with retry logic
   useEffect(() => {
-    const fetchChatListWithRetry = async () => {
+    const fetchChatListWithRetry = async (retry = 0) => {
       try {
+        setIsRetrying(retry > 0);
         await fetchChatList();
+        setError(null);
+        setRetryCount(0);
       } catch (err) {
-        setError("Failed to fetch messages. Please try again later.");
+        console.log("Chat fetch attempt", retry + 1, "of", MAX_RETRIES);
+        if (retry < MAX_RETRIES) {
+          setRetryCount(retry + 1);
+          setTimeout(() => {
+            fetchChatListWithRetry(retry + 1);
+          }, RETRY_DELAY);
+        } else {
+          setError("Unable to connect to chat service. Please check your connection.");
+          setIsRetrying(false);
+        }
       }
     };
+
     fetchChatListWithRetry();
   }, [fetchChatList]);
 
-  // Filtered chats based on selected tab - removed groups option
-  const getFilteredChatsByTab = () => {
-    if (activeTab === "all") return filteredChats;
-    if (activeTab === "unread") return filteredChats.filter(chat => chat.unread);
-    if (activeTab === "friends") return filteredChats.filter(chat => chat.isFriend);
-    return filteredChats;
-  };
-
-  // Fixed search bar toggle function to ensure keyboard focus
+  // Simplified toggle search bar (without animation)
   const toggleSearchBar = () => {
     if (showSearchBar) {
-      // Hide search bar
+      setShowSearchBar(false);
+      setSearchQuery("");
       Keyboard.dismiss();
-      Animated.timing(searchBarAnim, {
-        toValue: 0,
-        duration: 250,
-        useNativeDriver: false,
-      }).start(() => {
-        setShowSearchBar(false);
-        setSearchQuery("");
-      });
     } else {
-      // Show search bar and focus input
       setShowSearchBar(true);
-      Animated.timing(searchBarAnim, {
-        toValue: 1,
-        duration: 250,
-        useNativeDriver: false,
-      }).start(() => {
-        // Ensure focus is applied after animation completes and component is fully rendered
+      setTimeout(() => {
         if (searchInputRef.current) {
-          // Delay focus to ensure component is ready
-          setTimeout(() => {
-            searchInputRef.current.focus();
-          }, 100);
+          searchInputRef.current.focus();
         }
-      });
-    }
-  };
-
-  // Modified tab press handler - don't dismiss keyboard when changing tabs
-  const handleTabPress = (tabId) => {
-    setActiveTab(tabId);
-    // Scroll to top when changing tabs
-    if (flatListRef.current) {
-      flatListRef.current.scrollToOffset({ offset: 0, animated: true });
+      }, 100);
     }
   };
 
@@ -147,7 +102,7 @@ const MessagePage = () => {
     if (!timestamp) return "";
     const messageDate = moment(timestamp);
     const now = moment();
-    
+
     if (now.diff(messageDate, 'days') < 1) {
       return messageDate.format('h:mm A');
     } else if (now.diff(messageDate, 'days') < 7) {
@@ -157,7 +112,7 @@ const MessagePage = () => {
     }
   };
 
-  const renderChatItem = ({ item, index }) => {
+  const renderChatItem = ({ item }) => {
     const avatarUrl = item?.avatar
       ? `http://${ip}:3000/${item.avatar}`
       : "https://via.placeholder.com/100";
@@ -165,14 +120,12 @@ const MessagePage = () => {
     const isUnread = item.unread;
 
     return (
-      <Animated.View style={styles.chatItemContainer}>
+      <View style={styles.chatItemContainer}>
         <TouchableOpacity
           style={[styles.chatItem, isUnread && styles.unreadChatItem]}
           onPress={() => {
             router.replace(
-              `/chat?userId=${encodeURIComponent(item.userId)}&name=${encodeURIComponent(
-                item.name
-              )}`
+              `/chat?userId=${encodeURIComponent(item.userId)}&name=${encodeURIComponent(item.name)}`
             );
           }}
           activeOpacity={0.7}
@@ -187,7 +140,7 @@ const MessagePage = () => {
             />
             {item.isOnline && <View style={styles.onlineIndicator} />}
           </View>
-          
+
           <View style={styles.chatDetails}>
             <View style={styles.nameTimeRow}>
               <Text style={[styles.chatName, isUnread && styles.unreadName]} numberOfLines={1}>
@@ -200,7 +153,7 @@ const MessagePage = () => {
                 </Text>
               </View>
             </View>
-            
+
             <View style={styles.messagePreviewContainer}>
               {item.isTyping ? (
                 <Text style={styles.typingText}>typing...</Text>
@@ -212,24 +165,11 @@ const MessagePage = () => {
             </View>
           </View>
         </TouchableOpacity>
-        
         <View style={styles.swipeActionsPlaceholder} />
-      </Animated.View>
+      </View>
     );
   };
 
-  const renderTabItem = ({ item }) => (
-    <TouchableOpacity 
-      style={[styles.tabItem, activeTab === item.id && styles.activeTabItem]} 
-      onPress={() => handleTabPress(item.id)}
-    >
-      <Text style={[styles.tabText, activeTab === item.id && styles.activeTabText]}>
-        {item.label}
-      </Text>
-    </TouchableOpacity>
-  );
-
-  // Modified empty state to maintain consistent height
   const renderEmptyState = () => (
     <View style={styles.emptyContainer}>
       <View style={styles.emptyContent}>
@@ -244,85 +184,79 @@ const MessagePage = () => {
     </View>
   );
 
-  const renderHeader = () => (
-    <FlatList
-      horizontal
-      data={conversationTypes}
-      renderItem={renderTabItem}
-      keyExtractor={(item) => item.id}
-      showsHorizontalScrollIndicator={false}
-      contentContainerStyle={styles.tabsContainer}
-    />
-  );
-
+  // Header with search bar (no animations)
   const renderHeaderWithSearch = () => (
-    <>
-      <View style={styles.headerContainer}>
-        <View style={styles.header}>
-          <View style={styles.headerLeft}>
-            <TouchableOpacity style={styles.backButton} onPress={() => {
-              router.back();
-            }}>
-              <BackButton size={24} />
-            </TouchableOpacity>
-            <Text style={styles.headerTitle}>Messages</Text>
-          </View>
-          <View style={styles.headerRight}>
-            <TouchableOpacity style={styles.headerButton} onPress={toggleSearchBar}>
-              <Ionicons name="search" size={24} color={theme.colors.text} />
-            </TouchableOpacity>
+    <View style={styles.headerContainer}>
+      <View style={styles.header}>
+        <View style={styles.headerLeft}>
+          <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+            <BackButton size={24} />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Messages</Text>
+        </View>
+        <View style={styles.headerRight}>
+          <TouchableOpacity style={styles.headerButton} onPress={toggleSearchBar}>
+            <Ionicons name="search" size={24} color={theme.colors.text} />
+          </TouchableOpacity>
+        </View>
+      </View>
+      {showSearchBar && (
+        <View style={styles.searchBarContainer}>
+          <View style={styles.searchInputWrapper}>
+            <Ionicons name="search" size={20} color={theme.colors.gray} />
+            <TextInput
+              ref={searchInputRef}
+              style={styles.searchInput}
+              placeholder="Search conversations..."
+              placeholderTextColor={theme.colors.gray}
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+              autoCapitalize="none"
+              autoCorrect={false}
+              returnKeyType="search"
+              blurOnSubmit={false}
+            />
+            {searchQuery.length > 0 && (
+              <TouchableOpacity onPress={() => setSearchQuery("")}>
+                <Ionicons name="close-circle" size={20} color={theme.colors.gray} />
+              </TouchableOpacity>
+            )}
           </View>
         </View>
-
-        {/* Improved Search Bar Implementation */}
-        {showSearchBar && (
-          <Animated.View
-            style={[
-              styles.searchBarContainer,
-              {
-                height: searchBarAnim.interpolate({
-                  inputRange: [0, 1],
-                  outputRange: [0, 60]
-                }),
-                opacity: searchBarAnim
-              }
-            ]}
-          >
-            <View style={styles.searchInputWrapper}>
-              <Ionicons name="search" size={20} color={theme.colors.gray} />
-              <TextInput
-                ref={searchInputRef}
-                style={styles.searchInput}
-                placeholder="Search conversations..."
-                placeholderTextColor={theme.colors.gray}
-                value={searchQuery}
-                onChangeText={setSearchQuery}
-                autoCapitalize="none"
-                autoCorrect={false}
-                returnKeyType="search"
-                blurOnSubmit={false}
-              />
-              {searchQuery.length > 0 && (
-                <TouchableOpacity onPress={() => setSearchQuery("")}>
-                  <Ionicons name="close-circle" size={20} color={theme.colors.gray} />
-                </TouchableOpacity>
-              )}
-            </View>
-          </Animated.View>
-        )}
-      </View>
-
-      {renderHeader()}
-    </>
+      )}
+    </View>
   );
-  
-  const displayedChats = getFilteredChatsByTab();
+
+  const displayedChats = filteredChats;
+
+  const renderError = () => (
+    <View style={styles.errorContainer}>
+      <View style={styles.errorIconContainer}>
+        <Ionicons name="wifi-outline" size={40} color="#FFFFFF" />
+      </View>
+      <Text style={styles.errorTitle}>Connection Error</Text>
+      <Text style={styles.errorText}>
+        {isRetrying 
+          ? `Retrying connection... (Attempt ${retryCount}/${MAX_RETRIES})`
+          : error
+        }
+      </Text>
+      {!isRetrying && (
+        <TouchableOpacity
+          style={styles.retryButton}
+          onPress={() => {
+            setRetryCount(0);
+            fetchChatList();
+          }}>
+          <Text style={styles.retryButtonText}>Try Again</Text>
+        </TouchableOpacity>
+      )}
+    </View>
+  );
 
   return (
     <ScreenWrapper style={styles.container}>
       <StatusBar backgroundColor={theme.colors.background} barStyle="dark-content" />
-
-      {/* Chat List */}
       {loading ? (
         <View style={styles.loadingContainer}>
           <View style={styles.loadingIndicatorContainer}>
@@ -331,21 +265,9 @@ const MessagePage = () => {
           <Text style={styles.loadingText}>Loading your conversations...</Text>
         </View>
       ) : error ? (
-        <View style={styles.errorContainer}>
-          <View style={styles.errorIconContainer}>
-            <Ionicons name="wifi-outline" size={40} color="#FFFFFF" />
-          </View>
-          <Text style={styles.errorTitle}>Connection Error</Text>
-          <Text style={styles.errorText}>{error}</Text>
-          <TouchableOpacity 
-            style={styles.retryButton}
-            onPress={() => fetchChatList()}>
-            <Text style={styles.retryButtonText}>Try Again</Text>
-          </TouchableOpacity>
-        </View>
+        renderError()
       ) : (
         <FlatList
-          ref={flatListRef}
           data={displayedChats}
           keyExtractor={(item) => item.userId}
           renderItem={renderChatItem}
@@ -360,16 +282,28 @@ const MessagePage = () => {
           refreshing={loading}
           keyboardShouldPersistTaps="always"
           removeClippedSubviews={false}
-          // Ensure keyboard doesn't dismiss on scroll
           onScrollBeginDrag={() => {}}
           keyboardDismissMode="none"
         />
       )}
-
       <BottomNav />
     </ScreenWrapper>
   );
 };
+
+const additionalStyles = StyleSheet.create({
+  retryingText: {
+    fontSize: 14,
+    color: theme.colors.secondaryText || "#555555",
+    textAlign: 'center',
+    marginTop: 8,
+  },
+  progressText: {
+    fontSize: 12,
+    color: theme.colors.gray || "#8A8A8A",
+    marginTop: 4,
+  }
+});
 
 const styles = StyleSheet.create({
   container: {
@@ -414,7 +348,6 @@ const styles = StyleSheet.create({
   searchBarContainer: {
     paddingHorizontal: 16,
     paddingBottom: 12,
-    overflow: 'hidden',
   },
   searchInputWrapper: {
     flexDirection: "row",
@@ -433,34 +366,11 @@ const styles = StyleSheet.create({
     marginLeft: 8,
     paddingVertical: 10,
   },
-  tabsContainer: {
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: theme.colors.background || "#F8F9FA",
-  },
-  tabItem: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    marginRight: 10,
-    borderRadius: 18,
-    backgroundColor: 'rgba(0,0,0,0.04)',
-  },
-  activeTabItem: {
-    backgroundColor: theme.colors.primary || "#5B37B7",
-  },
-  tabText: {
-    fontSize: 14,
-    fontWeight: "500",
-    color: theme.colors.secondaryText || "#555555",
-  },
-  activeTabText: {
-    color: "#FFFFFF",
-  },
   chatListContainer: {
     paddingHorizontal: 16,
     paddingTop: 4,
     paddingBottom: 80,
-    minHeight: Dimensions.get('window').height - 80, // Ensure minimum height to prevent UI jumping
+    minHeight: Dimensions.get('window').height - 80,
   },
   chatItemContainer: {
     marginBottom: 12,
@@ -641,9 +551,9 @@ const styles = StyleSheet.create({
   },
   emptyContainer: {
     flex: 1,
-    paddingTop: 80, // This gives consistent position for the empty state
+    paddingTop: 80,
     justifyContent: 'flex-start',
-    minHeight: Dimensions.get('window').height - 280, // Ensure minimum height
+    minHeight: Dimensions.get('window').height - 280,
   },
   emptyContent: {
     alignItems: "center",
@@ -674,7 +584,8 @@ const styles = StyleSheet.create({
     color: theme.colors.secondaryText || "#555555",
     textAlign: "center",
     marginBottom: 32,
-  }
+  },
+  ...additionalStyles
 });
 
 export default MessagePage;

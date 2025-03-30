@@ -164,66 +164,110 @@ async function adminSignup(req, res) {
 
 async function login(req, res) {
   const { email, password } = req.body;
-  const userIp =
-    req.ip || req.headers["x-forwarded-for"] || req.connection.remoteAddress;
+  const userIp = req.ip || req.headers["x-forwarded-for"] || req.connection.remoteAddress;
   const deviceDetector = new DeviceDetector();
   const deviceInfo = deviceDetector.parse(req.headers["user-agent"]);
 
   try {
     const user = await User.findOne({ email });
     if (!user) {
-      return res
-        .status(404)
-        .json({ message: "User not found. Please sign up first." });
+      return res.status(404).json({ message: "User not found. Please sign up first." });
     }
 
-    if (user.status === "Inactive") {
-      user.status = "Active";
-    }
-
-    if (user.is_blocked) {
-      return res
-        .status(403)
-        .json({
-          message: "Your account is currently blocked. Please contact support.",
+    // Check account suspension
+    if (user.is_suspended) {
+      if (user.suspended_until && user.suspended_until > new Date()) {
+        return res.status(403).json({
+          message: `Your account is suspended until ${user.suspended_until.toLocaleDateString()}. Please contact support.`,
+          code: "ACCOUNT_SUSPENDED"
         });
+      } else {
+        // If suspension period is over, remove suspension
+        user.is_suspended = false;
+        user.suspended_until = null;
+      }
     }
 
+    // Check if account is blocked
+    if (user.is_blocked) {
+      return res.status(403).json({
+        message: "Your account is currently blocked. Please contact support.",
+        code: "ACCOUNT_BLOCKED"
+      });
+    }
+
+    // Check for permanently deleted account
+    if (user.is_deleted && user.deleted_at && user.deleted_at < new Date()) {
+      return res.status(401).json({
+        message: "This account has been permanently deleted. Please create a new account.",
+        code: "ACCOUNT_DELETED"
+      });
+    }
+
+    // Verify password
     const isPasswordValid = await user.comparePassword(password);
     if (!isPasswordValid) {
       return res.status(401).json({ message: "Invalid email or password." });
     }
 
-    const authToken = jwt.sign(
-      { id: user._id, email: user.email, role: user.role },
-      process.env.JWT_SECRET_KEY || "default_secret",
-      { expiresIn: "7d" }
-    );
+    // Handle account reactivation
+    if (user.is_deactivate) {
+      user.is_deactivate = false;
+      user.deactivate_date = null;
+      user.moderation_history.push({
+        admin: user._id,
+        action: "Login",
+        note: "Account reactivated through login",
+        date: new Date()
+      });
+    }
 
+    // Handle deletion cancellation within 15-day period
+    if (user.is_deleted && user.deleted_at && user.deleted_at > new Date()) {
+      user.is_deleted = false;
+      user.deleted_at = null;
+      user.moderation_history.push({
+        admin: user._id,
+        action: "Login",
+        note: "Account deletion cancelled through login",
+        date: new Date()
+      });
+    }
+
+    // Update login history and activity
     user.last_login = new Date();
+    user.last_activity = new Date();
     user.login_history.push({
       date: new Date(),
       ip_address: userIp,
-      device: deviceInfo.client ? deviceInfo.client.name : "Unknown Device",
+      device: deviceInfo.client ? deviceInfo.client.name : "Unknown Device"
     });
 
+    // Keep only last 10 login records
     if (user.login_history.length > 10) {
       user.login_history = user.login_history.slice(-10);
     }
 
+    // Add login to moderation history
     user.moderation_history.push({
       admin: user._id,
       action: "Login",
-      note: `User logged in from ${
-        deviceInfo.client ? deviceInfo.client.name : "Unknown Device"
-      } (${userIp})`,
-      date: new Date(),
+      note: `User logged in from ${deviceInfo.client ? deviceInfo.client.name : "Unknown Device"} (${userIp})`,
+      date: new Date()
     });
 
     user.markModified("login_history");
     user.markModified("moderation_history");
     await user.save();
 
+    // Generate auth token
+    const authToken = jwt.sign(
+      { id: user._id, email: user.email, role: user.role },
+      process.env.JWT_SECRET_KEY || "default_secret",
+      { expiresIn: "7d" }
+    );
+
+    // Prepare user response
     const userResponse = {
       id: user._id,
       username: user.username,
@@ -235,53 +279,61 @@ async function login(req, res) {
       gender: user.gender,
       location: user.current_location,
       destination: user.destination_country,
-      followersCount: user.followers ? user.followers.length : 0,
-      followingCount: user.following ? user.following.length : 0,
+      followersCount: user.followers?.length || 0,
+      followingCount: user.following?.length || 0,
       postsCount: user.posts_count || 0,
       likesReceived: user.likes_received || 0,
       status: user.status,
       isBlocked: user.is_blocked,
-      isSuspended: user.status === "Suspended",
+      isSuspended: user.is_suspended,
+      isDeactivated: user.is_deactivate,
+      isDeleted: user.is_deleted
     };
 
+    // Fetch user posts if account is active
     const userPosts = await Post.find({ user_id: user._id })
       .sort({ createdAt: -1 })
       .select("text_content media likes comments createdAt")
       .populate("user_id", "name profile_image")
       .lean();
 
-    const formattedPosts = userPosts.map((post) => ({
+    const formattedPosts = userPosts.map(post => ({
       id: post._id,
       content: post.text_content,
       media: post.media,
-      likesCount: post.likes ? post.likes.length : 0,
-      commentsCount: post.comments ? post.comments.length : 0,
+      likesCount: post.likes?.length || 0,
+      commentsCount: post.comments?.length || 0,
       createdAt: new Date(post.createdAt).toLocaleDateString("en-US", {
         year: "numeric",
         month: "long",
-        day: "numeric",
+        day: "numeric"
       }),
-      user: post.user_id
-        ? {
-            name: post.user_id.name,
-            profile_image: post.user_id.profile_image,
-          }
-        : {},
+      user: post.user_id ? {
+        name: post.user_id.name,
+        profile_image: post.user_id.profile_image
+      } : {}
     }));
 
+    // Return appropriate success message based on account state
+    let message = "Login successful!";
+    if (user.is_deactivate === false && user.deactivate_date === null) {
+      message = "Welcome back! Your account has been reactivated.";
+    } else if (user.is_deleted === false && user.deleted_at === null) {
+      message = "Welcome back! Your account deletion has been cancelled.";
+    }
+
     res.status(200).json({
-      message: "Login successful!",
+      message,
       authToken,
-      data: { user: userResponse, posts: formattedPosts },
+      data: { user: userResponse, posts: formattedPosts }
     });
+
   } catch (error) {
     console.error("Login Error:", error);
-    res
-      .status(500)
-      .json({
-        message: "An error occurred during login.",
-        error: error.message,
-      });
+    res.status(500).json({
+      message: "An error occurred during login.",
+      error: error.message
+    });
   }
 }
 

@@ -20,10 +20,12 @@ const { sendAdminNotification, getGlobalNotifications, scheduleAdminNotification
 router.get('/user', checkAuthentication, checkIsUser, getUserNotifications);
 
 
-router.put('/user/:notificationId/read', checkAuthentication, checkIsUser, markNotificationAsRead);
+router.put('/user/notification/read', checkAuthentication, checkIsUser, markNotificationAsRead);
 
 // Clear all notifications for a user
 router.delete('/user/clear-all', checkAuthentication, checkIsUser, clearAllNotifications);
+
+
 
 
 // =============================

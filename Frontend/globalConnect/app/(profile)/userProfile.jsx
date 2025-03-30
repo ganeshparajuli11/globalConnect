@@ -17,6 +17,7 @@ import { userAuth } from "../../contexts/AuthContext";
 import config from "../../constants/config";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { theme } from "../../constants/theme";
+import BottomNav from "../../components/bottomNav";
 
 const UserProfile = () => {
   const { userId } = useLocalSearchParams();
@@ -85,6 +86,38 @@ const UserProfile = () => {
     fetchUserProfile();
   };
 
+
+  const handleFollowToggle = async () => {
+    try {
+      const endpoint = `http://${ip}:3000/api/users/${userData.isFollowing ? 'unfollow' : 'follow'}/${userId}`;
+      
+      const response = await axios.post(endpoint, {}, {
+        headers: { Authorization: `Bearer ${authToken}` }
+      });
+
+      if (response.data.success) {
+        // Update local state
+        setUserData(prevData => ({
+          ...prevData,
+          isFollowing: !prevData.isFollowing,
+          followers: prevData.isFollowing 
+            ? prevData.followers - 1 
+            : prevData.followers + 1
+        }));
+      }
+    } catch (error) {
+      console.error('Follow/Unfollow error:', {
+        error: error.response?.data || error.message,
+        status: error.response?.status,
+        userId
+      });
+      Alert.alert(
+        'Error',
+        'Unable to update follow status. Please try again.'
+      );
+    }
+  };
+
   if (loading) {
     return (
       <View style={styles.loader}>
@@ -131,6 +164,7 @@ const UserProfile = () => {
           <Text style={styles.noPosts}>No posts available.</Text>
         }
       />
+      <BottomNav/>
     </SafeAreaView>
   );
 };

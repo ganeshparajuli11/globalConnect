@@ -4,8 +4,8 @@ const moment = require("moment");
 const Report = require("../models/reportCategorySchema");
 const nodemailer = require("nodemailer");
 const ReportUser = require("../models/reportUserSchema");
-const ReportPost = require("../models/reportPostSchema");
-
+const Comment = require("../models/commentSchema");
+const Category = require("../models/categorySchema");
 // Add cleanup job for long-term inactive users
 const initializeInactiveUsersCleanup = () => {
   setInterval(async () => {
@@ -859,7 +859,233 @@ const updateLocation = async (req, res) => {
   }
 };
 
+// Get unverified users
+const getUnverifiedUsers = async (req, res) => {
+  try {
+    const { sortBy = 'followers', sortOrder = 'desc', search = '' } = req.query;
 
+    // Build sort object
+    const sortObject = {};
+    switch (sortBy) {
+      case 'followers':
+        sortObject.followers = sortOrder === 'desc' ? -1 : 1;
+        break;
+      case 'posts':
+        sortObject.posts_count = sortOrder === 'desc' ? -1 : 1;
+        break;
+      case 'name':
+        sortObject.name = sortOrder === 'desc' ? -1 : 1;
+        break;
+      case 'date':
+        sortObject.createdAt = sortOrder === 'desc' ? -1 : 1;
+        break;
+      default:
+        sortObject.followers = -1;
+    }
+
+    // Build search query
+    const searchQuery = search ? {
+      $or: [
+        { name: { $regex: search, $options: 'i' } },
+        { email: { $regex: search, $options: 'i' } }
+      ]
+    } : {};
+
+    const unverifiedUsers = await User.find({
+      verified: false,
+      role: { $ne: "admin" },
+      is_deleted: false,
+      ...searchQuery
+    })
+      .select('_id name email profile_image followers posts_count createdAt')
+      .sort(sortObject);
+
+    const formattedUsers = unverifiedUsers.map(user => ({
+      userId: user._id,
+      name: user.name,
+      email: user.email,
+      profile_image: user.profile_image || "https://via.placeholder.com/40",
+      followers_count: user.followers?.length || 0,
+      posts_count: user.posts_count || 0,
+      createdAt: user.createdAt
+    }));
+
+    res.status(200).json({
+      success: true,
+      message: "Unverified users retrieved successfully",
+      data: formattedUsers
+    });
+  } catch (error) {
+    console.error("Error fetching unverified users:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch unverified users",
+      error: error.message
+    });
+  }
+};
+
+
+// Get verified users
+const getVerifiedUsers = async (req, res) => {
+  try {
+    const { sortBy = 'followers', sortOrder = 'desc', search = '' } = req.query;
+
+    // Build sort object
+    const sortObject = {};
+    switch (sortBy) {
+      case 'followers':
+        sortObject.followers = sortOrder === 'desc' ? -1 : 1;
+        break;
+      case 'posts':
+        sortObject.posts_count = sortOrder === 'desc' ? -1 : 1;
+        break;
+      case 'name':
+        sortObject.name = sortOrder === 'desc' ? -1 : 1;
+        break;
+      case 'date':
+        sortObject.createdAt = sortOrder === 'desc' ? -1 : 1;
+        break;
+      default:
+        sortObject.followers = -1;
+    }
+
+    // Build search query
+    const searchQuery = search ? {
+      $or: [
+        { name: { $regex: search, $options: 'i' } },
+        { email: { $regex: search, $options: 'i' } }
+      ]
+    } : {};
+
+    const verifiedUsers = await User.find({
+      verified: true,
+      role: { $ne: "admin" },
+      is_deleted: false,
+      ...searchQuery
+    })
+      .select('_id name email profile_image followers posts_count createdAt')
+      .sort(sortObject);
+
+    const formattedUsers = verifiedUsers.map(user => ({
+      userId: user._id,
+      name: user.name,
+      email: user.email,
+      profile_image: user.profile_image || "https://via.placeholder.com/40",
+      followers_count: user.followers?.length || 0,
+      posts_count: user.posts_count || 0,
+      createdAt: user.createdAt
+    }));
+
+    res.status(200).json({
+      success: true,
+      message: "Verified users retrieved successfully",
+      data: formattedUsers
+    });
+  } catch (error) {
+    console.error("Error fetching verified users:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch verified users",
+      error: error.message
+    });
+  }
+};
+
+// Update user verification status
+const verifyUser = async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const { verified, reason } = req.body;
+
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid user ID"
+      });
+    }
+
+    // Find user and update verification status
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found"
+      });
+    }
+
+    // Update verification status
+    user.verified = verified;
+    await user.save();
+
+    // Send email notification to user
+    const transporter = nodemailer.createTransport({
+      service: 'gmail',
+      auth: {
+        user: process.env.EMAIL,
+        pass: process.env.EMAIL_PASSWORD,
+      },
+    });
+
+    const emailHTML = `
+      <html>
+        <head>
+          <style>
+            .container { padding: 20px; font-family: Arial, sans-serif; }
+            .header { color: #4F46E5; font-size: 24px; margin-bottom: 20px; }
+            .content { line-height: 1.6; color: #333; }
+            .reason { background: #f3f4f6; padding: 15px; margin: 15px 0; border-radius: 5px; }
+            .footer { margin-top: 20px; color: #666; font-size: 14px; }
+          </style>
+        </head>
+        <body>
+          <div class="container">
+            <div class="header">Account Verification Update</div>
+            <div class="content">
+              <p>Dear ${user.name},</p>
+              <p>Your account has been verified by GlobalConnect admin team.</p>
+              ${reason ? `
+                <div class="reason">
+                  <strong>Reason for verification:</strong><br/>
+                  ${reason}
+                </div>
+              ` : ''}
+              <p>You will now have a verification badge on your profile.</p>
+            </div>
+            <div class="footer">
+              Best regards,<br/>
+              The GlobalConnect Team
+            </div>
+          </div>
+        </body>
+      </html>
+    `;
+
+    await transporter.sendMail({
+      from: process.env.EMAIL,
+      to: user.email,
+      subject: 'Your GlobalConnect Account Has Been Verified',
+      html: emailHTML
+    });
+
+    res.status(200).json({
+      success: true,
+      message: "User verification status updated successfully",
+      data: {
+        userId: user._id,
+        name: user.name,
+        verified: user.verified
+      }
+    });
+  } catch (error) {
+    console.error("Error updating user verification:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to update user verification",
+      error: error.message
+    });
+  }
+};
 
 // manage user status
 // Utility function to send email
@@ -892,10 +1118,10 @@ const manageUserStatus = async (req, res) => {
     console.log("Step 1: Extracting data from request body.");
     const {
       userId,
-      action,       
+      action,
       reason,
-      duration,     
-      resetReports, 
+      duration,
+      resetReports,
     } = req.body;
 
     console.log("Step 2: Validating action and duration.");
@@ -973,19 +1199,81 @@ const manageUserStatus = async (req, res) => {
         break;
 
       case "delete":
-        updatedStatus = "Deleted";
-        updateFields.is_deleted = true;
-        updateFields.deleted_at = new Date();
-        updateFields.status = "Deleted";
-        updateFields.delete_reason = reason || "User deleted by admin";
-        // Clear block/suspend
-        updateFields.is_blocked = false;
-        updateFields.is_suspended = false;
-        updateFields.block_reason = null;
-        updateFields.suspend_reason = null;
-        updateFields.unblock_date = null;
-        updateFields.suspended_until = null;
-        break;
+        try {
+          updatedStatus = "Deleted";
+          console.log("Step 5.1: Deleting user's posts and related data");
+
+          // Delete all posts by the user
+          const userPosts = await Post.find({ user_id: userId });
+          for (const post of userPosts) {
+            // Delete comments on user's posts
+            await Comment.deleteMany({ post_id: post._id });
+            // Delete likes on user's posts
+            await Post.updateMany({}, { $pull: { likes: post._id } });
+            // Delete reports for this post
+            await Post.updateMany(
+              { _id: post._id },
+              { $set: { reports: [] } }
+            );
+          }
+          await Post.deleteMany({ user_id: userId });
+
+          console.log("Step 5.2: Deleting user's reports and interactions");
+          // Delete all user reports
+          await ReportUser.deleteMany({ user_id: userId });
+          await ReportUser.deleteMany({ reported_by: userId });
+
+          // Delete post reports made by this user
+          await Post.updateMany(
+            { 'reports.reported_by': userId },
+            { $pull: { reports: { reported_by: userId } } }
+          );
+
+          console.log("Step 5.3: Cleaning up user social connections");
+          await User.updateMany(
+            { followers: userId },
+            { $pull: { followers: userId } }
+          );
+          await User.updateMany(
+            { following: userId },
+            { $pull: { following: userId } }
+          );
+          await User.updateMany(
+            { blocked_users: userId },
+            { $pull: { blocked_users: userId } }
+          );
+
+          console.log("Step 5.4: Removing user's likes and comments");
+          await Post.updateMany(
+            { likes: userId },
+            { $pull: { likes: userId } }
+          );
+          await Comment.deleteMany({ user_id: userId });
+
+          console.log("Step 5.5: Removing user's preferences and categories");
+          await Category.updateMany(
+            { preferred_by: userId },
+            { $pull: { preferred_by: userId } }
+          );
+
+          console.log("Step 5.6: Deleting user account");
+          await User.findByIdAndDelete(userId);
+
+          // Don't modify updateFields, return early instead
+          return res.status(200).json({
+            message: "User and all associated data deleted successfully",
+            data: {
+              userId,
+              action: "delete",
+              updatedStatus: "Deleted"
+            }
+          });
+
+        } catch (error) {
+          console.error("Error in delete case:", error);
+          throw error; // Re-throw to be caught by outer try-catch
+        }
+
     }
 
     if (resetReports === true) {
@@ -1075,19 +1363,16 @@ const manageUserStatus = async (req, res) => {
           </div>
           <div class="content">
             <h2>Hello ${user.name},</h2>
-            <p>Your account has been <strong>${updatedStatus}</strong>${
-              reason ? ` for the following reason:` : "."
-            }</p>
-            ${
-              reason
-                ? `<div class="reason-box">${reason}</div>`
-                : ""
-            }
-            ${
-              unblockDate
-                ? `<p>This action is effective until <strong>${moment(unblockDate).format("MMMM D, YYYY")}</strong>.</p>`
-                : ""
-            }
+            <p>Your account has been <strong>${updatedStatus}</strong>${reason ? ` for the following reason:` : "."
+      }</p>
+            ${reason
+        ? `<div class="reason-box">${reason}</div>`
+        : ""
+      }
+            ${unblockDate
+        ? `<p>This action is effective until <strong>${moment(unblockDate).format("MMMM D, YYYY")}</strong>.</p>`
+        : ""
+      }
             <p>If you believe this was a mistake or have any questions, feel free to reach out to our support team.</p>
             <p>Thank you,<br/>The <strong>GlobalConnect</strong> Team</p>
           </div>
@@ -1827,7 +2112,7 @@ const resetReportCount = async (req, res) => {
       updatedDoc = await User.findByIdAndUpdate(
         id,
         {
-          $set: { 
+          $set: {
             reported_count: 0,
             report_count: 0 // Update both fields to ensure compatibility
           }
@@ -1843,7 +2128,7 @@ const resetReportCount = async (req, res) => {
 
       // Also clear any associated reports in ReportUser collection
       await ReportUser.deleteMany({ user_id: id });
-      
+
       message = "User report count has been reset successfully";
 
     } else {
@@ -1851,7 +2136,7 @@ const resetReportCount = async (req, res) => {
       updatedDoc = await Post.findByIdAndUpdate(
         id,
         {
-          $set: { 
+          $set: {
             reported_count: 0,
             report_count: 0
           }
@@ -1867,7 +2152,7 @@ const resetReportCount = async (req, res) => {
 
       // Also clear any associated reports in ReportPost collection
       await ReportPost.deleteMany({ post_id: id });
-      
+
       message = "Post report count has been reset successfully";
     }
 
@@ -1907,5 +2192,8 @@ module.exports = {
   moderatePost,
   sendEmailToUsers,
   searchUsers,
-  resetReportCount
+  resetReportCount,
+  verifyUser,
+  getUnverifiedUsers,
+  getVerifiedUsers
 };

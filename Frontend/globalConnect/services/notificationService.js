@@ -7,9 +7,8 @@ import { userAuth } from '../contexts/AuthContext';
 const ip = config.API_IP;
 // Define your endpoint for fetching notifications for the logged-in user.
 const GET_NOTIFICATIONS_API_URL = `http://${ip}:3000/api/notifications/user`;
-const READ_NOTIFICATIONS_API_URL = `http://${ip}:3000/api/notifications/user/:notificationId/read`;
+const READ_NOTIFICATIONS_API_URL = `http://${ip}:3000/api/notifications/user/notification/read`;
 const CLEAR_NOTIFICATIONS_API_URL = `http://${ip}:3000/api/notifications/user/clear-all`;
-
 export const useFetchNotifications = () => {
   const { authToken } = userAuth();
   const [notifications, setNotifications] = useState([]);
@@ -47,11 +46,24 @@ export const useFetchNotifications = () => {
 
   const markAsRead = useCallback(async (notificationId) => {
     try {
-      const url = READ_NOTIFICATIONS_API_URL.replace(':notificationId', notificationId);
-      const response = await axios.put(url, {}, {
-        headers: { Authorization: `Bearer ${authToken}` },
-      });
-
+      // First check if notification is already read
+      const notification = notifications.find(n => n._id === notificationId);
+      if (notification?.read) {
+        // If already read, do nothing
+        return true;
+      }
+  
+      const response = await axios.put(
+        READ_NOTIFICATIONS_API_URL,
+        {
+          notificationId,
+          isRead: true
+        },
+        {
+          headers: { Authorization: `Bearer ${authToken}` },
+        }
+      );
+  
       if (response.data.success) {
         // Update the local state to mark the notification as read
         setNotifications(prevNotifications =>
@@ -66,9 +78,17 @@ export const useFetchNotifications = () => {
       return false;
     } catch (error) {
       console.error("Error marking notification as read:", error);
+      if (error.response) {
+        console.error(
+          "Error marking notification as read: Server responded with status",
+          error.response.status,
+          "and data:",
+          error.response.data
+        );
+      }
       return false;
     }
-  }, [authToken]);
+  }, [authToken, notifications]); // Added notifications to dependency array
 
   const clearAllNotifications = useCallback(async () => {
     try {

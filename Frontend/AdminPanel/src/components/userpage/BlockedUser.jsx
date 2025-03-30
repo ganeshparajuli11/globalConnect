@@ -23,31 +23,20 @@ import {
   FaUndo,
 } from "react-icons/fa";
 
+// Import the reusable component
+import UserManagementComponent from "./UserManagementComponent";
+
 const BlockedUser = () => {
   const [accessToken, setAccessToken] = useState(null);
   const [userData, setUserData] = useState([]);
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
+  const API_BASE_URL = "http://localhost:3000/api/dashboard";
 
   // Search & Pagination
   const [searchTerm, setSearchTerm] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const [usersPerPage, setUsersPerPage] = useState(10);
-
-  // Side-drawer & Modals
-  const [selectedUser, setSelectedUser] = useState(null);
-  const [actionModalVisible, setActionModalVisible] = useState(false);
-  const [durationModalVisible, setDurationModalVisible] = useState(false);
-
-  // Action logic
-  const [selectedAction, setSelectedAction] = useState("");
-  const [actionReason, setActionReason] = useState("");
-  const [selectedDuration, setSelectedDuration] = useState("");
-
-  // Confirmation
-  const [confirmationModalVisible, setConfirmationModalVisible] = useState(false);
-  const [confirmationMessage, setConfirmationMessage] = useState("");
-  const [onConfirm, setOnConfirm] = useState(() => () => {});
 
   // Stats
   const [stats, setStats] = useState({
@@ -57,8 +46,16 @@ const BlockedUser = () => {
     reportedUsers: 0,
   });
 
+  // Detail Modal (for viewing report details)
+  const [detailModalVisible, setDetailModalVisible] = useState(false);
+  const [selectedReport, setSelectedReport] = useState(null);
+
+  // Action Modal (reusable via UserManagementComponent)
+  const [selectedUser, setSelectedUser] = useState(null);
+  const [actionModalVisible, setActionModalVisible] = useState(false);
+
   // =======================================================
-  // 1) Retrieve token, then fetch blocked users
+  // Retrieve token, then fetch blocked users
   // =======================================================
   useEffect(() => {
     const token = reactLocalStorage.get("access_token");
@@ -75,14 +72,15 @@ const BlockedUser = () => {
 
     try {
       setLoading(true);
-      const response = await axios.get("http://localhost:3000/api/dashboard/get-blocked-user", {
-        headers: { Authorization: `Bearer ${accessToken}` },
-      });
+      const response = await axios.get(
+        "http://localhost:3000/api/dashboard/get-blocked-user",
+        {
+          headers: { Authorization: `Bearer ${accessToken}` },
+        }
+      );
 
       if (response.data.message === "Blocked users retrieved successfully.") {
         setUserData(response.data.data);
-
-        // Example stats
         const users = response.data.data;
         setStats({
           totalUsers: users.length,
@@ -104,7 +102,7 @@ const BlockedUser = () => {
   }, [accessToken]);
 
   // =======================================================
-  // 2) Search & Pagination
+  // Search & Pagination
   // =======================================================
   const filteredUsers = userData.filter(
     (u) =>
@@ -122,192 +120,29 @@ const BlockedUser = () => {
   };
 
   // =======================================================
-  // 3) Basic user row clicks
+  // Basic user row clicks
   // =======================================================
   const handleUserClick = (userId) => {
     navigate(`/user/${userId}`);
   };
 
-  // For 3-dot side-drawer
+  // For 3-dot side-drawer: set selected user and open action modal
   const handleActionClick = (e, user) => {
     e.stopPropagation();
     setSelectedUser(user);
     setActionModalVisible(true);
   };
 
-  // =======================================================
-  // 4) Delete user
-  // =======================================================
-  const handleDelete = () => {
-    if (!selectedUser) return;
-
-    setConfirmationMessage(
-      `Are you sure you want to delete user ${selectedUser.name}?`
-    );
-    setOnConfirm(() => async () => {
-      try {
-        await axios.delete(
-          `http://localhost:3000/api/dashboard/delete-user/${selectedUser.id}`,
-          { headers: { Authorization: `Bearer ${accessToken}` } }
-        );
-        toast.success("User deleted successfully");
-        fetchBlockedUsers();
-      } catch (error) {
-        toast.error("Failed to delete user");
-      }
-      setConfirmationModalVisible(false);
-      setActionModalVisible(false);
-      setSelectedUser(null);
-    });
-    setConfirmationModalVisible(true);
+  // Detail Modal handler (for viewing report details)
+  const handleViewDetails = (reportItem) => {
+    setSelectedReport(reportItem);
+    setDetailModalVisible(true);
   };
 
-  // =======================================================
-  // 5) Dynamic block/unblock/suspend/unsuspend
-  // Since these are blocked, we mostly do "unblock" or "suspend" or "unsuspend"
-  // But if you want to let them block further, you can show "block" again.
-  // =======================================================
-
-  // For "unblock" or "unsuspend" => direct confirm
-  const handleUnblockOrUnsuspend = (actionType) => {
-    // e.g. "unblock" or "unsuspend"
-    if (!selectedUser) return;
-
-    const label = actionType === "unblock" ? "unblock" : "unsuspend";
-    setConfirmationMessage(`Are you sure you want to ${label} user ${selectedUser.name}?`);
-    setOnConfirm(() => async () => {
-      try {
-        await axios.put(
-          "http://localhost:3000/api/dashboard/admin-update-user-status",
-          {
-            userId: selectedUser.id,
-            action: actionType, // "unblock" or "unsuspend"
-          },
-          { headers: { Authorization: `Bearer ${accessToken}` } }
-        );
-        toast.success(`User successfully ${label}ed.`);
-        fetchBlockedUsers();
-      } catch (error) {
-        toast.error(`Failed to ${label} user`);
-      }
-      setConfirmationModalVisible(false);
-      setActionModalVisible(false);
-      setSelectedUser(null);
-    });
-    setConfirmationModalVisible(true);
-  };
-
-  // For "block" or "suspend" => reason/duration
-  const handleBlockOrSuspend = (actionType) => {
-    setSelectedAction(actionType);
-    setActionModalVisible(false);
-
-    if (actionType === "unblock" || actionType === "unsuspend") {
-      setConfirmationMessage(
-        `Are you sure you want to ${actionType} user ${selectedUser?.reportedTo?.name}?`
-      );
-      setOnConfirm(() => async () => {
-        try {
-          await axios.put(
-            `${API_BASE_URL}/admin-update-user-status`,
-            {
-              userId: selectedUser?.reportedTo?._id,
-              action: actionType, 
-            },
-            { headers: { Authorization: `Bearer ${accessToken}` } }
-          );
-          toast.success(`User successfully ${actionType}ed`);
-          fetchReportedUsers();
-        } catch (error) {
-          toast.error(error.response?.data?.message || `Failed to ${actionType} user`);
-        } finally {
-          setConfirmationModalVisible(false);
-          setSelectedUser(null);
-          setSelectedAction("");
-        }
-      });
-      setConfirmationModalVisible(true);
-
-    } else {
-      // block / suspend => reason/duration
-      setDurationModalVisible(true);
-    }
-  };
-
-  // Then confirm block or suspend
-  const handleSubmitAction = async () => {
-    if (!selectedDuration || !actionReason.trim()) {
-      toast.error("Please select a duration and enter a reason.");
-      return;
-    }
-
-    try {
-      // "block" or "suspend" are direct from selectedAction
-      await axios.put(
-        `${API_BASE_URL}/admin-update-user-status`,
-        {
-          userId: selectedUser?.reportedTo?._id,
-          action: selectedAction,
-          reason: actionReason,
-          duration: selectedDuration,
-          resetReports: false
-        },
-        { headers: { Authorization: `Bearer ${accessToken}` } }
-      );
-
-      toast.success(`User ${selectedAction}ed successfully`);
-      fetchReportedUsers();
-
-      setDurationModalVisible(false);
-      setSelectedUser(null);
-      setSelectedAction("");
-      setActionReason("");
-      setSelectedDuration("");
-
-    } catch (error) {
-      toast.error(error.response?.data?.message || `Failed to ${selectedAction} user`);
-    }
-  };
-
-  // =======================================================
-  // 6) Reset user’s report count
-  // =======================================================
-  const handleResetReportCount = () => {
-    setConfirmationMessage(
-      `Are you sure you want to reset report count for user ${selectedUser?.reportedTo?.name}?`
-    );
-    setOnConfirm(() => async () => {
-      try {
-        await axios.put(
-          `${API_BASE_URL}/reset-report-count`, // Updated endpoint
-          {
-            type: "user", // Specify type as "user"
-            id: selectedUser?.reportedTo?._id // Send the user ID
-          },
-          { headers: { Authorization: `Bearer ${accessToken}` } }
-        );
-        
-        toast.success("Report count reset successfully");
-        fetchReportedUsers(); // Refresh the data
-        
-      } catch (error) {
-        console.error('Reset report error:', error.response?.data);
-        toast.error(error.response?.data?.message || "Failed to reset report count");
-      } finally {
-        setConfirmationModalVisible(false);
-        setActionModalVisible(false);
-        setSelectedUser(null);
-      }
-    });
-    setConfirmationModalVisible(true);
-  };
-
-  // =======================================================
-  // 7) Rendering
-  // =======================================================
   return (
     <div className="flex h-screen">
       <ToastContainer />
+
       {/* Sidebar */}
       <div className="w-64 fixed inset-y-0 bg-white shadow-lg z-30">
         <Sidebar />
@@ -343,7 +178,6 @@ const BlockedUser = () => {
                   </div>
                 </div>
               </div>
-
               <div className="bg-gradient-to-r from-red-500 to-red-600 rounded-lg p-4 text-white">
                 <div className="flex items-center">
                   <FaUserLock className="text-2xl opacity-80" />
@@ -353,7 +187,6 @@ const BlockedUser = () => {
                   </div>
                 </div>
               </div>
-
               <div className="bg-gradient-to-r from-yellow-500 to-yellow-600 rounded-lg p-4 text-white">
                 <div className="flex items-center">
                   <FaUserClock className="text-2xl opacity-80" />
@@ -363,7 +196,6 @@ const BlockedUser = () => {
                   </div>
                 </div>
               </div>
-
               <div className="bg-gradient-to-r from-orange-500 to-orange-600 rounded-lg p-4 text-white">
                 <div className="flex items-center">
                   <FaExclamationTriangle className="text-2xl opacity-80" />
@@ -425,7 +257,6 @@ const BlockedUser = () => {
                               alt={user.name}
                               className="w-10 h-10 rounded-full object-cover ring-2 ring-gray-100"
                             />
-                            {/* If we wanted an indicator for blocked or offline/online, could do so here */}
                           </div>
                         </td>
                         <td className="px-6 py-4">
@@ -439,7 +270,6 @@ const BlockedUser = () => {
                           <div className="max-w-xs truncate">{user.reason || "No reason provided"}</div>
                         </td>
                         <td className="px-6 py-4">
-                          {/* If user.is_blocked => show 'Blocked', else 'Active' or 'Suspended' etc. */}
                           {user.is_blocked ? (
                             <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
                               Blocked
@@ -549,279 +379,18 @@ const BlockedUser = () => {
         </div>
       </div>
 
-      {/* === ACTION SIDE-DRAWER === */}
+      {/* Render the reusable UserManagementComponent for user actions */}
       {actionModalVisible && selectedUser && (
-        <div className="fixed inset-0 overflow-hidden z-50">
-          <div className="absolute inset-0 overflow-hidden">
-            <div
-              className="absolute inset-0 bg-gray-500 bg-opacity-75 transition-opacity"
-              onClick={() => setActionModalVisible(false)}
-            />
-            <div className="fixed inset-y-0 right-0 pl-10 max-w-full flex">
-              <div className="w-screen max-w-md">
-                <div className="h-full flex flex-col bg-white shadow-xl">
-                  <div className="px-4 py-6 bg-gray-50 sm:px-6">
-                    <div className="flex items-center justify-between">
-                      <h2 className="text-lg font-medium text-gray-900">
-                        Manage User: {selectedUser?.name}
-                      </h2>
-                      <button
-                        onClick={() => setActionModalVisible(false)}
-                        className="rounded-md text-gray-400 hover:text-gray-500 focus:outline-none"
-                      >
-                        <FaTimes className="h-6 w-6" />
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="flex-1 px-4 py-6 sm:px-6 overflow-y-auto">
-                    <div className="space-y-4">
-                      {/* Info Card */}
-                      <div className="flex items-center space-x-4 p-4 bg-gray-50 rounded-lg">
-                        <img
-                          src={
-                            selectedUser.profile_image
-                              ? `http://localhost:3000/${selectedUser.profile_image}`
-                              : "https://via.placeholder.com/80"
-                          }
-                          alt={selectedUser.name}
-                          className="w-16 h-16 rounded-full object-cover"
-                        />
-                        <div>
-                          <h3 className="font-medium text-gray-900">{selectedUser.name}</h3>
-                          <p className="text-sm text-gray-500">{selectedUser.email}</p>
-                          {selectedUser.is_blocked ? (
-                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800 mt-2">
-                              Blocked
-                            </span>
-                          ) : selectedUser.is_suspended ? (
-                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800 mt-2">
-                              Suspended
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 mt-2">
-                              Active
-                            </span>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Action Buttons */}
-                      <div className="space-y-3">
-                        {/* If user is blocked, show Unblock else show Block */}
-                        {selectedUser.is_blocked ? (
-                          <button
-                            onClick={() => handleUnblockOrUnsuspend("unblock")}
-                            className="w-full flex items-center justify-between px-4 py-3 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
-                          >
-                            <div className="flex items-center">
-                              <FaUnlock className="text-green-500 mr-3" />
-                              <div className="text-left">
-                                <div className="font-medium">Unblock User</div>
-                                <div className="text-sm text-gray-500">Restore user access</div>
-                              </div>
-                            </div>
-                          </button>
-                        ) : (
-                          <button
-                            onClick={() => handleBlockOrSuspend("block")}
-                            className="w-full flex items-center justify-between px-4 py-3 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
-                          >
-                            <div className="flex items-center">
-                              <FaUserLock className="text-red-500 mr-3" />
-                              <div className="text-left">
-                                <div className="font-medium">Block User</div>
-                                <div className="text-sm text-gray-500">Prevent user from accessing</div>
-                              </div>
-                            </div>
-                          </button>
-                        )}
-
-                        {/* If user is suspended, show Unsuspend else show Suspend */}
-                        {selectedUser.is_suspended ? (
-                          <button
-                            onClick={() => handleUnblockOrUnsuspend("unsuspend")}
-                            className="w-full flex items-center justify-between px-4 py-3 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
-                          >
-                            <div className="flex items-center">
-                              <FaUndo className="text-green-500 mr-3" />
-                              <div className="text-left">
-                                <div className="font-medium">Unsuspend User</div>
-                                <div className="text-sm text-gray-500">Lift suspension from user</div>
-                              </div>
-                            </div>
-                          </button>
-                        ) : (
-                          <button
-                            onClick={() => handleBlockOrSuspend("suspend")}
-                            className="w-full flex items-center justify-between px-4 py-3 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
-                          >
-                            <div className="flex items-center">
-                              <FaUserClock className="text-yellow-500 mr-3" />
-                              <div className="text-left">
-                                <div className="font-medium">Suspend User</div>
-                                <div className="text-sm text-gray-500">Temporarily restrict user access</div>
-                              </div>
-                            </div>
-                          </button>
-                        )}
-
-                        {/* Reset Report Count */}
-                        <button
-                          onClick={handleResetReportCount}
-                          className="w-full flex items-center justify-between px-4 py-3 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
-                        >
-                          <div className="flex items-center">
-                            <FaUndo className="text-blue-500 mr-3" />
-                            <div className="text-left">
-                              <div className="font-medium">Reset Report Count</div>
-                              <div className="text-sm text-gray-500">Set report count to 0</div>
-                            </div>
-                          </div>
-                        </button>
-
-                        {/* Delete User */}
-                        <button
-                          onClick={handleDelete}
-                          className="w-full flex items-center justify-between px-4 py-3 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
-                        >
-                          <div className="flex items-center">
-                            <FaUserMinus className="text-gray-500 mr-3" />
-                            <div className="text-left">
-                              <div className="font-medium">Delete User</div>
-                              <div className="text-sm text-gray-500">
-                                Permanently remove user account
-                              </div>
-                            </div>
-                          </div>
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Duration/Reason Modal (for block/suspend) */}
-      {durationModalVisible && (
-        <div className="fixed inset-0 overflow-hidden z-50">
-          <div className="absolute inset-0 overflow-hidden">
-            <div
-              className="absolute inset-0 bg-gray-500 bg-opacity-75 transition-opacity"
-              onClick={() => setDurationModalVisible(false)}
-            />
-            <div className="absolute inset-x-0 bottom-0 max-w-full flex justify-center">
-              <div className="w-full max-w-lg">
-                <div className="bg-white rounded-t-xl shadow-xl">
-                  <div className="px-4 py-5 sm:p-6">
-                    <h3 className="text-lg font-medium text-gray-900 mb-4">
-                      {selectedAction === "block" ? "Block" : "Suspend"} User
-                    </h3>
-
-                    <div className="mb-4">
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Reason
-                      </label>
-                      <textarea
-                        value={actionReason}
-                        onChange={(e) => setActionReason(e.target.value)}
-                        placeholder={`Why are you ${selectedAction}ing this user?`}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        rows="3"
-                      />
-                    </div>
-
-                    <div className="mb-6">
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Duration
-                      </label>
-                      <div className="grid grid-cols-2 gap-3">
-                        {[
-                          { value: "1w", label: "1 Week" },
-                          { value: "1m", label: "1 Month" },
-                          { value: "6m", label: "6 Months" },
-                          { value: "permanent", label: "Permanent" },
-                        ].map((option) => (
-                          <label
-                            key={option.value}
-                            className={`flex items-center justify-center px-4 py-2 rounded-lg cursor-pointer border transition-all ${
-                              selectedDuration === option.value
-                                ? "border-blue-500 bg-blue-50 text-blue-700"
-                                : "border-gray-200 hover:border-gray-300"
-                            }`}
-                          >
-                            <input
-                              type="radio"
-                              value={option.value}
-                              checked={selectedDuration === option.value}
-                              onChange={(e) => setSelectedDuration(e.target.value)}
-                              className="hidden"
-                            />
-                            {option.label}
-                          </label>
-                        ))}
-                      </div>
-                    </div>
-
-                    <div className="flex space-x-3">
-                      <button
-                        onClick={handleSubmitAction}
-                        className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-                      >
-                        Confirm
-                      </button>
-                      <button
-                        onClick={() => {
-                          setDurationModalVisible(false);
-                          setActionReason("");
-                          setSelectedDuration("");
-                        }}
-                        className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
-                      >
-                        Cancel
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Confirmation Modal */}
-      {confirmationModalVisible && (
-        <div className="fixed inset-0 overflow-y-auto z-50">
-          <div className="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center">
-            <div
-              className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity"
-              onClick={() => setConfirmationModalVisible(false)}
-            />
-            <div className="inline-block w-full max-w-md p-6 my-8 overflow-hidden text-left align-middle transition-all transform bg-white shadow-xl rounded-lg">
-              <h3 className="text-lg font-medium text-gray-900 mb-4">Confirm Action</h3>
-              <p className="text-sm text-gray-500 mb-6 whitespace-pre-line">
-                {confirmationMessage}
-              </p>
-              <div className="flex space-x-3">
-                <button
-                  onClick={() => onConfirm()}
-                  className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
-                >
-                  Confirm
-                </button>
-                <button
-                  onClick={() => setConfirmationModalVisible(false)}
-                  className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
-                >
-                  Cancel
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
+        <UserManagementComponent
+          selectedUser={selectedUser}
+          setSelectedUser={setSelectedUser}
+          fetchUserData={fetchBlockedUsers}
+          fetchActiveUsers={fetchBlockedUsers}
+          API_BASE_URL={API_BASE_URL}
+          accessToken={accessToken}
+          isVisible={actionModalVisible}
+          setIsVisible={setActionModalVisible}
+        />
       )}
     </div>
   );

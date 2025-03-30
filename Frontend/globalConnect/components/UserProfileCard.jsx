@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   StyleSheet,
   Text,
@@ -16,158 +16,80 @@ import config from "../constants/config";
 import { userAuth } from "../contexts/AuthContext";
 
 const UserProfileCard = ({ user, isFollowing, onFollowToggle }) => {
-  const { authToken } = userAuth();
+  const { authToken, refreshUserProfile } = userAuth();
   const router = useRouter();
   const ip = config.API_IP;
+  const [following, setFollowing] = useState(isFollowing || false);
+  const [isUpdating, setIsUpdating] = useState(false);
 
-  // For showing/hiding the three-dot menu
-  const [menuVisible, setMenuVisible] = useState(false);
+  // Update local state when the isFollowing prop changes
+  useEffect(() => {
+    setFollowing(isFollowing || false);
+  }, [isFollowing]);
 
-  // Track whether we have blocked this user
-  // If your API/user object has a built-in flag, replace `false` with user.isBlocked
-  const [isBlocked, setIsBlocked] = useState(false);
+  // Follow/unfollow function
+  const performFollowToggle = async () => {
+    if (isUpdating) return;
+    
+    try {
+      setIsUpdating(true);
+      const endpoint = following ? "unfollow" : "follow";
+      const url = `http://${ip}:3000/api/${endpoint}`;
+      const bodyKey = following ? "unfollowUserId" : "followUserId";
+      const body = { [bodyKey]: user._id };
 
-  if (!user) return null;
+      const response = await axios.post(url, body, {
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${authToken}`,
+        },
+      });
 
+      if (response.status === 200) {
+        refreshUserProfile();
+        setFollowing(!following);
+        onFollowToggle && onFollowToggle(user._id, !following);
+      } else {
+        console.error("Unexpected response:", response);
+      }
+    } catch (error) {
+      console.error("Error toggling follow/unfollow:", error.response?.data || error.message);
+      Alert.alert("Error", "Unable to update follow status. Please try again.");
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
+  // Confirmation alert before toggling follow status
+  const confirmFollowToggle = () => {
+    const message = following
+      ? `Are you sure you want to unfollow ${user.name}?`
+      : `Do you want to follow ${user.name}?`;
+    const actionLabel = following ? "Unfollow" : "Follow";
+
+    Alert.alert("", message, [
+      { text: "Cancel", style: "cancel" },
+      { text: actionLabel, onPress: performFollowToggle },
+    ]);
+  };
+
+  // Build the profile image URL
   const profileImageURL = user.profile_image
     ? `http://${ip}:3000/${user.profile_image}`
     : "https://via.placeholder.com/100";
 
-  /**
-   * Toggle the menu open/closed
-   */
-  const toggleMenu = () => setMenuVisible(!menuVisible);
-
-  /**
-   * Show a confirmation alert for blocking/unblocking
-   */
-  const handleBlockToggle = () => {
-    if (isBlocked) {
-      // If currently blocked, confirm "Unblock"
-      Alert.alert(
-        "Unblock User",
-        `Are you sure you want to unblock ${user.name}?`,
-        [
-          { text: "Cancel", style: "cancel" },
-          { text: "Unblock", style: "default", onPress: unblockUser }
-        ]
-      );
-    } else {
-      // If not blocked, confirm "Block"
-      Alert.alert(
-        "Block User",
-        `Are you sure you want to block ${user.name}?`,
-        [
-          { text: "Cancel", style: "cancel" },
-          { text: "Block", style: "destructive", onPress: blockUser }
-        ]
-      );
-    }
-  };
-
-  /**
-   * Call PUT for "block"
-   */
-  const blockUser = async () => {
-    try {
-      const url = `http://${ip}:3000/api/profile/block-unblock`;
-      await axios.put(
-        url,
-        { targetUserId: user._id },
-        {
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${authToken}`
-          }
-        }
-      );
-      Alert.alert("Success", `${user.name} is now blocked.`);
-      setIsBlocked(true);
-      toggleMenu(); // Hide menu
-    } catch (error) {
-      console.error("Error blocking user:", error?.response?.data || error.message);
-      Alert.alert("Error", "Failed to block user. Please try again.");
-    }
-  };
-
-  /**
-   * Call POST for "unblock"
-   */
-  const unblockUser = async () => {
-    try {
-      const url = `http://${ip}:3000/api/profile/block-unblock`;
-      await axios.post(
-        url,
-        { targetUserId: user._id },
-        {
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${authToken}`
-          }
-        }
-      );
-      Alert.alert("Success", `${user.name} is now unblocked.`);
-      setIsBlocked(false);
-      toggleMenu(); // Hide menu
-    } catch (error) {
-      console.error("Error unblocking user:", error?.response?.data || error.message);
-      Alert.alert("Error", "Failed to unblock user. Please try again.");
-    }
-  };
-
-  /**
-   * For demonstration only
-   */
-  const handleReportUser = () => {
-    Alert.alert("Report User", `You have reported ${user.name}.`);
-    toggleMenu();
-  };
-  const handleShareProfile = () => {
-    Alert.alert("Share Profile", `Sharing ${user.name}'s profile...`);
-    toggleMenu();
-  };
-
   return (
     <View style={styles.container}>
-      {/* Header: Avatar, Name, Menu Button */}
+      {/* Header: Avatar, Name, and Menu Button */}
       <View style={styles.header}>
         <Image source={{ uri: profileImageURL }} style={styles.avatar} />
         <Text style={styles.name}>{user.name}</Text>
-
-        {/* Three-dot Menu Button */}
-        <TouchableOpacity onPress={toggleMenu} style={styles.menuButton}>
+        <TouchableOpacity onPress={() => {}} style={styles.menuButton}>
           <Icon name="ellipsis-v" size={20} color={theme.colors.textDark} />
         </TouchableOpacity>
       </View>
 
-      {/* Menu Options (Block/Unblock, Report, Share) */}
-      {menuVisible && (
-        <View style={styles.menu}>
-          <TouchableOpacity onPress={handleBlockToggle} style={styles.menuItem}>
-            <Icon
-              name="ban"
-              size={16}
-              color={isBlocked ? "#26B93E" : "red"}
-              style={styles.menuIcon}
-            />
-            <Text style={styles.menuText}>
-              {isBlocked ? "Unblock User" : "Block User"}
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity onPress={handleReportUser} style={styles.menuItem}>
-            <Icon name="flag" size={16} color="#FF6347" style={styles.menuIcon} />
-            <Text style={styles.menuText}>Report User</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity onPress={handleShareProfile} style={styles.menuItem}>
-            <Icon name="share" size={16} color="#4682B4" style={styles.menuIcon} />
-            <Text style={[styles.menuText, { color: "#4682B4" }]}>Share Profile</Text>
-          </TouchableOpacity>
-        </View>
-      )}
-
-      {/* Bio */}
+      {/* Optional Bio */}
       {user.bio ? <Text style={styles.bio}>{user.bio}</Text> : null}
 
       {/* Stats Row */}
@@ -177,17 +99,19 @@ const UserProfileCard = ({ user, isFollowing, onFollowToggle }) => {
         <Text style={styles.statText}>Posts: {user.posts_count}</Text>
       </View>
 
-      {/* Action Buttons: Follow/Unfollow + Message */}
+      {/* Action Buttons: Follow/Unfollow and Message */}
       <View style={styles.buttonsRow}>
         {/* Follow/Unfollow Button */}
         <TouchableOpacity
-          onPress={onFollowToggle}
+          onPress={confirmFollowToggle}
+          disabled={isUpdating}
           style={[
             styles.actionButton,
-            isFollowing ? styles.following : styles.notFollowing
+            following ? styles.following : styles.notFollowing,
+            isUpdating && styles.updatingButton
           ]}
         >
-          {isFollowing ? (
+          {following ? (
             <>
               <Icon
                 name="check"
@@ -196,7 +120,7 @@ const UserProfileCard = ({ user, isFollowing, onFollowToggle }) => {
                 style={styles.icon}
               />
               <Text style={[styles.buttonText, styles.followingText]}>
-                Following
+                {isUpdating ? "Updating..." : "Following"}
               </Text>
             </>
           ) : (
@@ -207,7 +131,9 @@ const UserProfileCard = ({ user, isFollowing, onFollowToggle }) => {
                 color={theme.colors.white}
                 style={styles.icon}
               />
-              <Text style={styles.buttonText}>Follow</Text>
+              <Text style={styles.buttonText}>
+                {isUpdating ? "Following..." : "Follow"}
+              </Text>
             </>
           )}
         </TouchableOpacity>
@@ -216,7 +142,6 @@ const UserProfileCard = ({ user, isFollowing, onFollowToggle }) => {
         <TouchableOpacity
           style={[styles.actionButton, styles.messageButton]}
           onPress={() => {
-            // Navigate to chat screen with userId & name
             router.replace(
               `/chat?userId=${encodeURIComponent(user._id)}&name=${encodeURIComponent(user.name)}`
             );
@@ -230,7 +155,11 @@ const UserProfileCard = ({ user, isFollowing, onFollowToggle }) => {
 };
 
 export default UserProfileCard;
-
+const additionalStyles = {
+  updatingButton: {
+    opacity: 0.7
+  }
+};
 const styles = StyleSheet.create({
   container: {
     padding: 15,

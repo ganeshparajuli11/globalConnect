@@ -7,6 +7,7 @@ import {
   Dimensions,
   Modal,
   Image,
+  Alert,
 } from "react-native";
 import moment from "moment";
 import RenderHtml from "react-native-render-html";
@@ -20,47 +21,55 @@ import { userAuth } from "../contexts/AuthContext";
 import axios from "axios";
 import { useFetchFollowing } from "../services/followFetchService";
 
-const PostCard = ({
-  item,
-  currentUser,
-  router,
-  hasShadow = true,
-  showMoreIcon = true,
-}) => {
+const PostCard = ({ item, router }) => {
   const { authToken } = userAuth();
   const ip = config.API_IP;
 
-  // State for likes (specific to current user)
+  // States for like, fullscreen image, and share modal
   const [liked, setLiked] = useState(item.liked);
   const [likeCount, setLikeCount] = useState(item.likeCount);
-
-  // State for fullscreen image
   const [fullScreenVisible, setFullScreenVisible] = useState(false);
   const [selectedImage, setSelectedImage] = useState(null);
-
-  // State for share modal
   const [shareModalVisible, setShareModalVisible] = useState(false);
 
-  // Following list for share modal
+  // Fetch following list for share modal
   const { following, loading: loadingFollowing } = useFetchFollowing();
 
   const profileImageURL = item?.user?.profile_image
     ? `http://${ip}:3000/${item.user.profile_image}`
     : "https://via.placeholder.com/100";
 
-  // Format the post's creation date using moment.js
   const createdAt = moment(item?.time).format("MMM D");
-
-  // HTML content width
   const contentWidth = Dimensions.get("window").width - 32;
 
-  // Only navigate to post details if showMoreIcon is true
-  const handleThreeDotsPress = () => {
-    if (showMoreIcon) {
-      router.push(`/postDetails?postId=${item.id}`);
+  // NEW: Handle user press with error handling for missing user ID
+  const handleUserPress = async () => {
+    try {
+      if (!item?.user?.id) {
+        console.error("Profile navigation error: User ID is missing", {
+          postData: item,
+          userId: item?.user?.id,
+        });
+        return;
+      }
+      console.log("Attempting to navigate to profile with ID:", item.user.id);
+      await router.push({
+        pathname: "/userProfile",
+        params: { userId: item.user.id },
+      });
+    } catch (error) {
+      console.error("Profile navigation error:", {
+        error: error.message,
+        status: error.response?.status,
+        data: error.response?.data,
+        userId: item?.user?.id,
+        postData: item,
+      });
+      Alert.alert("Error", "Unable to view profile at this time.");
     }
   };
 
+  // Other handlers remain unchanged
   const openFullScreen = (imageUrl) => {
     if (!imageUrl) return;
     const fullMediaUrl = imageUrl.startsWith("http")
@@ -81,7 +90,7 @@ const PostCard = ({
     const newLiked = !liked;
     const newLikeCount = likeCount + (liked ? -1 : 1);
 
-    // Optimistically update UI
+    // Optimistic UI update
     setLiked(newLiked);
     setLikeCount(newLikeCount);
 
@@ -121,13 +130,10 @@ const PostCard = ({
   };
 
   return (
-    <View style={[styles.container, hasShadow && styles.shadow]} key={item.id}>
-      {/* Header with user info and three-dots icon */}
+    <View style={[styles.container, styles.shadow]} key={item.id}>
+      {/* Header with user info and navigation icon */}
       <View style={styles.header}>
-        <TouchableOpacity
-          style={styles.userInfo}
-          onPress={() => router.push(`/userProfile?userId=${item.user._id}`)}
-        >
+        <TouchableOpacity style={styles.userInfo} onPress={handleUserPress}>
           <Avator size={hp(4.5)} uri={profileImageURL} rounded={theme.radius.md} />
           <View style={styles.userDetails}>
             <View style={styles.userNameContainer}>
@@ -143,16 +149,14 @@ const PostCard = ({
             <Text style={styles.postTime}>{createdAt}</Text>
           </View>
         </TouchableOpacity>
-        {showMoreIcon && (
-          <TouchableOpacity onPress={handleThreeDotsPress}>
-            <Icon
-              name="threeDotsHorizontal"
-              size={hp(3.4)}
-              strokeWidth={3}
-              color={theme.colors.text}
-            />
-          </TouchableOpacity>
-        )}
+        <TouchableOpacity onPress={() => router.push(`/postDetails?postId=${item.id}`)}>
+          <Icon
+            name="threeDotsHorizontal"
+            size={hp(3.4)}
+            strokeWidth={3}
+            color={theme.colors.text}
+          />
+        </TouchableOpacity>
       </View>
 
       {/* Post content */}
@@ -185,7 +189,7 @@ const PostCard = ({
         </View>
       </Modal>
 
-      {/* Footer (Like, Comment, Share) */}
+      {/* Footer with Like, Comment, and Share buttons */}
       <View style={styles.footer}>
         <View style={styles.footerButton}>
           <TouchableOpacity onPress={onLike}>
@@ -199,13 +203,9 @@ const PostCard = ({
           <Text style={styles.count}>{likeCount}</Text>
         </View>
         <View style={styles.footerButton}>
-          {showMoreIcon ? (
-            <TouchableOpacity onPress={() => router.push(`/postDetails?postId=${item.id}`)}>
-              <Icon name="comment" size={24} color={theme.colors.textLight} />
-            </TouchableOpacity>
-          ) : (
+          <TouchableOpacity onPress={() => router.push(`/postDetails?postId=${item.id}`)}>
             <Icon name="comment" size={24} color={theme.colors.textLight} />
-          )}
+          </TouchableOpacity>
           <Text style={styles.count}>{item.commentCount}</Text>
         </View>
         <View style={styles.footerButton}>

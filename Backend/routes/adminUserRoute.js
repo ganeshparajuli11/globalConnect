@@ -15,6 +15,9 @@ const {
   sendEmailToUsers,
   searchUsers,
   resetReportCount,
+  getUnverifiedUsers,
+  getVerifiedUsers,
+  verifyUser,
 } = require("../controller/adminUserController");
 const {
   checkAuthentication,
@@ -82,6 +85,10 @@ router.put(
 router.get("/userStats", checkAuthentication, getUserStats);
 
 router.post("/send-email-to-users", checkAuthentication, checkIsAdmin, sendEmailToUsers);
+// In adminRoutes.js or similar
+router.get('/unverified-users', checkAuthentication,checkIsAdmin, getUnverifiedUsers);
+router.get('/verified-users', checkAuthentication,checkIsAdmin, getVerifiedUsers);
+router.put('/verify-user/:userId', checkAuthentication,checkIsAdmin, verifyUser);
 
 // search users by name or email
 router.get("/search-users", checkAuthentication, checkIsAdmin, searchUsers);

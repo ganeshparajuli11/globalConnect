@@ -45,6 +45,8 @@ const UserPostCardDetails = ({
   // State for "User Options" modal (edit/delete post)
   const [optionsModalVisible, setOptionsModalVisible] = useState(false);
 
+console.log("checking item", item);
+
   // Following list (for sharing)
   const { following, loading: loadingFollowing } = useFetchFollowing();
 
@@ -53,7 +55,9 @@ const UserPostCardDetails = ({
     : "https://via.placeholder.com/100";
 
   // ▶ Updated date format to "MMM D, YYYY"
-  const createdAt = moment(item?.time).format("MMM D, YYYY");
+  const createdAt = moment(item?.time, "MMMM D, YYYY").format("MMM D, YYYY");
+
+
 
   // HTML content width
   const contentWidth = Dimensions.get("window").width - 32;

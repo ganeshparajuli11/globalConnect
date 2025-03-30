@@ -26,8 +26,6 @@ const messageStorage = multer.diskStorage({
 });
 
 
-
-
 // File type filter (only images allowed)
 const fileFilter = (req, file, cb) => {
     const allowedTypes = ["image/jpeg", "image/png", "image/gif"];
