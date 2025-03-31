@@ -8,6 +8,25 @@ const LOGO_URL = "http://localhost:3000/api/logo";
  * @param {*} res
  * Expects { "expoPushToken": "ExponentPushToken[xxxxxxx]" } in req.body
  */
+
+const getTargetScreen = (type) => {
+  switch (type) {
+    case "message":
+      return "chat"; // Chat page
+    case "comment":
+      return "PostDetails"; // Post page for comments
+    case "follow":
+      return "UserProfile"; // User profile page
+    case "admin":
+      return "home"; // Admin notifications go to home
+    default:
+      return "home"; // Fallback screen if needed
+  }
+};
+
+
+
+
 async function updateUserPushToken(req, res) {
   try {
     const { expoPushToken } = req.body;
@@ -35,7 +54,6 @@ async function updateUserPushToken(req, res) {
     return res.status(500).json({ error: "Error updating push token" });
   }
 }
-
 async function sendExpoPushNotification(expoPushToken, title, body, data = {}, type = "default") {
   try {
     if (!expoPushToken.startsWith("ExponentPushToken")) {
@@ -43,13 +61,15 @@ async function sendExpoPushNotification(expoPushToken, title, body, data = {}, t
       return null;
     }
 
-    const screen = type === "admin" ? "HomeScreen" : "ChatScreen";
+    // Use the provided screen if available; otherwise get a default one.
+    const finalScreen = data.screen ? data.screen : getTargetScreen(type);
+    const finalData = { ...data, screen: finalScreen };
 
     const response = await axios.post("https://exp.host/--/api/v2/push/send", {
       to: expoPushToken,
       title,
       body,
-      data: { ...data, screen },
+      data: finalData,  // Use the final data including preserved screen
       sound: "default",
       icon: LOGO_URL,
     });
@@ -62,11 +82,10 @@ async function sendExpoPushNotification(expoPushToken, title, body, data = {}, t
   }
 }
 
-// Function to send batch push notifications
+// Function to send batch push notifications; similar mapping applies.
 async function sendBatchPushNotifications(tokens, title, body, data = {}, type = "default") {
   try {
-    const screen = type === "admin" ? "HomeScreen" : "ChatScreen";
-
+    const screen = getTargetScreen(type);
     const messages = tokens.map((token) => ({
       to: token,
       title,
@@ -77,7 +96,6 @@ async function sendBatchPushNotifications(tokens, title, body, data = {}, type =
     }));
 
     const response = await axios.post("https://exp.host/--/api/v2/push/send", messages);
-
     console.log("✅ Batch push notifications sent:", response.data);
     return response.data;
   } catch (error) {
@@ -85,5 +103,6 @@ async function sendBatchPushNotifications(tokens, title, body, data = {}, type =
     return null;
   }
 }
+
 
 module.exports = { sendExpoPushNotification, updateUserPushToken,sendBatchPushNotifications };

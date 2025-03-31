@@ -10,6 +10,7 @@ import {
   ActivityIndicator,
   Modal,
   Alert,
+  BackHandler,
 } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import * as MediaLibrary from "expo-media-library";
@@ -22,6 +23,7 @@ import config from "../../constants/config";
 import { userAuth } from "../../contexts/AuthContext";
 import { useFetchConversation, sendMessage, getFullMediaUrl } from "../../services/messageSerive";
 import socket, { cleanup, connectSocket, setMessageHandler } from "../../socketManager/socket";
+import { useExpoRouter } from "expo-router/build/global-state/router-store";
 
 const Chat = () => {
   const { userId, name } = useLocalSearchParams();
@@ -32,7 +34,7 @@ const Chat = () => {
   const [selectedImage, setSelectedImage] = useState(null);
   const [messages, setMessages] = useState([]);
   const [isPreviewModalVisible, setIsPreviewModalVisible] = useState(false);
-
+  const router = useRouter();
   const scrollViewRef = useRef(null);
 
   // When conversation updates, update messages
@@ -41,7 +43,18 @@ const Chat = () => {
       setMessages(conversation);
     }
   }, [conversation]);
-
+  useEffect(() => {
+    const backAction = () => {
+      // Replace the current screen with '/home'
+      router.replace("/home");
+      return true;
+    };
+    const backHandler = BackHandler.addEventListener(
+      "hardwareBackPress",
+      backAction
+    );
+    return () => backHandler.remove();
+  }, [router]);
   // Setup socket and incoming message handling
   useEffect(() => {
     if (!user?.user?.id || !userId) return;

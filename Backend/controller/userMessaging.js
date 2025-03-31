@@ -65,7 +65,7 @@ const sendMessage = async (req, res) => {
         media_type: file.mimetype,
       }));
     }
-
+    console.log("checking nam,e", req.user.name)
     const imageField = messageType === "image" && media.length > 0 ? media[0].media_path : undefined;
 
     // Save the message in MongoDB
@@ -92,22 +92,18 @@ const sendMessage = async (req, res) => {
       postId: postId || null,
       timestamp: message.timestamp,
     });
-
+    const senderData = await User.findById(senderId, "name").lean();
     // Send push notification if receiver is offline
     const receiver = await User.findById(receiverId, "expoPushToken name").lean();
     if (receiver?.expoPushToken) {
-      let pushMessage = `${req.user.name || "Someone"} sent you a message.`;
-      if (messageType === "text") pushMessage = `${req.user.name || "Someone"}: ${content}`;
-      else if (messageType === "image") pushMessage = `${req.user.name || "Someone"} sent an image.`;
-      else if (messageType === "post") pushMessage = `${req.user.name || "Someone"} shared a post with you.`;
+      let pushMessage = `${senderData.name || "Someone"} sent you a message.`;
+      if (messageType === "text") pushMessage = `${senderData.name || "Someone"}: ${content}`;
+else if (messageType === "image") pushMessage = `${senderData.name || "Someone"} sent an image.`;
+else if (messageType === "post") pushMessage = `${senderData.name || "Someone"} shared a post with you.`;
 
-      await sendExpoPushNotification(
-        receiver.expoPushToken,
-        "New Message",
-        pushMessage,
-        { screen: "ChatScreen", senderId, name: req.user.name },
-        "message"
-      );
+      const payload = { screen: "chat", senderId, name: senderData.name };
+      console.log("Push payload:", message.content, payload);
+      await sendExpoPushNotification(receiver.expoPushToken, "New Message Received", pushMessage, payload, "message");
     }
 
     res.status(200).json({ success: true, message: "Message sent successfully.", data: message });
@@ -277,8 +273,8 @@ const getAllMessages = async (req, res) => {
             ? lastMessage.messageType === "text"
               ? decrypt(lastMessage.content)
               : lastMessage.messageType === "image"
-              ? "Sent an image"
-              : "Shared a post"
+                ? "Sent an image"
+                : "Shared a post"
             : "Start a new conversation",
           timestamp: lastMessage ? lastMessage.timestamp : null,
           hasMessages: !!lastMessage,

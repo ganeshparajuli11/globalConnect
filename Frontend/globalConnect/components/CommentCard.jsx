@@ -21,6 +21,9 @@ const CommentCard = ({
 }) => {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
 
+  console.log("comments ",postOwnerId);
+  // const isCommentOwner = comment.userId._id === currentUserId;
+  // const isPostOwner = postOwnerId === currentUserId;
   // Build profile image URL
   const ip = config.API_IP;
   const profileImageUrl = comment.userId.profile_image

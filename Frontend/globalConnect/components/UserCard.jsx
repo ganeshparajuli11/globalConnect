@@ -7,12 +7,13 @@ import config from "../constants/config";
 import axios from "axios";
 import { userAuth } from "../contexts/AuthContext";
 import { useRouter } from "expo-router";
+import { Modal } from 'react-native';
 
 const UserCard = ({ user, onFollowToggle }) => {
   const router = useRouter();
   const { authToken, refreshUserProfile } = userAuth();
   const ip = config.API_IP;
-
+  const [menuVisible, setMenuVisible] = useState(false);
   // Initialize local state with user.isFollowing (default to false if undefined)
   const [following, setFollowing] = useState(user.isFollowing || false);
 
@@ -77,7 +78,9 @@ const UserCard = ({ user, onFollowToggle }) => {
     <TouchableOpacity onPress={navigateToProfile} activeOpacity={0.8}>
       <View style={styles.card}>
         <Image source={{ uri: profileImageURL }} style={styles.avatar} />
-        <Text style={styles.userName}>{user.name}</Text>
+        <Text style={styles.userName}>{user.name} {user.verified && (
+          <Icon name="verify" size={16} color="blue" style={{ marginLeft: 4 }} />
+        )}</Text>
 
         <TouchableOpacity
           onPress={confirmFollowToggle}

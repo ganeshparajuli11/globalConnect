@@ -1,5 +1,3 @@
-// anotherPostDetailCard.jsx
-
 import React, { useState } from "react";
 import {
   StyleSheet,
@@ -9,18 +7,19 @@ import {
   Dimensions,
   Modal,
   Image,
+  ScrollView,
 } from "react-native";
 import moment from "moment";
 import RenderHtml from "react-native-render-html";
 import { theme } from "../constants/theme";
 import Avator from "./Avator";
 import Icon from "../assets/icons";
+import VerifiedIcon from "../assets/icons/verifiedIcon";
 import { hp } from "../helpers/common";
 import config from "../constants/config";
-import { userAuth } from "../contexts/AuthContext";
 import axios from "axios";
 import { useFetchFollowing } from "../services/followFetchService";
-import VerifiedIcon from "../assets/icons/verifiedIcon";
+import { userAuth } from "../contexts/AuthContext";
 
 const PostCardDetails = ({
   item,
@@ -32,40 +31,40 @@ const PostCardDetails = ({
   const { authToken } = userAuth();
   const ip = config.API_IP;
 
-  // State for likes
+  // Like state
   const [liked, setLiked] = useState(item.liked);
   const [likeCount, setLikeCount] = useState(item.likeCount);
 
-  // State for fullscreen image
+  // Fullscreen image state
   const [fullScreenVisible, setFullScreenVisible] = useState(false);
   const [selectedImage, setSelectedImage] = useState(null);
 
-  // State for share modal
+  // Share modal state
   const [shareModalVisible, setShareModalVisible] = useState(false);
 
-  // **New**: state for “Report Post” modal
+  // Report Post modal state
   const [reportModalVisible, setReportModalVisible] = useState(false);
 
-  // Following list
+  // Liked users modal state
+  const [likesModalVisible, setLikesModalVisible] = useState(false);
+  const [likedUsers, setLikedUsers] = useState([]);
+  const [loadingLikes, setLoadingLikes] = useState(false);
+
+  // Following list for share modal
   const { following, loading: loadingFollowing } = useFetchFollowing();
 
   const profileImageURL = item?.user?.profile_image
     ? `http://${ip}:3000/${item.user.profile_image}`
     : "https://via.placeholder.com/100";
 
-  // Format the post's creation date using moment.js
   const createdAt = moment(item?.time).format("MMM D");
-
-  // HTML content width
   const contentWidth = Dimensions.get("window").width - 32;
 
-  // Handle three-dots press. In post details, show the Report Post modal.
+  // Handle three-dots press
   const handleThreeDotsPress = () => {
     if (showMoreIcon) {
-      // In other contexts, navigate to post details
       router.push(`/postDetails?postId=${item.id}`);
     } else {
-      // For post details, open the "Report Post" modal
       setReportModalVisible(true);
     }
   };
@@ -83,7 +82,6 @@ const PostCardDetails = ({
     setFullScreenVisible(false);
     setSelectedImage(null);
   };
-console.log("user",item)
 
   const onLike = async () => {
     try {
@@ -91,11 +89,8 @@ console.log("user",item)
       const response = await axios.put(
         url,
         {},
-        {
-          headers: { Authorization: `Bearer ${authToken}` },
-        }
+        { headers: { Authorization: `Bearer ${authToken}` } }
       );
-
       const { liked: updatedLiked, likesCount } = response.data;
       setLiked(updatedLiked);
       setLikeCount(likesCount);
@@ -107,12 +102,10 @@ console.log("user",item)
     }
   };
 
-  // Instead of directly sharing, open the share modal
   const onShare = async () => {
     setShareModalVisible(true);
   };
 
-  // Placeholder for actual share
   const sharePostToUser = async (user) => {
     try {
       const url = `http://${ip}:3000/api/post/share`;
@@ -134,31 +127,41 @@ console.log("user",item)
   const handleReportPost = () => {
     console.log("Report Post clicked");
     router.push("/report");
-    router.replace(
-        `/report?postId=${item.id}`
-      );
+    router.replace(`/report?postId=${item.id}`);
     setReportModalVisible(false);
+  };
+
+  // Fetch liked users and show modal
+  const fetchLikedUsers = async () => {
+    try {
+      setLoadingLikes(true);
+      const response = await axios.get(`http://${ip}:3000/api/post/liked/${item.id}`, {
+        headers: { Authorization: `Bearer ${authToken}` },
+      });
+      setLikedUsers(response.data.data);
+    } catch (error) {
+      console.error("Error fetching liked users:", error);
+    } finally {
+      setLoadingLikes(false);
+    }
+  };
+
+  const handleShowLikes = () => {
+    fetchLikedUsers();
+    setLikesModalVisible(true);
   };
 
   return (
     <View style={[styles.container, hasShadow && styles.shadow]} key={item.id}>
-      {/* Header with user info and three-dots */}
+      {/* Header */}
       <View style={styles.header}>
         <View style={styles.userInfo}>
-          <Avator
-            size={hp(4.5)}
-            uri={profileImageURL}
-            rounded={theme.radius.md}
-          />
+          <Avator size={hp(4.5)} uri={profileImageURL} rounded={theme.radius.md} />
           <View style={styles.userDetails}>
-          <Text style={styles.userName}>{item.user.name}</Text>
-              {item.user.verified && (
-                <VerifiedIcon
-                  size={16}
-                  color="#1877F2"
-                  style={styles.verifiedIcon}
-                />
-              )}
+            <Text style={styles.userName}>{item.user.name}</Text>
+            {item.user.verified && (
+              <VerifiedIcon size={16} color="#1877F2" style={styles.verifiedIcon} />
+            )}
             <Text style={styles.postTime}>{createdAt}</Text>
           </View>
         </View>
@@ -172,15 +175,12 @@ console.log("user",item)
         </TouchableOpacity>
       </View>
 
-      {/* Post content */}
+      {/* Post Content */}
       <View style={styles.content}>
-        <RenderHtml
-          contentWidth={contentWidth}
-          source={{ html: item.content }}
-        />
+        <RenderHtml contentWidth={contentWidth} source={{ html: item.content }} />
       </View>
 
-      {/* Media images (up to 4) */}
+      {/* Media Images */}
       {item.media && item.media.length > 0 && (
         <View style={styles.mediaContainer}>
           {item.media.slice(0, 4).map((mediaUrl, index) => (
@@ -195,13 +195,10 @@ console.log("user",item)
         </View>
       )}
 
-      {/* Fullscreen Modal for images */}
+      {/* Fullscreen Modal for Images */}
       <Modal visible={fullScreenVisible} transparent={true}>
         <View style={styles.fullScreenContainer}>
-          <Image
-            source={{ uri: selectedImage }}
-            style={styles.fullScreenImage}
-          />
+          <Image source={{ uri: selectedImage }} style={styles.fullScreenImage} />
           <TouchableOpacity style={styles.closeIcon} onPress={closeFullScreen}>
             <Icon name="cross" size={24} color={theme.colors.text} />
           </TouchableOpacity>
@@ -220,19 +217,17 @@ console.log("user",item)
               color={liked ? theme.colors.heart : theme.colors.textLight}
             />
           </TouchableOpacity>
-          <Text style={styles.count}>{likeCount}</Text>
+          <TouchableOpacity onPress={handleShowLikes}>
+            <Text style={styles.count}>{likeCount}</Text>
+          </TouchableOpacity>
         </View>
 
         <View style={styles.footerButton}>
           {showMoreIcon ? (
-            // Only navigate if showMoreIcon = true
-            <TouchableOpacity
-              onPress={() => router.push(`/postDetails?postId=${item.id}`)}
-            >
+            <TouchableOpacity onPress={() => router.push(`/postDetails?postId=${item.id}`)}>
               <Icon name="comment" size={24} color={theme.colors.textLight} />
             </TouchableOpacity>
           ) : (
-            // If showMoreIcon = false, just show the icon (no onPress)
             <Icon name="comment" size={24} color={theme.colors.textLight} />
           )}
           <Text style={styles.count}>{item.commentCount}</Text>
@@ -246,11 +241,7 @@ console.log("user",item)
       </View>
 
       {/* Share Modal */}
-      <Modal
-        visible={shareModalVisible}
-        transparent={true}
-        animationType="slide"
-      >
+      <Modal visible={shareModalVisible} transparent={true} animationType="slide">
         <View style={styles.shareModalContainer}>
           <View style={styles.shareModalContent}>
             <Text style={styles.shareModalTitle}>Share Post With</Text>
@@ -281,27 +272,65 @@ console.log("user",item)
       </Modal>
 
       {/* Report Post Modal */}
-      <Modal
-        visible={reportModalVisible}
-        transparent={true}
-        animationType="fade"
-      >
+      <Modal visible={reportModalVisible} transparent={true} animationType="fade">
         <View style={styles.reportModalContainer}>
           <View style={styles.reportModalContent}>
             <Text style={styles.reportTitle}>Options</Text>
-            <TouchableOpacity
-              onPress={handleReportPost}
-              style={styles.reportButton}
-            >
+            <TouchableOpacity onPress={handleReportPost} style={styles.reportButton}>
               <Text style={styles.reportButtonText}>Report Post</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.reportButton, { backgroundColor: "#ccc" }]}
               onPress={() => setReportModalVisible(false)}
             >
-              <Text style={[styles.reportButtonText, { color: "#333" }]}>
-                Cancel
-              </Text>
+              <Text style={[styles.reportButtonText, { color: "#333" }]}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Likes Modal */}
+      <Modal visible={likesModalVisible} transparent={true} animationType="slide">
+        <View style={styles.shareModalContainer}>
+          <View style={styles.shareModalContent}>
+            <Text style={styles.shareModalTitle}>Likes</Text>
+            {loadingLikes ? (
+              <Text>Loading...</Text>
+            ) : likedUsers.length > 0 ? (
+              <ScrollView style={styles.likesList}>
+                {likedUsers.map((user) => {
+                  const likedUserImageURL = user.profile_image
+                    ? `http://${ip}:3000/${user.profile_image}`
+                    : "https://via.placeholder.com/100";
+                  return (
+                    <TouchableOpacity
+                      key={user._id}
+                      style={styles.likedUserItem}
+                      onPress={() => {
+                        setLikesModalVisible(false);
+                        router.push(`/userProfile?userId=${user._id}`);
+                      }}
+                    >
+                      <View style={styles.userInfoContainer}>
+                        <Avator
+                          size={hp(5)}
+                          uri={likedUserImageURL}
+                          rounded={theme.radius.full}
+                        />
+                        <Text style={styles.likedUserName}>{user.name}</Text>
+                      </View>
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+            ) : (
+              <Text>No likes yet.</Text>
+            )}
+            <TouchableOpacity
+              style={styles.cancelButton}
+              onPress={() => setLikesModalVisible(false)}
+            >
+              <Text style={styles.cancelButtonText}>Cancel</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -478,5 +507,26 @@ const styles = StyleSheet.create({
   reportButtonText: {
     color: "#fff",
     fontSize: 16,
+  },
+  likesList: {
+    padding: 10,
+  },
+  likedUserItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 10,
+    borderBottomColor: theme.colors.gray,
+    borderBottomWidth: 0.5,
+  },
+  userInfoContainer: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  likedUserName: {
+    marginLeft: 10,
+    fontSize: 16,
+    color: theme.colors.text,
+    fontWeight: "500",
   },
 });

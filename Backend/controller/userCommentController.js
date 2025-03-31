@@ -77,12 +77,15 @@ async function addComment(req, res) {
     postExists.comments_count = (postExists.comments_count || 0) + 1; // Ensure count is initialized
     await postExists.save();
 
-    // Send notification only if the commenter is not the post owner
-    if (postExists.user_id && postExists.user_id.toString() !== userId.toString()) {
+    // Send push notification only if the commenter is not the post owner
+    if (
+      postExists.user_id &&
+      postExists.user_id.toString() !== userId.toString()
+    ) {
       await sendCommentNotification({
         commenterId: userId,
         postId,
-        postOwnerId: postExists.user_id, // Corrected field
+        postOwnerId: postExists.user_id,
         commentText: text,
       });
     }
@@ -135,6 +138,7 @@ async function editComment(req, res) {
   }
 }
 
+
 // Function to delete a comment (allowed for comment owner or post owner)
 async function deleteComment(req, res) {
   try {
@@ -156,7 +160,7 @@ async function deleteComment(req, res) {
     // Check permission: allow deletion if requester is comment owner or post owner
     if (
       comment.userId.toString() !== userId &&
-      post.userId.toString() !== userId
+      post.user_id.toString() !== userId // Use post.user_id instead of post.userId
     ) {
       return res.status(403).json({ message: "You are not allowed to delete this comment." });
     }

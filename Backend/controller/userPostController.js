@@ -6,6 +6,7 @@ const User = require("../models/userSchema");
 const fs = require('fs');
 const path = require('path');
 const nodemailer = require("nodemailer");
+const { sendLikeNotification } = require("./notificationController");
 
 async function createPost(req, res) {
   try {
@@ -74,7 +75,8 @@ const getAllPost = async (req, res) => {
       return res.status(401).json({ message: "Unauthorized access." });
     }
 
-    const user = await User.findById(userId).select("preferred_categories following");
+    // Include liked_posts in the user selection
+    const user = await User.findById(userId).select("preferred_categories following liked_posts");
     if (!user) {
       return res.status(404).json({ message: "User not found." });
     }
@@ -97,51 +99,38 @@ const getAllPost = async (req, res) => {
           isBlocked: false,
           isUnderReview: false,
           "reports.4": { $exists: false },
-
           $or: [
             { isSuspended: false },
-            {
-              isSuspended: true,
-              suspended_until: { $lt: currentDate }
-            }
+            { isSuspended: true, suspended_until: { $lt: currentDate } }
           ],
-
           'author.is_blocked': false,
           'author.is_deactivate': false,
           'author.is_deleted': false,
           $or: [
             { 'author.is_suspended': false },
-            {
-              'author.is_suspended': true,
-              'author.suspended_until': { $lt: currentDate }
-            }
+            { 'author.is_suspended': true, 'author.suspended_until': { $lt: currentDate } }
           ]
         }
       }
     ];
 
-    // ✅ Add category and search filters
+    // Add category and search filters if provided
     if (category || search) {
       const additionalMatch = {};
-
       if (category && category !== "All") {
-        const catArray = category
-          .split(",")
-          .map(c => new mongoose.Types.ObjectId(c.trim())); // ✅ Correct use
+        const catArray = category.split(",").map(c => new mongoose.Types.ObjectId(c.trim()));
         additionalMatch.category_id = catArray.length > 1 ? { $in: catArray } : catArray[0];
       }
-
       if (search && search.trim() !== "") {
         additionalMatch.$or = [
           { text_content: { $regex: search, $options: "i" } },
           { "author.name": { $regex: search, $options: "i" } }
         ];
       }
-
       pipeline.push({ $match: additionalMatch });
     }
 
-    // ✅ Sorting and pagination
+    // Sorting and pagination
     pipeline.push(
       { $sort: { createdAt: -1 } },
       { $skip: (page - 1) * limit },
@@ -155,6 +144,7 @@ const getAllPost = async (req, res) => {
       { path: "comments", select: "text user_id createdAt" }
     ]);
 
+    // Format posts and check if post._id exists in user.liked_posts
     const formattedPosts = posts.map(post => ({
       id: post._id,
       user: {
@@ -167,7 +157,7 @@ const getAllPost = async (req, res) => {
       time: post.createdAt,
       content: post.text_content || "No content available",
       media: post.media?.map(m => m.media_path) || [],
-      liked: post.likes?.includes(userId) || false,
+      liked: (user.liked_posts || []).some(likedId => likedId.toString() === post._id.toString()),
       likeCount: post.likes?.length || 0,
       commentCount: post.comments?.length || 0,
       shareCount: post.shares || 0
@@ -177,45 +167,10 @@ const getAllPost = async (req, res) => {
       message: "Posts retrieved successfully.",
       data: formattedPosts
     });
-
   } catch (error) {
     console.error("Error retrieving posts:", error);
     return res.status(500).json({ message: "Failed to retrieve posts." });
   }
-};
-
-
-
-// Function to format posts
-const formatPosts = (posts) => {
-  return posts.map((post) => ({
-    id: post._id,
-    user: {
-      _id: post.user_id ? post.user_id._id : null,
-      name: post.user_id ? post.user_id.name : "Unknown User",
-      profile_image:
-        post.user_id && post.user_id.profile_image
-          ? `${post.user_id.profile_image}`
-          : "https://via.placeholder.com/40",
-      verified: post.user_id.verified,
-    },
-    type: post.category_id?.name || "Unknown Category",
-    time: post.createdAt,
-    content: post.text_content || "No content available",
-    media:
-      post.media && post.media.length > 0
-        ? post.media.map((m) => `${m.media_path}`)
-        : [],
-    liked: post.likes && post.user_id ? post.likes.includes(post.user_id._id) : false,
-    likeCount: post.likes ? post.likes.length : 0,
-    commentCount: post.comments ? post.comments.length : 0,
-    shareCount: post.shares ? post.shares.length : 0,
-    comments: post.comments.map((comment) => ({
-      user: comment.user_id ? comment.user_id.name : "Unknown",
-      text: comment.text,
-      time: comment.createdAt,
-    })),
-  }));
 };
 // function to search for posts
 
@@ -289,7 +244,45 @@ const searchPosts = async (req, res) => {
   }
 };
 
+// get all liked user
+const getLikedUsers = async (req, res) => {
+  try {
+    const { postId } = req.params;
 
+    // Find the post and populate the likes field with user details
+    const post = await Post.findById(postId)
+      .populate('likes', 'name profile_image')
+      .lean();
+
+    if (!post) {
+      return res.status(404).json({ 
+        success: false, 
+        message: "Post not found" 
+      });
+    }
+
+    // Format the response to include only necessary user details
+    const likedUsers = post.likes.map(user => ({
+      _id: user._id,
+      name: user.name,
+      profile_image: user.profile_image || "https://via.placeholder.com/40"
+    }));
+
+    return res.status(200).json({
+      success: true,
+      message: "Liked users retrieved successfully",
+      data: likedUsers
+    });
+
+  } catch (error) {
+    console.error("Error fetching liked users:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to fetch liked users",
+      error: error.message
+    });
+  }
+};
 
 const getPostById = async (req, res) => {
   try {
@@ -870,42 +863,49 @@ const likeUnlikePost = async (req, res) => {
 
     let liked = false;
     if (post.likes.includes(userId)) {
-      // User already liked => unlike
-
-      // Remove the like from the post document
+      // Unlike scenario
       post.likes = post.likes.filter(
         (id) => id.toString() !== userId.toString()
       );
-      // Remove the postId from user's liked_posts
       user.liked_posts = user.liked_posts.filter(
         (id) => id.toString() !== postId.toString()
       );
       liked = false;
-      // Decrement user's likes_given (if maintained)
       user.likes_given = Math.max((user.likes_given || 0) - 1, 0);
 
-      // Update post owner’s likes_received if needed.
+      // Update post owner's likes_received if needed.
       const postOwner = await User.findById(post.user_id);
       if (postOwner) {
-        postOwner.likes_received = Math.max((postOwner.likes_received || 0) - 1, 0);
+        postOwner.likes_received = Math.max(
+          (postOwner.likes_received || 0) - 1,
+          0
+        );
         await postOwner.save();
       }
     } else {
-      // Not previously liked => add like
-
+      // Like scenario
       post.likes.push(userId);
-      // Add postId into user's liked_posts if not already added.
       if (!user.liked_posts.includes(postId)) {
         user.liked_posts.push(postId);
       }
       liked = true;
       user.likes_given = (user.likes_given || 0) + 1;
 
-      // Update post owner’s likes_received.
+      // Update post owner's likes_received.
       const postOwner = await User.findById(post.user_id);
       if (postOwner) {
         postOwner.likes_received = (postOwner.likes_received || 0) + 1;
         await postOwner.save();
+
+        // Send like notification if the liker is not the post owner
+        if (post.user_id.toString() !== userId.toString()) {
+          
+          await sendLikeNotification({
+            likerId: userId,
+            postId,
+            postOwnerId: post.user_id,
+          });
+        }
       }
     }
 
@@ -913,9 +913,7 @@ const likeUnlikePost = async (req, res) => {
     await post.save();
     await user.save();
 
-
-    // For instance, if the user has liked 7 or more posts from a certain category,
-    // we add that category to preferred_categories.
+    // Update preferred categories based on liked posts.
     const likedPostIds = user.liked_posts;
     const likedPosts = await Post.find({ _id: { $in: likedPostIds } });
     const categoryCount = {};
@@ -925,23 +923,25 @@ const likeUnlikePost = async (req, res) => {
         categoryCount[catId] = (categoryCount[catId] || 0) + 1;
       }
     });
-    // Threshold set, for example, as 7.
     const threshold = 7;
     for (const [catId, count] of Object.entries(categoryCount)) {
-      if (count >= threshold && !user.preferred_categories.map(String).includes(catId)) {
+      if (
+        count >= threshold &&
+        !user.preferred_categories.map(String).includes(catId)
+      ) {
         user.preferred_categories.push(catId);
       }
     }
     await user.save();
 
-    res.status(200).json({
+    return res.status(200).json({
       message: "Post liked/unliked successfully",
       likesCount: post.likes.length,
       likedByUser: liked,
     });
   } catch (error) {
     console.error("Error liking/unliking post:", error);
-    res.status(500).json({ message: "Internal server error" });
+    return res.status(500).json({ message: "Internal server error" });
   }
 };
 
@@ -1199,5 +1199,6 @@ module.exports = {
   editPost,
   deletePost,
   updateReportStatus,
-  handlePostAdminAction
+  handlePostAdminAction,
+  getLikedUsers
 };

@@ -18,6 +18,7 @@ const {
   deletePost,
   getReportedPostsAdmin,
   handlePostAdminAction,
+  getLikedUsers,
 
 } = require("../controller/userPostController");
 const { uploadPostMedia } = require("../middleware/uploadMiddleware");
@@ -37,7 +38,7 @@ router.get("/all", checkAuthentication, getAllPost);
 router.get("/admin/all", checkAuthentication, checkIsAdmin, getAllPostAdmin);
 router.get("/admin/reported", checkAuthentication, checkIsAdmin, getReportedPostsAdmin );
 router.put("/admin/report/action", checkAuthentication, checkIsAdmin, handlePostAdminAction );
-
+router.get('/liked/:postId', checkAuthentication, getLikedUsers);
 
 router.get("/admin/stats", checkAuthentication, checkIsAdmin, getPostStatsAdmin);
 router.post("/share", checkAuthentication,  sharePost);

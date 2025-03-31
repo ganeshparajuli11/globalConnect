@@ -20,7 +20,7 @@ import { theme } from "../../constants/theme";
 import { hp, wp } from "../../helpers/common";
 import Input from "../../components/Input";
 import CommentCard from "../../components/CommentCard";
-
+import Icon from "../../assets/icons/index";
 // Import comment services (hook and functions)
 import {
   useFetchComments,
@@ -40,7 +40,10 @@ const PostDetails = () => {
   const [post, setPost] = useState(null);
   const [startLoading, setStartLoading] = useState(true);
   const [comment, setComment] = useState("");
-
+  // Add these states after your existing useState declarations
+  const [likesModalVisible, setLikesModalVisible] = useState(false);
+  const [likedUsers, setLikedUsers] = useState([]);
+  const [loadingLikes, setLoadingLikes] = useState(false);
   // For editing comments
   const [editModalVisible, setEditModalVisible] = useState(false);
   const [editCommentText, setEditCommentText] = useState("");
@@ -48,7 +51,30 @@ const PostDetails = () => {
 
   // Get comments for the post using our custom hook
   const { comments, fetchComments, loading: commentsLoading } = useFetchComments(postId);
+  // Add this function to fetch likes
+  const fetchLikedUsers = async () => {
+    try {
+      setLoadingLikes(true);
+      const response = await axios.get(
+        `http://${ip}:3000/api/post/liked/${postId}`,
+        {
+          headers: { Authorization: `Bearer ${authToken}` },
+        }
+      );
+      setLikedUsers(response.data.data);
+    } catch (error) {
+      console.error("Error fetching liked users:", error);
+    } finally {
+      setLoadingLikes(false);
+    }
+  };
 
+
+  // Add this function to handle opening the likes modal
+  const handleShowLikes = () => {
+    fetchLikedUsers();
+    setLikesModalVisible(true);
+  };
   useEffect(() => {
     if (postId) {
       getPostDetails();
@@ -72,7 +98,6 @@ const PostDetails = () => {
       setStartLoading(false);
     }
   };
-
   // Create comment
   const handleCommentSubmit = async (commentText) => {
     if (!commentText.trim()) return;
@@ -123,6 +148,7 @@ const PostDetails = () => {
     setEditCommentText("");
   };
 
+
   if (startLoading || !post) {
     return (
       <ScreenWrapper style={styles.center}>
@@ -147,6 +173,7 @@ const PostDetails = () => {
             router={router}
             hasShadow={false}
             showMoreIcon={false}
+            onLikeCountPress={handleShowLikes}  // Add this line
           />
         </View>
 
@@ -170,8 +197,8 @@ const PostDetails = () => {
               <CommentCard
                 key={c._id}
                 comment={c}
-                currentUserId={user._id}
-                postOwnerId={post.userId} // pass post owner's ID
+                currentUserId={user.user.id}
+                postOwnerId={post.user._id} // pass post owner's ID
                 onDelete={handleDeleteComment}
                 onEdit={handleEditComment}
               />
@@ -211,6 +238,52 @@ const PostDetails = () => {
                 <Text style={[styles.modalButtonText, { color: "#333" }]}>Cancel</Text>
               </TouchableOpacity>
             </View>
+          </View>
+        </View>
+      </Modal>
+      <Modal
+        visible={likesModalVisible}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setLikesModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContainer, styles.likesModalContainer]}>
+            <View style={styles.likesModalHeader}>
+              <Text style={styles.modalTitle}>Likes</Text>
+              <TouchableOpacity
+                onPress={() => setLikesModalVisible(false)}
+                style={styles.closeButton}
+              >
+                <Icon name="cross" size={24} color={theme.colors.text} />
+              </TouchableOpacity>
+            </View>
+
+            {loadingLikes ? (
+              <Loading />
+            ) : (
+              <ScrollView style={styles.likesList}>
+                {likedUsers.map((user) => (
+                  <TouchableOpacity
+                    key={user._id}
+                    style={styles.likedUserItem}
+                    onPress={() => {
+                      setLikesModalVisible(false);
+                      router.push(`/profile?userId=${user._id}`);
+                    }}
+                  >
+                    <View style={styles.userInfoContainer}>
+                      <Avator
+                        size={hp(5)}
+                        uri={user.profile_image}
+                        rounded={theme.radius.full}
+                      />
+                      <Text style={styles.likedUserName}>{user.name}</Text>
+                    </View>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            )}
           </View>
         </View>
       </Modal>
@@ -291,5 +364,45 @@ const styles = StyleSheet.create({
   modalButtonText: {
     color: "#fff",
     fontWeight: "bold",
+  },
+  likesModalContainer: {
+    maxHeight: '70%',
+    width: '90%',
+    backgroundColor: theme.colors.white,
+    borderRadius: theme.radius.lg,
+    padding: 0,
+    overflow: 'hidden',
+  },
+  likesModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: wp(4),
+    borderBottomWidth: 1,
+    borderBottomColor: theme.colors.border,
+  },
+  closeButton: {
+    padding: wp(2),
+  },
+  likesList: {
+    padding: wp(4),
+  },
+  likedUserItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: hp(1.5),
+    borderBottomWidth: 1,
+    borderBottomColor: theme.colors.border,
+  },
+  userInfoContainer: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  likedUserName: {
+    marginLeft: wp(3),
+    fontSize: 16,
+    color: theme.colors.text,
+    fontWeight: '500',
   },
 });

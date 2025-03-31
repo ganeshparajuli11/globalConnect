@@ -21,7 +21,7 @@ import { userAuth } from "../contexts/AuthContext";
 import axios from "axios";
 import { useFetchFollowing } from "../services/followFetchService";
 
-const PostCard = ({ item, router }) => {
+const PostCard = ({ item,verifiedStatus, router }) => {
   const { authToken } = userAuth();
   const ip = config.API_IP;
 
@@ -42,7 +42,7 @@ const PostCard = ({ item, router }) => {
   const createdAt = moment(item?.time).format("MMM D");
   const contentWidth = Dimensions.get("window").width - 32;
 
-  // NEW: Handle user press with error handling for missing user ID
+  // Handle user press with error handling for missing user ID
   const handleUserPress = async () => {
     try {
       if (!item?.user?.id) {
@@ -52,7 +52,7 @@ const PostCard = ({ item, router }) => {
         });
         return;
       }
-      console.log("Attempting to navigate to profile with ID:", item.user.id);
+
       await router.push({
         pathname: "/userProfile",
         params: { userId: item.user.id },
@@ -141,7 +141,7 @@ const PostCard = ({ item, router }) => {
               {item.user.verified && (
                 <VerifiedIcon
                   size={16}
-                  color="#1877F2"
+                  color="#1877F2" // Blue tick color
                   style={styles.verifiedIcon}
                 />
               )}

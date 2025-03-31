@@ -206,79 +206,61 @@ const clearAllNotifications = async (req, res) => {
   }
 };
 
-// Function to send a comment notification
-const sendCommentNotification = async ({
-  commenterId,
-  postId,
-  postOwnerId,
-  commentText,
-}) => {
+async function sendLikeNotification({ likerId, postId, postOwnerId }) {
   try {
-    if (!commenterId || !postId || !postOwnerId) {
-      throw new Error("Missing required parameters.");
+    // Get post owner and liker details
+    const postOwner = await User.findById(postOwnerId);
+    const liker = await User.findById(likerId);
+    if (!postOwner || !postOwner.expoPushToken) {
+      console.log("Post owner push token not found");
+      return;
     }
 
-    // Fetch commenter details
-    const commenter = await User.findById(commenterId).lean();
-    if (!commenter) {
-      throw new Error("Commenter not found.");
-    }
+    // Construct notification title and body
+    const title = `${liker.name} liked your post`;
+    const body = `${liker.name} liked your post`;
 
-    // Fetch post details
-    const post = await Post.findById(postId).lean();
-    if (!post) {
-      throw new Error("Post not found.");
-    }
-
-    const message = `${commenter.name} commented on your post: "${commentText}"`;
-
-    // Create a new comment notification
-    const notification = new UserNotification({
-      userId: postOwnerId, // The owner of the post receives the notification
-      message,
-      metadata: {
-        commenterId,
-        commenterName: commenter.name,
-        profileImage: commenter.profile_image || null,
-        postId,
-      },
-    });
-
-    await notification.save();
-    console.log(`✅ Comment notification saved for user ${postOwnerId}`);
-
-    // Emit real-time notification using Socket.io
-    if (io) {
-      io.to(postOwnerId.toString()).emit("receiveNotification", {
-        message,
-        commenterId,
-        commenterName: commenter.name,
-        profileImage: commenter.profile_image || null,
-        postId,
-        createdAt: new Date(),
-      });
-    } else {
-      console.warn("⚠️ Socket.io instance is not initialized.");
-    }
-
-    // ✔️ Send push notification if post owner has an Expo push token
-    const postOwner = await User.findById(postOwnerId, "expoPushToken").lean();
-    if (postOwner?.expoPushToken) {
-      await sendExpoPushNotification(
-        postOwner.expoPushToken,
-        "New Comment",
-        message,
-        { screen: "PostDetails", postId }
-      );
-      console.log(`📲 Push notification sent to post owner ${postOwnerId}`);
-    }
-
-    return { success: true, message: "Comment notification sent successfully." };
+    // Send push notification with target screen 'PostDetails' and include postId.
+    await sendExpoPushNotification(
+      postOwner.expoPushToken,
+      title,
+      body,
+      { screen: "PostDetails", postId },
+      "like"
+    );
+    console.log("Like push notification sent to user:", postOwnerId);
   } catch (error) {
-    console.error("❌ Error sending comment notification:", error);
-    return { success: false, message: "Failed to send comment notification." };
+    console.error("Error sending like notification:", error);
   }
-};
+}
+// Example function to send a comment notification
+async function sendCommentNotification({ commenterId, postId, postOwnerId, commentText }) {
+  try {
+    // Get the post owner and commenter details
+    const postOwner = await User.findById(postOwnerId);
+    const commenter = await User.findById(commenterId);
+    if (!postOwner || !postOwner.expoPushToken) {
+      console.log("Post owner push token not found");
+      return;
+    }
+
+    // Construct the notification message
+    const title = `${commenter.name} commented on your photo`;
+    const body = `${commenter.name} commented: "${commentText}" in your post`;
+
+    // Send push notification with required data payload
+    await sendExpoPushNotification(
+      postOwner.expoPushToken,
+      title,
+      body,
+      { screen: "PostDetails", postId },
+      "comment"
+    );
+    console.log("Comment push notification sent to user:", postOwnerId);
+  } catch (error) {
+    console.error("Error sending comment notification:", error);
+  }
+}
 
 /**
  * Fetch notifications for the logged-in user (user-specific notifications).
@@ -372,5 +354,6 @@ module.exports = {
   sendCommentNotification,
   clearAllNotifications,
   emitNotification,
+  sendLikeNotification
 
 };

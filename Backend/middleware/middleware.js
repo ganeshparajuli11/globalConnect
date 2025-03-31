@@ -3,11 +3,11 @@ const User = require("../models/userSchema");
 // Middleware to check authentication
 const checkAuthentication = (req, res, next) => {
   try {
-    console.log("Authenticating user...");
+
 
     // Extract token from the Authorization header
     const token = req.headers.authorization?.replace("Bearer ", "");
-    console.log("token: ", token);
+
     if (!token) {
       return res.status(401).json({ msg: "No token provided. Unauthorized." });
     }
@@ -15,7 +15,7 @@ const checkAuthentication = (req, res, next) => {
     // Verify the token
     const JWT_SECRET_KEY = process.env.JWT_SECRET_KEY || "default_secret";
     const decoded = jwt.verify(token, JWT_SECRET_KEY);
-    console.log("decoded data", decoded);
+
 
     // Check if decoded token contains necessary user data
     if (!decoded || !decoded.id || !decoded.role) {
@@ -26,7 +26,7 @@ const checkAuthentication = (req, res, next) => {
 
     // Attach user data to the request object
     req.user = decoded;
-    console.log("User data from token: ", req.user); // Log the decoded token data
+    
 
     next();
   } catch (error) {
@@ -64,7 +64,6 @@ const bothUser = (req, res, next) => {
 };
 
 const checkIsSuperAdmin = (req, res, next) => {
-  console.log("User role in checkIsSuperAdmin:", req.user?.role);
   if (req.user?.role === "superadmin") {
     next();
   } else {

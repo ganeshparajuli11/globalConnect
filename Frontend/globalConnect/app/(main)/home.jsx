@@ -1,11 +1,11 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   StyleSheet,
   Text,
   View,
   FlatList,
   ActivityIndicator,
-  TouchableOpacity
+  TouchableOpacity,
 } from "react-native";
 import BottomNav from "../../components/bottomNav";
 import { theme } from "../../constants/theme";
@@ -24,30 +24,29 @@ import { updateUserLocation } from "../../services/getLocationService";
 import DobCard from "../../components/DobCard";
 import { checkDOB, updateDOB } from "../../services/dobService";
 import { userAuth } from "../../contexts/AuthContext";
-import { useCallback } from "react";
-
 
 const Home = () => {
   const router = useRouter();
-  const { authToken, refreshUserProfile } = userAuth()
+  const { authToken } = userAuth();
 
   // if(!authToken){
   //   router.replace("/login")
   // }
   const handleShareError = (error) => {
     // Only log non-socket related errors
-    if (!error?.error?.includes('getIO is not a function')) {
-      console.error('Share error:', error);
+    if (!error?.error?.includes("getIO is not a function")) {
+      console.error("Share error:", error);
     }
 
     // For socket-specific errors, just log a debug message
-    if (error?.error?.includes('getIO is not function')) {
-      console.debug('Socket sharing temporarily unavailable');
+    if (error?.error?.includes("getIO is not function")) {
+      console.debug("Socket sharing temporarily unavailable");
     }
 
     // Return false to prevent further error propagation
     return false;
   };
+
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("All");
   const [searchType, setSearchType] = useState("users");
@@ -55,15 +54,23 @@ const Home = () => {
   const [showDobModal, setShowDobModal] = useState(false);
 
   // Hooks for posts & search
-  const { posts, fetchPosts, loading, hasMore, page, resetPosts } = useFetchPosts(selectedCategory);
+  const {
+    posts,
+    fetchPosts,
+    loading,
+    hasMore,
+    page,
+    resetPosts,
+  } = useFetchPosts(selectedCategory);
   const { users, loading: searchUserLoading } = useSearchUsers(searchQuery);
   const {
     posts: searchPosts,
     loading: searchPostLoading,
     fetchSearchPosts,
     hasMore: searchHasMore,
-    page: searchPage
+    page: searchPage,
   } = useSearchPosts(searchQuery);
+
   // Update search effects
   useEffect(() => {
     if (searchQuery.trim() && searchType === "posts") {
@@ -77,12 +84,10 @@ const Home = () => {
     }
   }, [searchHasMore, searchPostLoading, searchQuery, searchPage, searchType]);
 
-
   // When category changes, reset posts and fetch fresh data
   useEffect(() => {
     resetPosts();
     fetchPosts(1, true);
-
   }, [selectedCategory]);
 
   const isSearching = searchQuery.trim().length > 0;
@@ -152,7 +157,6 @@ const Home = () => {
   // Handler to update the DOB when submitted from the DobCard.
   const handleDobSubmit = async (selectedDate) => {
     try {
-
       if (authToken) {
         await updateDOB(authToken, selectedDate.toISOString());
         setShowDobModal(false);
@@ -187,7 +191,9 @@ const Home = () => {
               showsVerticalScrollIndicator={false}
               contentContainerStyle={styles.listStyle}
               keyExtractor={(item) => item._id}
-              renderItem={({ item }) => <UserCard user={item} onFollowToggle={() => { }} />}
+              renderItem={({ item }) => (
+                <UserCard user={item} onFollowToggle={() => {}} />
+              )}
               ListEmptyComponent={
                 !searchLoading && (
                   <View style={styles.emptyContainer}>
@@ -196,61 +202,33 @@ const Home = () => {
                 )
               }
               ListFooterComponent={
-                searchLoading && <ActivityIndicator style={{ marginVertical: 30 }} size="large" />
+                searchLoading && (
+                  <ActivityIndicator style={{ marginVertical: 30 }} size="large" />
+                )
               }
             />
           ) : (
-            <FlatList
-              data={searchPosts}
-              showsVerticalScrollIndicator={false}
-              contentContainerStyle={styles.listStyle}
-              keyExtractor={(item) => item.id}
-              renderItem={({ item }) => <PostCard item={item} router={router} />}
-              onEndReached={handleLoadMoreSearchPosts}
-              onEndReachedThreshold={0.5}
-              onShareError={handleShareError}
-              ListEmptyComponent={
-                !searchPostLoading && (
-                  <View style={styles.emptyContainer}>
-                    <Text style={styles.emptyText}>No posts found</Text>
-                  </View>
-                )
-              }
-              ListFooterComponent={() => {
-                if (searchPostLoading) {
-                  return <ActivityIndicator style={{ marginVertical: 30 }} size="large" />;
-                }
-                if (!searchHasMore && searchPosts.length > 0) {
-                  return (
-                    <View style={styles.footerContainer}>
-                      <Text style={styles.footerText}>No more posts available</Text>
-                    </View>
-                  );
-                }
-                return null;
-              }}
-            />
-          )
-        ) : (
-          <>
-            <SortCategory selectedCategory={selectedCategory} setSelectedCategory={setSelectedCategory} />
             <FlatList
               data={posts}
               showsVerticalScrollIndicator={false}
               contentContainerStyle={styles.listStyle}
               keyExtractor={(item) => item.id}
-              renderItem={({ item }) => <PostCard
-                item={{
-                  ...item,
-                  user: {
-                    id: item.user?._id || item.user?.id, // Handle both formats
-                    name: item.user?.name,
-                    profile_image: item.user?.profile_image
-                  }
-                }}
-                router={router}
-                onShareError={handleShareError}
-              />}
+              renderItem={({ item }) => (
+                <PostCard
+                  item={{
+                    ...item,
+                    user: {
+                      id: item.user?._id || item.user?.id, // Handle both formats
+                      name: item.user?.name,
+                      profile_image: item.user?.profile_image,
+                      verified: item.user?.verified ?? false,
+                    },
+                  }}
+                  verifiedStatus={item.user?.verified ?? false} // Passing verified status explicitly
+                  router={router}
+                  onShareError={handleShareError}
+                />
+              )}
               onEndReached={() => {
                 if (hasMore && !loading) {
                   fetchPosts(page, false);
@@ -266,7 +244,66 @@ const Home = () => {
               }
               ListFooterComponent={() => {
                 if (loading) {
-                  return <ActivityIndicator style={{ marginVertical: 30 }} size="large" />;
+                  return (
+                    <ActivityIndicator style={{ marginVertical: 30 }} size="large" />
+                  );
+                }
+                if (!hasMore && posts.length > 0) {
+                  return (
+                    <View style={styles.footerContainer}>
+                      <Text style={styles.footerText}>No more posts available</Text>
+                    </View>
+                  );
+                }
+                return null;
+              }}
+            />
+          )
+        ) : (
+          <>
+            <SortCategory
+              selectedCategory={selectedCategory}
+              setSelectedCategory={setSelectedCategory}
+            />
+            <FlatList
+              data={posts}
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={styles.listStyle}
+              keyExtractor={(item) => item.id}
+              renderItem={({ item }) => (
+                <PostCard
+                  item={{
+                    ...item,
+                    user: {
+                      id: item.user?._id || item.user?.id, // Handle both formats
+                      name: item.user?.name,
+                      profile_image: item.user?.profile_image,
+                      verified: item.user?.verified ?? false,
+                    },
+                  }}
+                  verifiedStatus={item.user?.verified ?? false}
+                  router={router}
+                  onShareError={handleShareError}
+                />
+              )}
+              onEndReached={() => {
+                if (hasMore && !loading) {
+                  fetchPosts(page, false);
+                }
+              }}
+              onEndReachedThreshold={0.5}
+              ListEmptyComponent={
+                !loading && (
+                  <View style={styles.emptyContainer}>
+                    <Text style={styles.emptyText}>No posts available</Text>
+                  </View>
+                )
+              }
+              ListFooterComponent={() => {
+                if (loading) {
+                  return (
+                    <ActivityIndicator style={{ marginVertical: 30 }} size="large" />
+                  );
                 }
                 if (!hasMore && posts.length > 0) {
                   return (

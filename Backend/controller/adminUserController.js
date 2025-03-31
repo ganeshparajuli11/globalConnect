@@ -6,6 +6,7 @@ const nodemailer = require("nodemailer");
 const ReportUser = require("../models/reportUserSchema");
 const Comment = require("../models/commentSchema");
 const Category = require("../models/categorySchema");
+const mongoose = require("mongoose");
 // Add cleanup job for long-term inactive users
 const initializeInactiveUsersCleanup = () => {
   setInterval(async () => {
@@ -1087,6 +1088,99 @@ const verifyUser = async (req, res) => {
   }
 };
 
+const unverifyUser = async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const { reason } = req.body; // Optional reason for unverification
+
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid user ID"
+      });
+    }
+
+    // Find the user
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found"
+      });
+    }
+
+    // Update verification status to false
+    user.verified = false;
+    await user.save();
+
+    // Configure Nodemailer transporter
+    const transporter = nodemailer.createTransport({
+      service: 'gmail',
+      auth: {
+        user: process.env.EMAIL,
+        pass: process.env.EMAIL_PASSWORD,
+      },
+    });
+
+    // Compose the email HTML
+    const emailHTML = `
+      <html>
+        <head>
+          <style>
+            .container { padding: 20px; font-family: Arial, sans-serif; }
+            .header { color: #DC2626; font-size: 24px; margin-bottom: 20px; }
+            .content { line-height: 1.6; color: #333; }
+            .reason { background: #fef2f2; padding: 15px; margin: 15px 0; border-radius: 5px; }
+            .footer { margin-top: 20px; color: #666; font-size: 14px; }
+          </style>
+        </head>
+        <body>
+          <div class="container">
+            <div class="header">Account Unverification Update</div>
+            <div class="content">
+              <p>Dear ${user.name},</p>
+              <p>Your account has been unverified by the GlobalConnect admin team.</p>
+              ${reason ? `<div class="reason">
+                            <strong>Reason for unverification:</strong><br/>
+                            ${reason}
+                          </div>` : ""}
+              <p>Your verification badge has been removed from your profile.</p>
+            </div>
+            <div class="footer">
+              Best regards,<br/>
+              The GlobalConnect Team
+            </div>
+          </div>
+        </body>
+      </html>
+    `;
+
+    // Send notification email to the user
+    await transporter.sendMail({
+      from: process.env.EMAIL,
+      to: user.email,
+      subject: 'Your GlobalConnect Account Has Been Unverified',
+      html: emailHTML
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: "User unverification status updated successfully",
+      data: {
+        userId: user._id,
+        name: user.name,
+        verified: user.verified
+      }
+    });
+  } catch (error) {
+    console.error("Error updating user unverification:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to update user unverification",
+      error: error.message
+    });
+  }
+};
 // manage user status
 // Utility function to send email
 const sendEmail = async (email, subject, message) => {
@@ -1198,81 +1292,127 @@ const manageUserStatus = async (req, res) => {
         updateFields.status = "Active";
         break;
 
-      case "delete":
-        try {
-          updatedStatus = "Deleted";
-          console.log("Step 5.1: Deleting user's posts and related data");
-
-          // Delete all posts by the user
-          const userPosts = await Post.find({ user_id: userId });
-          for (const post of userPosts) {
-            // Delete comments on user's posts
-            await Comment.deleteMany({ post_id: post._id });
-            // Delete likes on user's posts
-            await Post.updateMany({}, { $pull: { likes: post._id } });
-            // Delete reports for this post
-            await Post.updateMany(
-              { _id: post._id },
-              { $set: { reports: [] } }
-            );
-          }
-          await Post.deleteMany({ user_id: userId });
-
-          console.log("Step 5.2: Deleting user's reports and interactions");
-          // Delete all user reports
-          await ReportUser.deleteMany({ user_id: userId });
-          await ReportUser.deleteMany({ reported_by: userId });
-
-          // Delete post reports made by this user
-          await Post.updateMany(
-            { 'reports.reported_by': userId },
-            { $pull: { reports: { reported_by: userId } } }
-          );
-
-          console.log("Step 5.3: Cleaning up user social connections");
-          await User.updateMany(
-            { followers: userId },
-            { $pull: { followers: userId } }
-          );
-          await User.updateMany(
-            { following: userId },
-            { $pull: { following: userId } }
-          );
-          await User.updateMany(
-            { blocked_users: userId },
-            { $pull: { blocked_users: userId } }
-          );
-
-          console.log("Step 5.4: Removing user's likes and comments");
-          await Post.updateMany(
-            { likes: userId },
-            { $pull: { likes: userId } }
-          );
-          await Comment.deleteMany({ user_id: userId });
-
-          console.log("Step 5.5: Removing user's preferences and categories");
-          await Category.updateMany(
-            { preferred_by: userId },
-            { $pull: { preferred_by: userId } }
-          );
-
-          console.log("Step 5.6: Deleting user account");
-          await User.findByIdAndDelete(userId);
-
-          // Don't modify updateFields, return early instead
-          return res.status(200).json({
-            message: "User and all associated data deleted successfully",
-            data: {
-              userId,
-              action: "delete",
-              updatedStatus: "Deleted"
+        case "delete":
+          try {
+            // Handle deletion reason from request body. Allow flexibility if sent as deleteReason.
+            const deletionReason = req.body.reason || req.body.deleteReason;
+            if (!deletionReason || !deletionReason.trim()) {
+              return res.status(400).json({ message: "Deletion reason is required." });
             }
-          });
-
-        } catch (error) {
-          console.error("Error in delete case:", error);
-          throw error; // Re-throw to be caught by outer try-catch
-        }
+        
+            updatedStatus = "Deleted";
+            console.log("Step 5.1: Deleting user's posts and related data");
+        
+            // Delete user's related data (posts, comments, reports, interactions, etc.)
+            const userPosts = await Post.find({ user_id: userId });
+            for (const post of userPosts) {
+              // Delete comments for each post
+              await Comment.deleteMany({ post_id: post._id });
+              // Remove likes referencing this post from all posts
+              await Post.updateMany({}, { $pull: { likes: post._id } });
+              // Clear embedded reports in the post before deletion
+              await Post.updateMany({ _id: post._id }, { $set: { reports: [] } });
+            }
+            await Post.deleteMany({ user_id: userId });
+        
+            console.log("Step 5.2: Deleting user's reports and interactions");
+            // Delete reports made by or for the user
+            await ReportUser.deleteMany({ user_id: userId });
+            await ReportUser.deleteMany({ reported_by: userId });
+            // Remove this user's reports from posts
+            await Post.updateMany(
+              { 'reports.reported_by': userId },
+              { $pull: { reports: { reported_by: userId } } }
+            );
+        
+            console.log("Step 5.3: Cleaning up user social connections");
+            await User.updateMany({ followers: userId }, { $pull: { followers: userId } });
+            await User.updateMany({ following: userId }, { $pull: { following: userId } });
+            await User.updateMany({ blocked_users: userId }, { $pull: { blocked_users: userId } });
+        
+            console.log("Step 5.4: Removing user's likes and comments");
+            await Post.updateMany({ likes: userId }, { $pull: { likes: userId } });
+            await Comment.deleteMany({ user_id: userId });
+        
+            console.log("Step 5.5: Removing user's preferences and categories");
+            await Category.updateMany({ preferred_by: userId }, { $pull: { preferred_by: userId } });
+        
+            // Save user's email and name before deletion
+            const userEmail = user.email;
+            const userName = user.name;
+        
+            // Step 5.6: Compose deletion email
+            console.log("Step 5.6: Composing and sending deletion email");
+            const emailSubject = "Your GlobalConnect Account Has Been Deleted";
+            const emailHTML = `
+              <!DOCTYPE html>
+              <html lang="en">
+                <head>
+                  <meta charset="UTF-8" />
+                  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+                  <title>Account Deletion Notice</title>
+                  <style>
+                    body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f4f9; margin: 0; padding: 0; }
+                    .email-container { max-width: 600px; margin: 40px auto; background: #ffffff; border-radius: 10px; overflow: hidden; box-shadow: 0 8px 20px rgba(0,0,0,0.08); }
+                    .header { background: linear-gradient(135deg, #4F46E5, #3B82F6); padding: 30px 20px; color: #ffffff; text-align: center; }
+                    .content { padding: 30px 25px; color: #333333; }
+                    .footer { background: #f9fafb; padding: 20px; text-align: center; font-size: 13px; color: #888; }
+                  </style>
+                </head>
+                <body>
+                  <div class="email-container">
+                    <div class="header">
+                      <h1>Account Deleted</h1>
+                    </div>
+                    <div class="content">
+                      <h2>Hello ${userName},</h2>
+                      <p>Your GlobalConnect account has been deleted.</p>
+                      <p><strong>Reason:</strong> ${deletionReason}</p>
+                      <p>If you believe this was an error, please contact our support team immediately.</p>
+                    </div>
+                    <div class="footer">
+                      <p>&copy; ${new Date().getFullYear()} GlobalConnect. All rights reserved.</p>
+                    </div>
+                  </div>
+                </body>
+              </html>
+            `;
+        
+            const transporter = nodemailer.createTransport({
+              service: "Gmail",
+              auth: {
+                user: process.env.EMAIL,
+                pass: process.env.EMAIL_PASSWORD,
+              },
+            });
+        
+            await transporter.sendMail({
+              from: process.env.EMAIL,
+              to: userEmail,
+              subject: emailSubject,
+              html: emailHTML,
+            });
+            console.log("Deletion email sent successfully to", userEmail);
+        
+            // Step 5.7: Finally delete the user
+            await User.findByIdAndDelete(userId);
+        
+            return res.status(200).json({
+              message: "User and all associated data deleted successfully.",
+              data: {
+                userId,
+                action: "delete",
+                updatedStatus: "Deleted"
+              }
+            });
+        
+          } catch (error) {
+            console.error("Error in delete case:", error);
+            return res.status(500).json({
+              message: "Failed to delete user.",
+              error: error.message
+            });
+          }
 
     }
 
@@ -2195,5 +2335,6 @@ module.exports = {
   resetReportCount,
   verifyUser,
   getUnverifiedUsers,
-  getVerifiedUsers
+  getVerifiedUsers,
+  unverifyUser
 };

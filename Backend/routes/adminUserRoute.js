@@ -18,6 +18,7 @@ const {
   getUnverifiedUsers,
   getVerifiedUsers,
   verifyUser,
+  unverifyUser,
 } = require("../controller/adminUserController");
 const {
   checkAuthentication,
@@ -89,6 +90,8 @@ router.post("/send-email-to-users", checkAuthentication, checkIsAdmin, sendEmail
 router.get('/unverified-users', checkAuthentication,checkIsAdmin, getUnverifiedUsers);
 router.get('/verified-users', checkAuthentication,checkIsAdmin, getVerifiedUsers);
 router.put('/verify-user/:userId', checkAuthentication,checkIsAdmin, verifyUser);
+router.put('/unverify-user/:userId', checkAuthentication,checkIsAdmin, unverifyUser);
+
 
 // search users by name or email
 router.get("/search-users", checkAuthentication, checkIsAdmin, searchUsers);
