@@ -1,7 +1,9 @@
 const Comment = require("../models/commentSchema");
-const  Post = require("../models/postSchema");
+const Post = require("../models/postSchema");
 const User = require("../models/userSchema");
 const { sendCommentNotification } = require("./notificationController");
+const Notification = require("../models/notificationSchema");
+const { UserNotification } = require("../models/notificationSchema");
 
 // Function to get all comments for a specific post (Admin only)
 async function getCommentsByPost(req, res) {
@@ -45,7 +47,6 @@ async function getCommentsByPost(req, res) {
   }
 }
 
-
 // Function to add a comment to a post
 async function addComment(req, res) {
   try {
@@ -63,6 +64,10 @@ async function addComment(req, res) {
       return res.status(404).json({ message: "Post not found." });
     }
 
+    // Fetch the commenter's profile image
+    const commenter = await User.findById(userId).select("profile_image");
+    const profileImage = commenter?.profile_image || null;
+
     // Create the comment
     const comment = new Comment({
       userId,
@@ -77,11 +82,28 @@ async function addComment(req, res) {
     postExists.comments_count = (postExists.comments_count || 0) + 1; // Ensure count is initialized
     await postExists.save();
 
-    // Send push notification only if the commenter is not the post owner
+    // Send push notification and store it in the database
     if (
       postExists.user_id &&
       postExists.user_id.toString() !== userId.toString()
     ) {
+      const notificationMessage = `User commented on your post: "${text}"`;
+
+      // Store the notification in the database
+      await UserNotification.create({
+        userId: postExists.user_id.toString(),
+        message: notificationMessage,
+        metadata: {
+          commenterId: userId,
+          profileImage, // Include the commenter's profile image
+          postId,
+          commentText: text,
+        },
+      });
+
+      console.log("Notification stored successfully.");
+
+      // Send push notification
       await sendCommentNotification({
         commenterId: userId,
         postId,
@@ -102,6 +124,7 @@ async function addComment(req, res) {
     });
   }
 }
+
 // Function to edit a comment (only the comment owner can edit)
 async function editComment(req, res) {
   try {
@@ -137,7 +160,6 @@ async function editComment(req, res) {
     });
   }
 }
-
 
 // Function to delete a comment (allowed for comment owner or post owner)
 async function deleteComment(req, res) {

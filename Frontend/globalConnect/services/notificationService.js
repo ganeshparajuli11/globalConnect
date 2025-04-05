@@ -46,26 +46,18 @@ export const useFetchNotifications = () => {
 
   const markAsRead = useCallback(async (notificationId) => {
     try {
-      // First check if notification is already read
       const notification = notifications.find(n => n._id === notificationId);
       if (notification?.read) {
-        // If already read, do nothing
-        return true;
+        return true; // Already read, no further action needed
       }
-  
+
       const response = await axios.put(
         READ_NOTIFICATIONS_API_URL,
-        {
-          notificationId,
-          isRead: true
-        },
-        {
-          headers: { Authorization: `Bearer ${authToken}` },
-        }
+        { notificationId, isRead: true },
+        { headers: { Authorization: `Bearer ${authToken}` } }
       );
-  
+
       if (response.data.success) {
-        // Update the local state to mark the notification as read
         setNotifications(prevNotifications =>
           prevNotifications.map(notification =>
             notification._id === notificationId
@@ -78,17 +70,9 @@ export const useFetchNotifications = () => {
       return false;
     } catch (error) {
       console.error("Error marking notification as read:", error);
-      if (error.response) {
-        console.error(
-          "Error marking notification as read: Server responded with status",
-          error.response.status,
-          "and data:",
-          error.response.data
-        );
-      }
       return false;
     }
-  }, [authToken, notifications]); // Added notifications to dependency array
+  }, [authToken, notifications]);
 
   const clearAllNotifications = useCallback(async () => {
     try {

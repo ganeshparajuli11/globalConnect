@@ -282,9 +282,6 @@ const getUserNotifications = async (req, res) => {
   }
 };
 
-/**
- * Fetch global notifications (available to all users).
- */
 
 /**
  * Mark a user-specific notification as read or unread.
@@ -297,14 +294,12 @@ const markNotificationAsRead = async (req, res) => {
       return res.status(400).json({ error: "Invalid notification ID" });
     }
 
-    // First check if notification exists and its current read status
     const notification = await UserNotification.findById(notificationId);
 
     if (!notification) {
       return res.status(404).json({ error: "Notification not found" });
     }
 
-    // If notification is already read, return success without making changes
     if (notification.isRead) {
       return res.status(200).json({
         success: true,
@@ -313,20 +308,15 @@ const markNotificationAsRead = async (req, res) => {
       });
     }
 
-    // Only allow marking as read (not unread)
     if (!isRead) {
       return res.status(400).json({
         error: "Cannot mark notification as unread once it has been read"
       });
     }
 
-    // Update the notification to read status and add read timestamp
     const updatedNotification = await UserNotification.findByIdAndUpdate(
       notificationId,
-      { 
-        isRead: true,
-        readAt: new Date()
-      },
+      { isRead: true, readAt: new Date() },
       { new: true }
     );
 
@@ -337,12 +327,13 @@ const markNotificationAsRead = async (req, res) => {
     });
   } catch (error) {
     console.error("Error updating notification status:", error);
-    return res.status(500).json({ 
+    return res.status(500).json({
       error: "Error updating notification status",
-      details: error.message 
+      details: error.message
     });
   }
 };
+
 
 module.exports = {
   initializeNotificationController,

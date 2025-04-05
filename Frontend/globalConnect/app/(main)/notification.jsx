@@ -42,6 +42,10 @@ const Notification = () => {
   };
 
   const handleNotificationPress = async (notificationId) => {
+    const notification = notifications.find(n => n._id === notificationId);
+    if (notification?.read) {
+      return; // Prevent toggling back to unread
+    }
     await markAsRead(notificationId);
   };
 
