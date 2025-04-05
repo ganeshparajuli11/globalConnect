@@ -63,6 +63,8 @@ async function createPost(req, res) {
   }
 }
 
+
+
 // Get all posts based on query/interest/search logic
 const getAllPost = async (req, res) => {
   try {
@@ -172,8 +174,27 @@ const getAllPost = async (req, res) => {
     return res.status(500).json({ message: "Failed to retrieve posts." });
   }
 };
-// function to search for posts
 
+// function to search for posts
+const formatPosts = (posts, user, req) => {
+  return posts.map(post => ({
+    id: post._id,
+    user: {
+      id: post.user_id ? post.user_id._id : post.author._id,
+      name: post.user_id ? post.user_id.name : post.author.name,
+      profile_image: post.user_id ? post.user_id.profile_image || "https://via.placeholder.com/40" : post.author.profile_image || "https://via.placeholder.com/40",
+      verified: post.user_id ? post.user_id.verified : post.author.verified
+    },
+    type: post.category_id?.name || "Unknown Category",
+    time: post.createdAt,
+    content: post.text_content || "No content available",
+    media: post.media?.map(m => m.media_path) || [],
+    liked: (user?.liked_posts || []).some(likedId => likedId.toString() === post._id.toString()),
+    likeCount: post.likes?.length || 0,
+    commentCount: post.comments?.length || 0,
+    shareCount: post.shares || 0
+  }));
+};
 const searchPosts = async (req, res) => {
   try {
     const { query } = req.query;
@@ -255,9 +276,9 @@ const getLikedUsers = async (req, res) => {
       .lean();
 
     if (!post) {
-      return res.status(404).json({ 
-        success: false, 
-        message: "Post not found" 
+      return res.status(404).json({
+        success: false,
+        message: "Post not found"
       });
     }
 
@@ -297,18 +318,24 @@ const getPostById = async (req, res) => {
       return res.status(404).json({ message: "Post not found." });
     }
 
-    // Format media array to match `getAllPost`
-    const formattedMedia = post.media.map(media => media.media_path);
+    // Format media array to include each media item's id and url
+    const formattedMedia = post.media.map(media => ({
+      id: media._id,
+      url: media.media_path
+    }));
 
-    // Construct response in the same structure as `getAllPost`
+    // Construct response in the same structure as getAllPost
     const formattedPost = {
       id: post._id,
       user: {
-        _id: post.user_id._id,
+        id: post.user_id._id,
         name: post.user_id.name,
         profile_image: post.user_id.profile_image,
       },
-      type: post.category_id.name,
+      category: {
+        id: post.category_id._id, // Include category ID
+        name: post.category_id.name, // Include category name
+      },
       time: post.createdAt,
       content: post.text_content,
       media: formattedMedia,
@@ -316,7 +343,7 @@ const getPostById = async (req, res) => {
       likeCount: post.likes.length,
       commentCount: post.comments.length,
       shareCount: post.shares,
-      comments: post.comments, // You may need to format comments separately if needed
+      comments: post.comments, // Format comments further if needed
     };
 
     return res.status(200).json({
@@ -328,6 +355,7 @@ const getPostById = async (req, res) => {
     return res.status(500).json({ message: "Failed to retrieve post." });
   }
 };
+
 
 // Configure transporter (adjust according to your SMTP configuration)
 const transporter = nodemailer.createTransport({
@@ -899,7 +927,7 @@ const likeUnlikePost = async (req, res) => {
 
         // Send like notification if the liker is not the post owner
         if (post.user_id.toString() !== userId.toString()) {
-          
+
           await sendLikeNotification({
             likerId: userId,
             postId,
@@ -1042,14 +1070,13 @@ const updatePostStatus = async (req, res) => {
   }
 };
 
-/**
- * Controller: Edit an existing post
- */
+
 const editPost = async (req, res) => {
   try {
     const { postId } = req.params;
     const userId = req.user.id;
     const { category_id, text_content, removed_media } = req.body;
+    console.log("checking all data", req.body);
 
     // Find the post and verify ownership
     const post = await Post.findById(postId);
@@ -1062,13 +1089,16 @@ const editPost = async (req, res) => {
       return res.status(403).json({ message: "You can only edit your own posts." });
     }
 
-    // Validate category if provided
-    if (category_id) {
-      const categoryExists = await Category.findById(category_id);
-      if (!categoryExists) {
-        return res.status(400).json({ message: "Invalid category ID." });
+    // Update category only if a valid category_id is provided.
+    // If category_id is undefined or an empty string, leave the category unchanged.
+    if (typeof category_id !== "undefined" && category_id.trim() !== "") {
+      if (mongoose.isValidObjectId(category_id)) {
+        post.category_id = new mongoose.Types.ObjectId(category_id);
+      } else {
+        console.warn("Provided category_id is invalid. Leaving category unchanged.");
+        // Optionally, you could return an error instead:
+        // return res.status(400).json({ message: "Invalid category ID format." });
       }
-      post.category_id = category_id;
     }
 
     // Update text content if provided
@@ -1138,6 +1168,10 @@ const editPost = async (req, res) => {
     });
   }
 };
+
+
+
+
 
 /**
  * Controller: Delete a post by ID (only by post owner)

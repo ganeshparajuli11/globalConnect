@@ -40,7 +40,6 @@ const PostDetails = () => {
   const [post, setPost] = useState(null);
   const [startLoading, setStartLoading] = useState(true);
   const [comment, setComment] = useState("");
-  // Add these states after your existing useState declarations
   const [likesModalVisible, setLikesModalVisible] = useState(false);
   const [likedUsers, setLikedUsers] = useState([]);
   const [loadingLikes, setLoadingLikes] = useState(false);
@@ -51,16 +50,14 @@ const PostDetails = () => {
 
   // Get comments for the post using our custom hook
   const { comments, fetchComments, loading: commentsLoading } = useFetchComments(postId);
-  // Add this function to fetch likes
+
+  // Function to fetch liked users
   const fetchLikedUsers = async () => {
     try {
       setLoadingLikes(true);
-      const response = await axios.get(
-        `http://${ip}:3000/api/post/liked/${postId}`,
-        {
-          headers: { Authorization: `Bearer ${authToken}` },
-        }
-      );
+      const response = await axios.get(`http://${ip}:3000/api/post/liked/${postId}`, {
+        headers: { Authorization: `Bearer ${authToken}` },
+      });
       setLikedUsers(response.data.data);
     } catch (error) {
       console.error("Error fetching liked users:", error);
@@ -69,12 +66,12 @@ const PostDetails = () => {
     }
   };
 
-
-  // Add this function to handle opening the likes modal
+  // Function to open the likes modal
   const handleShowLikes = () => {
     fetchLikedUsers();
     setLikesModalVisible(true);
   };
+
   useEffect(() => {
     if (postId) {
       getPostDetails();
@@ -98,13 +95,14 @@ const PostDetails = () => {
       setStartLoading(false);
     }
   };
+
   // Create comment
   const handleCommentSubmit = async (commentText) => {
     if (!commentText.trim()) return;
     try {
       await createComment(postId, commentText, authToken);
       setComment("");
-      fetchComments(); // refresh comment list after posting
+      fetchComments(); // Refresh comment list after posting
     } catch (error) {
       console.error("Error posting comment:", error);
     }
@@ -114,7 +112,7 @@ const PostDetails = () => {
   const handleDeleteComment = async (commentId) => {
     try {
       await deleteComment(commentId, authToken);
-      fetchComments(); // refresh comments after deletion
+      fetchComments(); // Refresh comments after deletion
     } catch (error) {
       console.error("Error deleting comment:", error);
     }
@@ -127,7 +125,7 @@ const PostDetails = () => {
     setEditModalVisible(true);
   };
 
-  // Save changes
+  // Save edited comment
   const saveEditComment = async () => {
     if (!selectedComment) return;
     try {
@@ -147,7 +145,6 @@ const PostDetails = () => {
     setSelectedComment(null);
     setEditCommentText("");
   };
-
 
   if (startLoading || !post) {
     return (
@@ -173,7 +170,7 @@ const PostDetails = () => {
             router={router}
             hasShadow={false}
             showMoreIcon={false}
-            onLikeCountPress={handleShowLikes}  // Add this line
+            onLikeCountPress={handleShowLikes} // Open likes modal on like count press
           />
         </View>
 
@@ -198,7 +195,7 @@ const PostDetails = () => {
                 key={c._id}
                 comment={c}
                 currentUserId={user.user.id}
-                postOwnerId={post.user._id} // pass post owner's ID
+                postOwnerId={post.user.id} // Updated to use post.user.id
                 onDelete={handleDeleteComment}
                 onEdit={handleEditComment}
               />
@@ -241,6 +238,8 @@ const PostDetails = () => {
           </View>
         </View>
       </Modal>
+
+      {/* Likes Modal */}
       <Modal
         visible={likesModalVisible}
         transparent={true}
@@ -321,8 +320,6 @@ const styles = StyleSheet.create({
     color: theme.colors.textLight,
     fontSize: 16,
   },
-
-  // Edit Modal
   modalOverlay: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.4)",
@@ -348,7 +345,7 @@ const styles = StyleSheet.create({
     padding: wp(3),
     marginBottom: hp(2),
     minHeight: hp(10),
-    textAlignVertical: "top", // for multiline
+    textAlignVertical: "top",
     color: theme.colors.textDark,
   },
   modalButtons: {
@@ -366,17 +363,17 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
   },
   likesModalContainer: {
-    maxHeight: '70%',
-    width: '90%',
+    maxHeight: "70%",
+    width: "90%",
     backgroundColor: theme.colors.white,
     borderRadius: theme.radius.lg,
     padding: 0,
-    overflow: 'hidden',
+    overflow: "hidden",
   },
   likesModalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
     padding: wp(4),
     borderBottomWidth: 1,
     borderBottomColor: theme.colors.border,
@@ -388,21 +385,21 @@ const styles = StyleSheet.create({
     padding: wp(4),
   },
   likedUserItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     paddingVertical: hp(1.5),
     borderBottomWidth: 1,
     borderBottomColor: theme.colors.border,
   },
   userInfoContainer: {
     flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
   },
   likedUserName: {
     marginLeft: wp(3),
     fontSize: 16,
     color: theme.colors.text,
-    fontWeight: '500',
+    fontWeight: "500",
   },
 });

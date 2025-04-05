@@ -34,7 +34,7 @@ const Sidebar = ({ setIsAuthenticated }) => {
     name: "",
     email: "",
     profile_image: "",
-    role: "", // Changed from hardcoded "Admin" to empty string
+    role: "",
   });
 
   // Fetch the token once (on mount), and fetch user info
@@ -48,7 +48,6 @@ const Sidebar = ({ setIsAuthenticated }) => {
           },
         })
         .then((res) => {
-          // The response structure is different, update the data extraction
           const userData = res.data?.data?.user;
           if (userData) {
             setUserData({
@@ -56,7 +55,7 @@ const Sidebar = ({ setIsAuthenticated }) => {
               name: userData.name?.trim() ?? "",
               email: userData.email,
               profile_image: userData.profile_image,
-              role: userData.role || "", // Now correctly accessing the role
+              role: userData.role || "",
             });
           }
         })
@@ -66,15 +65,16 @@ const Sidebar = ({ setIsAuthenticated }) => {
     }
   }, []);
 
-
-
   // Keep submenus open based on URL path
   useEffect(() => {
     if (location.pathname.startsWith("/user")) {
       setActiveMenu("Users");
     } else if (location.pathname.startsWith("/posts")) {
       setActiveMenu("Posts");
-    } else if (location.pathname.startsWith("/allCategory") || location.pathname.startsWith("/categories")) {
+    } else if (
+      location.pathname.startsWith("/allCategory") ||
+      location.pathname.startsWith("/categories")
+    ) {
       setActiveMenu("Categories");
     } else if (location.pathname.startsWith("/notification")) {
       setActiveMenu("Notifications");
@@ -86,11 +86,16 @@ const Sidebar = ({ setIsAuthenticated }) => {
     setActiveMenu(activeMenu === menuTitle ? "" : menuTitle);
   };
 
-  // Handle logout
+  // Updated logout handler without forcing a reload
   const handleLogout = () => {
     localStorage.removeItem("access_token");
     setIsAuthenticated(false);
-    navigate("/login");
+    setShowLogoutDialog(false);
+
+    setTimeout(() => {
+      navigate("/login", { replace: true });
+      window.scrollTo({ top: 0, behavior: "instant" });
+    }, 100);
   };
 
   // Menu items structure
@@ -110,7 +115,7 @@ const Sidebar = ({ setIsAuthenticated }) => {
         { title: "Inactive Users", path: "/user/inActive" },
         { title: "Blocked Users", path: "/user/blocked" },
         { title: "Reported Users", path: "/user/reported" },
-        { title: "Verify Users", path: "/user/verify" }, // Add this new item
+        { title: "Verify Users", path: "/user/verify" },
       ],
     },
     {
@@ -126,9 +131,7 @@ const Sidebar = ({ setIsAuthenticated }) => {
       title: "Categories",
       icon: <FaTags />,
       submenu: true,
-      submenuItems: [
-        { title: "All Categories", path: "/allCategory" },
-      ],
+      submenuItems: [{ title: "All Categories", path: "/allCategory" }],
     },
     {
       title: "Notifications",
@@ -160,41 +163,37 @@ const Sidebar = ({ setIsAuthenticated }) => {
       icon: <FaUserShield />,
       path: "/admin",
     },
-  ].filter(item => {
+  ].filter((item) => {
     // Remove Admin Management tab if user is not superadmin
     if (item.title === "Admin Management") {
       return userData.role === "superadmin";
     }
     return true;
-  });;
+  });
 
   // Fallback image generator if the profile image fails
   const handleImageError = (e) => {
-    // If the image is *already* using the fallback URL, stop here.
     if (e.target.src.includes("/api/avatar?name=")) {
       return;
     }
-
-    // Otherwise, switch to the fallback URL. Trim the user’s name to remove trailing spaces.
-    e.target.src = `${API_BASE_URL}/api/avatar?name=${encodeURIComponent(userData.name.trim())}`;
+    e.target.src = `${API_BASE_URL}/api/avatar?name=${encodeURIComponent(
+      userData.name.trim()
+    )}`;
   };
-
 
   return (
     <div
-      className={`h-screen flex flex-col justify-between bg-white border-r border-gray-200 transition-all duration-300 ${isCollapsed ? "w-20" : "w-64"
-        }`}
+      className={`h-screen flex flex-col justify-between bg-white border-r border-gray-200 transition-all duration-300 ${
+        isCollapsed ? "w-20" : "w-64"
+      }`}
     >
       {/* SIDEBAR HEADER */}
       <div className="flex items-center justify-between h-16 px-4 border-b border-gray-200">
-        {/* Brand / Title */}
         {!isCollapsed && (
           <div className="text-xl font-bold bg-gradient-to-r from-blue-600 to-blue-800 bg-clip-text text-transparent">
             Admin Panel
           </div>
         )}
-
-        {/* Collapse/Expand Button */}
         <button
           onClick={() => setIsCollapsed(!isCollapsed)}
           className="p-2 rounded-lg hover:bg-gray-100 text-gray-500 transition-colors"
@@ -208,16 +207,17 @@ const Sidebar = ({ setIsAuthenticated }) => {
         {menuItems.map((item, index) =>
           item.submenu ? (
             <div key={index}>
-              {/* Submenu parent */}
               <div
                 onClick={() => toggleMenu(item.title)}
-                className={`flex items-center justify-between px-4 py-3 cursor-pointer hover:bg-gray-50 transition-colors ${activeMenu === item.title ? "bg-blue-50" : ""
-                  }`}
+                className={`flex items-center justify-between px-4 py-3 cursor-pointer hover:bg-gray-50 transition-colors ${
+                  activeMenu === item.title ? "bg-blue-50" : ""
+                }`}
               >
                 <div className="flex items-center space-x-3">
                   <span
-                    className={`text-lg ${activeMenu === item.title ? "text-blue-600" : "text-gray-500"
-                      }`}
+                    className={`text-lg ${
+                      activeMenu === item.title ? "text-blue-600" : "text-gray-500"
+                    }`}
                   >
                     {item.icon}
                   </span>
@@ -233,17 +233,18 @@ const Sidebar = ({ setIsAuthenticated }) => {
                     </span>
                   )}
                 </div>
-                {/* Chevron for submenu */}
                 {!isCollapsed && (
                   <span
-                    className={`transition-transform duration-200 ${activeMenu === item.title ? "rotate-90 text-blue-600" : "text-gray-400"
-                      }`}
+                    className={`transition-transform duration-200 ${
+                      activeMenu === item.title
+                        ? "rotate-90 text-blue-600"
+                        : "text-gray-400"
+                    }`}
                   >
                     <BiChevronRight />
                   </span>
                 )}
               </div>
-              {/* Submenu items */}
               {activeMenu === item.title && !isCollapsed && (
                 <div className="bg-gray-50">
                   {item.submenuItems.map((subItem, subIndex) => (
@@ -251,9 +252,10 @@ const Sidebar = ({ setIsAuthenticated }) => {
                       key={subIndex}
                       to={subItem.path}
                       className={({ isActive }) =>
-                        `block py-2 px-12 hover:bg-gray-100 transition-colors ${isActive
-                          ? "text-blue-600 font-medium bg-blue-50"
-                          : "text-gray-600"
+                        `block py-2 px-12 hover:bg-gray-100 transition-colors ${
+                          isActive
+                            ? "text-blue-600 font-medium bg-blue-50"
+                            : "text-gray-600"
                         }`
                       }
                     >
@@ -264,19 +266,20 @@ const Sidebar = ({ setIsAuthenticated }) => {
               )}
             </div>
           ) : (
-            // Normal menu item
             <NavLink
               key={index}
               to={item.path}
               end
               className={({ isActive }) =>
-                `flex items-center px-4 py-3 hover:bg-gray-50 transition-colors ${isActive ? "bg-blue-50 text-blue-600 font-medium" : "text-gray-700"
+                `flex items-center px-4 py-3 hover:bg-gray-50 transition-colors ${
+                  isActive ? "bg-blue-50 text-blue-600 font-medium" : "text-gray-700"
                 }`
               }
             >
               <span
-                className={`text-lg ${location.pathname === item.path ? "text-blue-600" : "text-gray-500"
-                  }`}
+                className={`text-lg ${
+                  location.pathname === item.path ? "text-blue-600" : "text-gray-500"
+                }`}
               >
                 {item.icon}
               </span>
@@ -288,14 +291,12 @@ const Sidebar = ({ setIsAuthenticated }) => {
 
       {/* USER PROFILE SECTION */}
       <div className="border-t border-gray-200">
-        {/* "inherit" width is tricky; let's ensure it spans entire sidebar width */}
         <div
-          className={`flex items-center justify-between p-3 ${isCollapsed ? "w-20" : "w-64"
-            } transition-all duration-300`}
+          className={`flex items-center justify-between p-3 ${
+            isCollapsed ? "w-20" : "w-64"
+          } transition-all duration-300`}
         >
-          {/* Avatar + Name/Role */}
           <div className="flex items-center space-x-3">
-            {/* Avatar */}
             <div>
               {userData.profile_image ? (
                 <img
@@ -310,8 +311,6 @@ const Sidebar = ({ setIsAuthenticated }) => {
                 </div>
               )}
             </div>
-
-            {/* Name and Role, only if not collapsed */}
             {!isCollapsed && (
               <div className="leading-tight">
                 <div className="text-sm font-semibold text-gray-900">
@@ -323,8 +322,6 @@ const Sidebar = ({ setIsAuthenticated }) => {
               </div>
             )}
           </div>
-
-          {/* Logout Icon - only if not collapsed */}
           {!isCollapsed && (
             <button
               onClick={() => setShowLogoutDialog(true)}

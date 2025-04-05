@@ -84,21 +84,25 @@ const PostCardDetails = ({
   };
 
   const onLike = async () => {
+    const prevLiked = liked;
+    const prevLikeCount = likeCount;
+    const newLiked = !liked;
+    const newLikeCount = likeCount + (liked ? -1 : 1);
+    // Optimistically update UI
+    setLiked(newLiked);
+    setLikeCount(newLikeCount);
+
     try {
       const url = `http://${ip}:3000/api/post/like-unlike/${item.id}`;
-      const response = await axios.put(
-        url,
-        {},
-        { headers: { Authorization: `Bearer ${authToken}` } }
-      );
-      const { liked: updatedLiked, likesCount } = response.data;
-      setLiked(updatedLiked);
-      setLikeCount(likesCount);
+      await axios.put(url, {}, { headers: { Authorization: `Bearer ${authToken}` } });
     } catch (error) {
       console.error(
         "Error toggling like:",
         error.response ? error.response.data : error.message
       );
+      // Revert update if request fails
+      setLiked(prevLiked);
+      setLikeCount(prevLikeCount);
     }
   };
 
@@ -181,19 +185,23 @@ const PostCardDetails = ({
       </View>
 
       {/* Media Images */}
-      {item.media && item.media.length > 0 && (
-        <View style={styles.mediaContainer}>
-          {item.media.slice(0, 4).map((mediaUrl, index) => (
-            <TouchableOpacity
-              key={index}
-              onPress={() => openFullScreen(mediaUrl)}
-              style={styles.mediaItem}
-            >
-              <Image source={{ uri: mediaUrl }} style={styles.mediaImage} />
-            </TouchableOpacity>
-          ))}
-        </View>
-      )}
+      {item.media.slice(0, 4).map((media, index) => (
+        <TouchableOpacity
+          key={media.id || index}
+          onPress={() => openFullScreen(media.url)}
+          style={styles.mediaItem}
+        >
+          <Image
+            source={{
+              uri: media.url.startsWith("http")
+                ? media.url
+                : `http://${ip}:3000${media.url}`
+            }}
+            style={styles.mediaImage}
+          />
+        </TouchableOpacity>
+      ))}
+
 
       {/* Fullscreen Modal for Images */}
       <Modal visible={fullScreenVisible} transparent={true}>

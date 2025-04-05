@@ -19,8 +19,8 @@ import { hp } from "../helpers/common";
 import config from "../constants/config";
 import { userAuth } from "../contexts/AuthContext";
 import { reportUser } from "../services/reportService"; // Ensure this is imported
-import ReportCategoryCard from './ReportCategoryCard';
-import { useFetchCategories } from '../services/reportService';
+import ReportCategoryCard from "./ReportCategoryCard";
+import { useFetchCategories } from "../services/reportService";
 
 const UserProfileCard = ({ user, isFollowing, onFollowToggle }) => {
   const { authToken, refreshUserProfile } = userAuth();
@@ -117,14 +117,12 @@ const UserProfileCard = ({ user, isFollowing, onFollowToggle }) => {
   };
 
   // Instead of directly alerting, open the report user modal (Report Card)
-  // Replace your existing handleReportUser function with this
   const handleReportUser = () => {
     setMenuVisible(false);
     setReportUserModalVisible(true);
   };
 
-  // Add this function to handle report submission
-  // Update the submitReportUser function
+  // Handle report submission
   const submitReportUser = async () => {
     if (!selectedCategory) {
       Alert.alert("Error", "Please select a reason for reporting");
@@ -132,7 +130,7 @@ const UserProfileCard = ({ user, isFollowing, onFollowToggle }) => {
     }
 
     try {
-      setIsSubmitting(true); // Add this state variable
+      setIsSubmitting(true);
       const response = await reportUser(user._id, selectedCategory);
 
       if (response.success) {
@@ -161,7 +159,6 @@ const UserProfileCard = ({ user, isFollowing, onFollowToggle }) => {
       setIsSubmitting(false);
     }
   };
-
 
   // Navigate to the user's profile screen
   const navigateToProfile = () => {
@@ -194,7 +191,11 @@ const UserProfileCard = ({ user, isFollowing, onFollowToggle }) => {
               onPress={() => setMenuVisible(true)}
               style={styles.menuButton}
             >
-              <Icon name="ellipsis-v" size={20} color={theme.colors.textDark} />
+              <Icon
+                name="ellipsis-v"
+                size={20}
+                color={theme.colors.textDark}
+              />
             </TouchableOpacity>
           </View>
 
@@ -277,13 +278,17 @@ const UserProfileCard = ({ user, isFollowing, onFollowToggle }) => {
           <View style={styles.modalContent}>
             <TouchableOpacity style={styles.menuItem} onPress={handleBlockUser}>
               <Icon name="ban" size={20} color={theme.colors.error} />
-              <Text style={[styles.menuText, { color: theme.colors.error }]}>
+              <Text
+                style={[styles.menuText, { color: theme.colors.error }]}
+              >
                 Block User
               </Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.menuItem} onPress={handleReportUser}>
               <Icon name="flag" size={20} color={theme.colors.warning} />
-              <Text style={[styles.menuText, { color: theme.colors.warning }]}>
+              <Text
+                style={[styles.menuText, { color: theme.colors.warning }]}
+              >
                 Report User
               </Text>
             </TouchableOpacity>
@@ -291,7 +296,7 @@ const UserProfileCard = ({ user, isFollowing, onFollowToggle }) => {
         </TouchableOpacity>
       </Modal>
 
-      // Update the Report Modal JSX
+      {/* Report Modal */}
       <Modal
         visible={reportUserModalVisible}
         transparent={true}
@@ -325,7 +330,10 @@ const UserProfileCard = ({ user, isFollowing, onFollowToggle }) => {
             </Text>
 
             {categoriesLoading ? (
-              <ActivityIndicator size="large" color={theme.colors.primary} />
+              <ActivityIndicator
+                size="large"
+                color={theme.colors.primary}
+              />
             ) : (
               <ScrollView style={styles.categoriesList}>
                 {categories.map((category) => (
@@ -344,7 +352,7 @@ const UserProfileCard = ({ user, isFollowing, onFollowToggle }) => {
               <TouchableOpacity
                 style={[
                   styles.modalButton,
-                  { backgroundColor: theme.colors.border }
+                  { backgroundColor: theme.colors.border },
                 ]}
                 onPress={() => {
                   if (!isSubmitting) {
@@ -354,7 +362,12 @@ const UserProfileCard = ({ user, isFollowing, onFollowToggle }) => {
                 }}
                 disabled={isSubmitting}
               >
-                <Text style={[styles.modalButtonText, { color: theme.colors.text }]}>
+                <Text
+                  style={[
+                    styles.modalButtonText,
+                    { color: theme.colors.text },
+                  ]}
+                >
                   Cancel
                 </Text>
               </TouchableOpacity>
@@ -364,8 +377,8 @@ const UserProfileCard = ({ user, isFollowing, onFollowToggle }) => {
                   styles.modalButton,
                   {
                     backgroundColor: theme.colors.primary,
-                    opacity: !selectedCategory || isSubmitting ? 0.5 : 1
-                  }
+                    opacity: !selectedCategory || isSubmitting ? 0.5 : 1,
+                  },
                 ]}
                 onPress={submitReportUser}
                 disabled={!selectedCategory || isSubmitting}
@@ -373,7 +386,7 @@ const UserProfileCard = ({ user, isFollowing, onFollowToggle }) => {
                 {isSubmitting ? (
                   <ActivityIndicator color="white" size="small" />
                 ) : (
-                  <Text style={[styles.modalButtonText, { color: 'white' }]}>
+                  <Text style={[styles.modalButtonText, { color: "white" }]}>
                     Submit Report
                   </Text>
                 )}
@@ -506,21 +519,20 @@ const styles = StyleSheet.create({
     fontSize: 16,
     marginLeft: 10,
   },
-  // ...existing styles...
   modalContainer: {
-    backgroundColor: 'white',
-    width: '90%',
+    backgroundColor: "white",
+    width: "90%",
     borderRadius: 15,
     padding: 20,
-    maxHeight: '80%',
+    maxHeight: "80%",
   },
   modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
     marginBottom: 15,
     borderBottomWidth: 1,
-    borderBottomColor: '#eee',
+    borderBottomColor: "#eee",
     paddingBottom: 10,
   },
   closeButton: {
@@ -531,23 +543,23 @@ const styles = StyleSheet.create({
   },
   modalTitle: {
     fontSize: 20,
-    fontWeight: 'bold',
+    fontWeight: "bold",
     color: theme.colors.text,
-    textAlign: 'center',
+    textAlign: "center",
     flex: 1,
   },
   modalSubtitle: {
     fontSize: 14,
     color: theme.colors.textLight,
     marginBottom: 15,
-    textAlign: 'center',
+    textAlign: "center",
   },
   modalButtons: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    justifyContent: "space-between",
     marginTop: 15,
     borderTopWidth: 1,
-    borderTopColor: '#eee',
+    borderTopColor: "#eee",
     paddingTop: 15,
   },
   modalButton: {
@@ -555,11 +567,11 @@ const styles = StyleSheet.create({
     padding: 12,
     borderRadius: 8,
     marginHorizontal: 5,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
   },
   modalButtonText: {
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: "600",
   },
 });

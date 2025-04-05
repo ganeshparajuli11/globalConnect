@@ -21,7 +21,7 @@ import { userAuth } from "../contexts/AuthContext";
 import axios from "axios";
 import { useFetchFollowing } from "../services/followFetchService";
 
-const PostCard = ({ item,verifiedStatus, router }) => {
+const PostCard = ({ item, verifiedStatus, router }) => {
   const { authToken } = userAuth();
   const ip = config.API_IP;
 
@@ -220,23 +220,28 @@ const PostCard = ({ item,verifiedStatus, router }) => {
         <View style={styles.shareModalContainer}>
           <View style={styles.shareModalContent}>
             <Text style={styles.shareModalTitle}>Share Post With</Text>
-            {loadingFollowing ? (
-              <Text>Loading...</Text>
-            ) : following.length > 0 ? (
-              following.map((user) => (
-                <TouchableOpacity
-                  key={user._id}
-                  style={styles.shareUserItem}
-                  onPress={() => sharePostToUser(user)}
-                >
-                  <Text style={styles.shareUserName}>{user.name}</Text>
-                  <Text style={styles.shareUserEmail}>{user.email}</Text>
-                </TouchableOpacity>
-              ))
-            ) : (
-              <Text>No users found</Text>
-            )}
-            <TouchableOpacity style={styles.cancelButton} onPress={() => setShareModalVisible(false)}>
+            <View style={styles.shareUserList}>
+              {loadingFollowing ? (
+                <Text style={styles.messageText}>Loading...</Text>
+              ) : following.length > 0 ? (
+                following.map((user) => (
+                  <TouchableOpacity
+                    key={user._id}
+                    style={styles.shareUserItem}
+                    onPress={() => sharePostToUser(user)}
+                  >
+                    <Text style={styles.shareUserName}>{user.name}</Text>
+                    <Text style={styles.shareUserEmail}>{user.email}</Text>
+                  </TouchableOpacity>
+                ))
+              ) : (
+                <Text style={styles.messageText}>No users found</Text>
+              )}
+            </View>
+            <TouchableOpacity
+              style={styles.cancelButton}
+              onPress={() => setShareModalVisible(false)}
+            >
               <Text style={styles.cancelButtonText}>Cancel</Text>
             </TouchableOpacity>
           </View>

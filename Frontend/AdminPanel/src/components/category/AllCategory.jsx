@@ -2,13 +2,16 @@ import React, { useState, useEffect } from "react";
 import axios from "axios";
 import Sidebar from "../sidebar/Sidebar";
 import { XCircle, Trash2 } from "lucide-react"; // Using Trash2 for delete icon
-import "../category/category.css"
+import "../category/category.css";
+
 const AllCategory = () => {
   const [categories, setCategories] = useState([]);
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [newCategory, setNewCategory] = useState({ name: "" });
   const [categoryToDelete, setCategoryToDelete] = useState(null);
+  const [isToggleDialogOpen, setIsToggleDialogOpen] = useState(false);
+  const [categoryToToggle, setCategoryToToggle] = useState(null);
 
   // Fetch all categories on mount
   useEffect(() => {
@@ -39,6 +42,12 @@ const AllCategory = () => {
 
   const handleCategoryChange = (e) => {
     setNewCategory({ ...newCategory, [e.target.name]: e.target.value });
+  };
+
+  // Function to open the toggle confirmation dialog
+  const openToggleDialog = (categoryId, currentStatus) => {
+    setCategoryToToggle({ id: categoryId, currentStatus });
+    setIsToggleDialogOpen(true);
   };
 
   const handleAddCategory = async () => {
@@ -98,18 +107,22 @@ const AllCategory = () => {
   // ===============================
   // Toggle Category Active Status
   // ===============================
-  const handleToggleCategory = async (categoryId) => {
+  const handleToggleCategory = async () => {
+    if (!categoryToToggle) return;
+
     try {
       await axios.patch(
-        `http://localhost:3000/api/category/status/${categoryId}`
+        `http://localhost:3000/api/category/status/${categoryToToggle.id}`
       );
       setCategories(
         categories.map((category) =>
-          category._id === categoryId
+          category._id === categoryToToggle.id
             ? { ...category, active: !category.active }
             : category
         )
       );
+      setIsToggleDialogOpen(false);
+      setCategoryToToggle(null);
     } catch (error) {
       console.error("Error toggling category status:", error);
     }
@@ -154,14 +167,12 @@ const AllCategory = () => {
                       type="checkbox"
                       className="sr-only peer"
                       checked={!!category.active}
-                      onChange={() => handleToggleCategory(category._id)}
+                      onChange={() =>
+                        openToggleDialog(category._id, category.active)
+                      }
                     />
-                    <div
-                      className={`w-11 h-6 rounded-full bg-gray-200 peer-focus:outline-none peer-focus:ring-2 
-                        peer-focus:ring-blue-500 transition-all 
-                        ${category.active ? "bg-green-500" : "bg-gray-200"}`}
-                    ></div>
-                    <span className="ml-3 text-sm font-medium">
+                    <div className="relative w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 dark:peer-focus:ring-blue-800 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-blue-600"></div>
+                    <span className="ml-3 text-sm font-medium text-black dark:text-black">
                       {category.active ? "Active" : "Inactive"}
                     </span>
                   </label>
@@ -226,22 +237,65 @@ const AllCategory = () => {
         {/* Delete Confirmation Dialog */}
         {isDeleteDialogOpen && (
           <div className="fixed inset-0 bg-gray-800 bg-opacity-50 flex items-center justify-center">
-            <div className="bg-white p-6 rounded w-80">
-              <h2 className="text-xl font-bold mb-4">
+            <div className="bg-white p-6 rounded w-96">
+              <h2 className="text-xl font-bold mb-4">Delete Category</h2>
+              <p className="mb-4">
                 Are you sure you want to delete this category?
-              </h2>
-              <div className="flex justify-end space-x-4">
+              </p>
+              <div className="flex justify-end space-x-3">
                 <button
                   onClick={closeDeleteDialog}
-                  className="bg-gray-500 text-white p-2 rounded"
+                  className="px-4 py-2 bg-gray-300 rounded hover:bg-gray-400"
                 >
-                  No
+                  Cancel
                 </button>
                 <button
                   onClick={handleDeleteCategory}
-                  className="bg-red-500 text-white p-2 rounded"
+                  className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700"
                 >
-                  Yes
+                  Delete
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Toggle Confirmation Dialog */}
+        {isToggleDialogOpen && (
+          <div className="fixed inset-0 bg-gray-800 bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white p-6 rounded-lg shadow-xl max-w-md w-full mx-4">
+              <div className="mb-4">
+                <h3 className="text-lg font-semibold text-gray-900">
+                  Confirm Status Change
+                </h3>
+                <p className="mt-2 text-sm text-gray-500">
+                  Are you sure you want to{" "}
+                  {categoryToToggle?.currentStatus ? "deactivate" : "activate"}{" "}
+                  this category?
+                  {categoryToToggle?.currentStatus
+                    ? " This will hide the category from users."
+                    : " This will make the category visible to users."}
+                </p>
+              </div>
+              <div className="flex items-center justify-end space-x-3 mt-5 border-t pt-4">
+                <button
+                  onClick={() => {
+                    setIsToggleDialogOpen(false);
+                    setCategoryToToggle(null);
+                  }}
+                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 border border-gray-300 rounded-md hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleToggleCategory}
+                  className={`px-4 py-2 text-sm font-medium text-white rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 ${
+                    categoryToToggle?.currentStatus
+                      ? "bg-red-600 hover:bg-red-700 focus:ring-red-500"
+                      : "bg-green-600 hover:bg-green-700 focus:ring-green-500"
+                  }`}
+                >
+                  {categoryToToggle?.currentStatus ? "Deactivate" : "Activate"}
                 </button>
               </div>
             </div>

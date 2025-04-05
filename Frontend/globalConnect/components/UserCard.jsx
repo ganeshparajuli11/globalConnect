@@ -7,26 +7,24 @@ import config from "../constants/config";
 import axios from "axios";
 import { userAuth } from "../contexts/AuthContext";
 import { useRouter } from "expo-router";
-import { Modal } from 'react-native';
 
 const UserCard = ({ user, onFollowToggle }) => {
   const router = useRouter();
   const { authToken, refreshUserProfile } = userAuth();
   const ip = config.API_IP;
   const [menuVisible, setMenuVisible] = useState(false);
-  // Initialize local state with user.isFollowing (default to false if undefined)
   const [following, setFollowing] = useState(user.isFollowing || false);
 
   useEffect(() => {
     setFollowing(user.isFollowing || false);
   }, [user.isFollowing]);
 
-  // Build the correct URL for the user's profile image
+  // Build the URL for the user's profile image
   const profileImageURL = user?.profile_image
     ? `http://${ip}:3000/${user.profile_image}`
     : "https://via.placeholder.com/100";
 
-  // Follow/unfollow function using the same pattern as in UserProfileCard
+  // Follow/unfollow function
   const performFollowToggle = async () => {
     try {
       const endpoint = following ? "unfollow" : "follow";
@@ -42,7 +40,7 @@ const UserCard = ({ user, onFollowToggle }) => {
       });
 
       if (response.status === 200) {
-        refreshUserProfile()
+        refreshUserProfile();
         setFollowing(!following);
         onFollowToggle && onFollowToggle(user._id, !following);
       } else {
@@ -53,7 +51,6 @@ const UserCard = ({ user, onFollowToggle }) => {
     }
   };
 
-  // Show a confirmation alert before toggling follow status
   const confirmFollowToggle = () => {
     const message = following
       ? `Are you sure you want to unfollow ${user.name}?`
@@ -66,7 +63,6 @@ const UserCard = ({ user, onFollowToggle }) => {
     ]);
   };
 
-  // Navigate to the user's profile screen
   const navigateToProfile = () => {
     router.push({
       pathname: "/userProfile",
@@ -78,24 +74,21 @@ const UserCard = ({ user, onFollowToggle }) => {
     <TouchableOpacity onPress={navigateToProfile} activeOpacity={0.8}>
       <View style={styles.card}>
         <Image source={{ uri: profileImageURL }} style={styles.avatar} />
-        <Text style={styles.userName}>{user.name} {user.verified && (
-          <Icon name="verify" size={16} color="blue" style={{ marginLeft: 4 }} />
-        )}</Text>
-
+        <View style={styles.userNameContainer}>
+          <Text style={styles.userName}>{user.name}</Text>
+          {user.verified && (
+            <Icon name="verify" size={16} color="blue" style={styles.verifyIcon} />
+          )}
+        </View>
         <TouchableOpacity
           onPress={confirmFollowToggle}
-          style={[
-            styles.followButton,
-            following ? styles.following : styles.notFollowing,
-          ]}
+          style={[styles.followButton, following ? styles.following : styles.notFollowing]}
           activeOpacity={0.8}
         >
           {following ? (
             <>
               <Icon name="check" size={16} color={theme.colors.primary} style={styles.icon} />
-              <Text style={[styles.followButtonText, styles.followingText]}>
-                Following
-              </Text>
+              <Text style={[styles.followButtonText, styles.followingText]}>Following</Text>
             </>
           ) : (
             <>
@@ -132,11 +125,19 @@ const styles = StyleSheet.create({
     borderRadius: hp(2.5),
     marginRight: wp(3),
   },
-  userName: {
+  userNameContainer: {
     flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  userName: {
     fontSize: 16,
     fontWeight: "bold",
     color: theme.colors.text,
+  },
+  verifyIcon: {
+    marginLeft: 4,
+    marginTop: 2, // small top margin to align with text
   },
   followButton: {
     flexDirection: "row",
@@ -165,3 +166,4 @@ const styles = StyleSheet.create({
     marginRight: 5,
   },
 });
+

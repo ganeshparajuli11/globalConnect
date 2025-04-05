@@ -16,9 +16,10 @@ const formatPostData = (post) => ({
   type: post.type || "Unknown Category",
   time: post.time,
   content: post.content || "No content available",
-  media: post.media?.length > 0
-    ? post.media.map((m) => `http://${ip}:3000${m}`)
-    : [],
+  media:
+    post.media?.length > 0
+      ? post.media.map((m) => `http://${ip}:3000${m}`)
+      : [],
   liked: post.liked || false,
   likeCount: post.likeCount || 0,
   commentCount: post.commentCount || 0,
@@ -43,9 +44,11 @@ export const useFetchPosts = (selectedCategory = "All") => {
       try {
         let url = `${API_URL}?page=${pageNumber}&limit=5`;
         if (selectedCategory && selectedCategory !== "All") {
-          url += `&category=${Array.isArray(selectedCategory) 
-            ? selectedCategory.join(",") 
-            : selectedCategory}`;
+          url += `&category=${
+            Array.isArray(selectedCategory)
+              ? selectedCategory.join(",")
+              : selectedCategory
+          }`;
         }
 
         const response = await axios.get(url, {
@@ -64,7 +67,6 @@ export const useFetchPosts = (selectedCategory = "All") => {
 
         setPage(pageNumber + 1);
         setHasMore(newPosts.length > 0);
-
       } catch (error) {
         console.error("Error fetching posts:", error);
         setError(error.response?.data?.message || "Failed to fetch posts");
@@ -89,15 +91,7 @@ export const useFetchPosts = (selectedCategory = "All") => {
     }
   }, []);
 
-  return { 
-    posts, 
-    fetchPosts, 
-    loading, 
-    hasMore, 
-    page, 
-    resetPosts, 
-    error 
-  };
+  return { posts, fetchPosts, loading, hasMore, page, resetPosts, error };
 };
 
 export const useSearchPosts = (searchQuery) => {
@@ -118,7 +112,9 @@ export const useSearchPosts = (searchQuery) => {
       setError(null);
 
       try {
-        const url = `${API_URL}?search=${encodeURIComponent(query)}&page=${pageNumber}&limit=10`;
+        const url = `${API_URL}?search=${encodeURIComponent(
+          query
+        )}&page=${pageNumber}&limit=10`;
         const response = await axios.get(url, {
           headers: { Authorization: `Bearer ${authToken}` },
         });
@@ -126,7 +122,9 @@ export const useSearchPosts = (searchQuery) => {
         const searchResults = response.data.data.map(formatPostData);
 
         setPosts((prev) => {
-          const combinedPosts = isFirstLoad ? searchResults : [...prev, ...searchResults];
+          const combinedPosts = isFirstLoad
+            ? searchResults
+            : [...prev, ...searchResults];
           return combinedPosts.filter(
             (post, index, self) =>
               index === self.findIndex((p) => p.id === post.id)
@@ -135,7 +133,6 @@ export const useSearchPosts = (searchQuery) => {
 
         setPage(pageNumber + 1);
         setHasMore(searchResults.length > 0);
-
       } catch (error) {
         console.error("Error searching posts:", error);
         setError(error.response?.data?.message || "Failed to search posts");
@@ -153,7 +150,7 @@ export const useSearchPosts = (searchQuery) => {
     setPage(1);
     setHasMore(true);
     setError(null);
-    
+
     if (searchQuery.trim()) {
       fetchSearchPosts(searchQuery, 1, true);
     }
@@ -171,6 +168,6 @@ export const useSearchPosts = (searchQuery) => {
       setPage(1);
       setHasMore(true);
       setError(null);
-    }
+    },
   };
 };

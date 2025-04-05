@@ -10,7 +10,7 @@ const {
 } = require('../controller/notificationController');
 
 const { checkAuthentication, checkIsUser } = require('../middleware/middleware');
-const { sendAdminNotification, getGlobalNotifications, scheduleAdminNotification, resendAdminNotification } = require('../controller/adminNotificationController');
+const { sendAdminNotification, getGlobalNotifications, scheduleAdminNotification, resendAdminNotification, deleteAdminNotification } = require('../controller/adminNotificationController');
 
 // =============================
 // User Notification Routes
@@ -36,6 +36,8 @@ router.delete('/user/clear-all', checkAuthentication, checkIsUser, clearAllNotif
 
 router.post('/admin/send/global', checkAuthentication, sendAdminNotification);
 router.post('/admin/schedule', checkAuthentication, scheduleAdminNotification);
+router.delete('/admin/:notificationId', checkAuthentication, deleteAdminNotification );
+
 
 
 // // router to get all admin notifications

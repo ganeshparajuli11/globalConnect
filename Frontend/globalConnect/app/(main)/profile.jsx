@@ -21,12 +21,10 @@ import * as ImagePicker from "expo-image-picker";
 import UserPostCardDetails from "../../components/UserPostCardDetails";
 import axios from "axios";
 
-
 const Profile = () => {
   const router = useRouter();
   const { user, authToken, setUserData, refreshUserProfile } = userAuth();
   const ip = config.API_IP;
-  console.log("user", user)
   const profileImagePath =
     user?.user?.profile_image?.uri || user?.user?.profile_image || "";
 
@@ -110,7 +108,7 @@ const Profile = () => {
           Alert.alert(
             "Error",
             error.response.data.message ||
-            "An error occurred while updating your profile"
+              "An error occurred while updating your profile"
           );
         } else {
           Alert.alert("Error", "An error occurred while updating your profile");
@@ -119,6 +117,30 @@ const Profile = () => {
     }
   };
 
+  user.posts.map((post) => {
+    const transformedPost = {
+      id: post._id, // Match backend's `_id`
+      content: post.content, // Match backend's `text_content`
+      time: post.createdAt, // Match backend's `createdAt`
+      commentCount: post.commentsCount, // Match backend's `commentsCount`
+      likeCount: post.likesCount, // Match backend's `likesCount`
+      liked: post.likes?.includes(user.user.id) || false, // Handle `liked` logic
+      media:
+        post.media?.map((m) => ({
+          id: m._id, // Use `_id` from media object
+          url: `http://${ip}:3000${m.media_path}`, // Construct media URL using `media_path`
+        })) || [],
+      user: {
+        id: user.user.id, // Use current user's ID
+        name: user.user.name, // Use current user's name
+        profile_image: user.user.profile_image, // Use current user's profile image
+        verified: user.user.verified ?? false, // Handle `verified` logic
+      },
+    };
+
+
+  
+  })
 
   return (
     <ScreenWrapper>
@@ -156,7 +178,11 @@ const Profile = () => {
               {user?.user?.name || "John Doe"}
             </Text>
             {user?.user?.verified && (
-              <VerifiedIcon size={20} color="#1877F2" style={styles.verifiedIcon} />
+              <VerifiedIcon
+                size={20}
+                color="#1877F2"
+                style={styles.verifiedIcon}
+              />
             )}
             <Text style={styles.userEmail}>{user?.user?.email}</Text>
             <Text style={styles.userLocation}>
@@ -205,22 +231,29 @@ const Profile = () => {
             <Text style={styles.postsTitle}>Posts</Text>
             {user?.posts && user.posts.length > 0 ? (
               user.posts.map((post) => {
-                // Transform the post data to match the expected structure
                 const transformedPost = {
-                  ...post,
-                  time: post.createdAt,
-                  commentCount: post.commentsCount,
-                  likeCount: post.likesCount,
-                  media: post.media?.map(m => `http://${ip}:3000${m.media_path}`) || [],
+                  id: post.id, // Match backend's `_id`
+                  content: post.content, // Match backend's `text_content`
+                  time: post.createdAt, // Match backend's `createdAt`
+                  commentCount: post.commentsCount, // Match backend's `commentsCount`
+                  likeCount: post.likesCount, // Match backend's `likesCount`
+                  liked: post.likes?.includes(user.user.id) || false, // Handle `liked` logic
+                  media:
+                    post.media?.map((m) => ({
+                      id: m._id, // Use `_id` from media object
+                      url: `http://${ip}:3000${m.media_path}`, // Construct media URL using `media_path`
+                    })) || [],
                   user: {
-                    ...post.user,
-                    profile_image: post.user.profile_image
-                  }
+                    id: user.user.id, // Use current user's ID
+                    name: user.user.name, // Use current user's name
+                    profile_image: user.user.profile_image, // Use current user's profile image
+                    verified: user.user.verified ?? false, // Handle `verified` logic
+                  },
                 };
 
                 return (
                   <UserPostCardDetails
-                    key={post.id}
+                    key={transformedPost.id}
                     item={transformedPost}
                     currentUser={user?.user}
                     router={router}

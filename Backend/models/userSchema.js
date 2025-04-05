@@ -31,7 +31,7 @@ const userSchema = new mongoose.Schema(
     password: { type: String, required: true },
     dob: { type: Date, required: true },
     gender: { type: String, enum: ["Male", "Female", "Other"], default: null },
-    role: { type: String, enum: ["user", "admin"], default: "user" },
+    role: { type: String, enum: ["user", "admin", "superadmin"], default: "user" },
     verified: { type: Boolean, default: false },
     profile_image: { type: String, default: null },
     profile_views: { type: Number, default: 0 },

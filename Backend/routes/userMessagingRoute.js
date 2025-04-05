@@ -10,12 +10,12 @@ module.exports = (io) => {
   router.post(
     "/message",
     checkAuthentication,
-    uploadMessageMedia.array("media", 5), // Handle multiple media files
-    (req, res) => sendMessage(req, res, io) // Pass io for real-time updates
+    uploadMessageMedia.array("media", 5), 
+    (req, res) => sendMessage(req, res, io) 
   );
 
-  router.post("/get-message", checkAuthentication, getMessages); //Corrected this to POST because we are sending data from frontend
-  router.post("/admin/get-message", checkAuthentication, getMessagesForAdmin); //Corrected this to POST because we are sending data from frontend
+  router.post("/get-message", checkAuthentication, getMessages);
+  router.post("/admin/get-message", checkAuthentication, getMessagesForAdmin); 
 
   router.get("/all-message", checkAuthentication, getAllMessages);
 

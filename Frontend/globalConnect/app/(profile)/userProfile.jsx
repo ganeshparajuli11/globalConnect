@@ -59,9 +59,15 @@ const UserProfile = () => {
         likeCount: post.likesCount,
         commentCount: post.commentsCount,
         liked: currentUser ? post.likes.includes(currentUser._id) : false,
-        media: post.media?.length > 0 ? post.media.map((m) => m.media_path) : [],
+        media: post.media?.length > 0
+          ? post.media.map((m) => ({
+              id: m._id,
+              url: m.media_path,
+            }))
+          : [],
         user: formattedUser,
       }));
+      
 
       setUserData(formattedUser);
       setPosts(transformedPosts);

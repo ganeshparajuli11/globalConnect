@@ -45,7 +45,6 @@ const UserPostCardDetails = ({
   // State for "User Options" modal (edit/delete post)
   const [optionsModalVisible, setOptionsModalVisible] = useState(false);
 
-console.log("checking item", item);
 
   // Following list (for sharing)
   const { following, loading: loadingFollowing } = useFetchFollowing();
@@ -184,20 +183,35 @@ console.log("checking item", item);
         />
       </View>
 
+
       {/* Media images (up to 4) */}
-      {item.media && item.media.length > 0 && (
+      {Array.isArray(item.media) && item.media.length > 0 && (
         <View style={styles.mediaContainer}>
-          {item.media.slice(0, 4).map((mediaUrl, index) => (
-            <TouchableOpacity
-              key={index}
-              onPress={() => openFullScreen(mediaUrl)}
-              style={styles.mediaItem}
-            >
-              <Image source={{ uri: mediaUrl }} style={styles.mediaImage} />
-            </TouchableOpacity>
-          ))}
+          {item.media.slice(0, 4).map((media, index) => {
+            const url = media?.url;
+            const fullUrl = url
+              ? url.startsWith("http")
+                ? url
+                : `http://${ip}:3000${url}`
+              : null;
+
+            if (!fullUrl) return null;
+
+            return (
+              <TouchableOpacity
+                key={media.id || index}
+                onPress={() => openFullScreen(url)}
+                style={styles.mediaItem}
+              >
+                <Image source={{ uri: fullUrl }} style={styles.mediaImage} />
+              </TouchableOpacity>
+            );
+          })}
         </View>
       )}
+
+
+
 
       {/* Fullscreen Modal for images */}
       <Modal visible={fullScreenVisible} transparent={true}>
@@ -256,22 +270,24 @@ console.log("checking item", item);
         <View style={styles.shareModalContainer}>
           <View style={styles.shareModalContent}>
             <Text style={styles.shareModalTitle}>Share Post With</Text>
-            {loadingFollowing ? (
-              <Text>Loading...</Text>
-            ) : following.length > 0 ? (
-              following.map((user) => (
-                <TouchableOpacity
-                  key={user._id}
-                  style={styles.shareUserItem}
-                  onPress={() => sharePostToUser(user)}
-                >
-                  <Text style={styles.shareUserName}>{user.name}</Text>
-                  <Text style={styles.shareUserEmail}>{user.email}</Text>
-                </TouchableOpacity>
-              ))
-            ) : (
-              <Text>No users found</Text>
-            )}
+            <View style={styles.shareUserList}>
+              {loadingFollowing ? (
+                <Text style={styles.loadingText}>Loading...</Text>
+              ) : following.length > 0 ? (
+                following.map((user) => (
+                  <TouchableOpacity
+                    key={user._id}
+                    style={styles.shareUserItem}
+                    onPress={() => sharePostToUser(user)}
+                  >
+                    <Text style={styles.shareUserName}>{user.name}</Text>
+                    <Text style={styles.shareUserEmail}>{user.email}</Text>
+                  </TouchableOpacity>
+                ))
+              ) : (
+                <Text style={styles.noUsersText}>No users found</Text>
+              )}
+            </View>
             <TouchableOpacity
               style={styles.cancelButton}
               onPress={() => setShareModalVisible(false)}
@@ -488,5 +504,20 @@ const styles = StyleSheet.create({
   optionButtonText: {
     color: theme.colors.text,
     fontSize: 16,
+  },
+  shareUserList: {
+    maxHeight: '70%',
+  },
+  loadingText: {
+    fontSize: 16,
+    color: theme.colors.textLight,
+    textAlign: 'center',
+    padding: 10,
+  },
+  noUsersText: {
+    fontSize: 16,
+    color: theme.colors.textLight,
+    textAlign: 'center',
+    padding: 10,
   },
 });

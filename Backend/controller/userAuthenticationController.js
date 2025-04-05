@@ -350,9 +350,10 @@ async function loginAdmin(req, res) {
     }
 
     // Check if the user has an admin role
-    if (user.role !== "admin") {
+    if (user.role !== "admin" && user.role !== "superadmin") {
       return res.status(403).json({ message: "Access denied. Admins only." });
     }
+
 
     // Check if the user is active
     if (user.status !== "Active") {

@@ -298,10 +298,7 @@ const getAllMessages = async (req, res) => {
   }
 };
 
-/**
- * Fetch messages for admin between the admin and a specific user.
- * The request body should include userId (the conversation partner’s ID).
- */
+
 const getMessagesForAdmin = async (req, res) => {
   try {
     if (req.user.role !== "admin") {
@@ -328,8 +325,8 @@ const getMessagesForAdmin = async (req, res) => {
 
     const messages = await Message.find(query)
       .sort({ timestamp: 1 })
-      .populate("sender", "name")
-      .populate("receiver", "name")
+      .populate("sender", "name profile_image")
+      .populate("receiver", "name profile_image")
       .lean();
 
     if (!messages.length) {
@@ -341,14 +338,22 @@ const getMessagesForAdmin = async (req, res) => {
     }
 
     const formattedMessages = messages.map((msg) => {
-      let senderInfo = msg.sender;
-      if (msg.sender && msg.sender._id.toString() === currentUserId.toString()) {
-        senderInfo = { _id: msg.sender._id, name: "You" };
-      }
+      const sender = {
+        _id: msg.sender._id,
+        name: msg.sender._id.toString() === currentUserId.toString() ? "You" : msg.sender.name,
+        avatar: msg.sender.profile_image,
+      };
+
+      const receiver = {
+        _id: msg.receiver._id,
+        name: msg.receiver.name,
+        avatar: msg.receiver.profile_image,
+      };
+
       return {
         _id: msg._id,
-        sender: senderInfo,
-        receiver: msg.receiver,
+        sender,
+        receiver,
         messageType: msg.messageType,
         content: msg.messageType === "text" ? decrypt(msg.content) : msg.content,
         media: msg.media || [],
@@ -369,6 +374,7 @@ const getMessagesForAdmin = async (req, res) => {
     res.status(500).json({ error: "Failed to fetch messages." });
   }
 };
+
 
 module.exports = {
   sendMessage,

@@ -5,15 +5,29 @@ import axios from "axios";
 import UserBar from "../userpage/UserBar";
 import { useNavigate } from "react-router-dom";
 import {
-  FaSearch, FaBell, FaFilter, FaEllipsisV,
-  FaExclamationTriangle, FaUserShield, FaChartBar,
-  FaCalendarAlt, FaDownload, FaNewspaper, FaChartLine,
-  FaHashtag, FaComments, FaShare, FaHeart, FaEye,
-  FaFlag, FaTrash, FaCheck
+  FaSearch,
+  FaBell,
+  FaFilter,
+  FaEllipsisV,
+  FaExclamationTriangle,
+  FaUserShield,
+  FaChartBar,
+  FaCalendarAlt,
+  FaDownload,
+  FaNewspaper,
+  FaChartLine,
+  FaHashtag,
+  FaComments,
+  FaShare,
+  FaHeart,
+  FaEye,
+  FaFlag,
+  FaTrash,
+  FaCheck,
 } from "react-icons/fa";
 import { toast } from "react-hot-toast";
 
-const Dashboard = () => {
+const Dashboard = ({ setIsAuthenticated }) => {
   const navigate = useNavigate();
   const [accessToken, setAccessToken] = useState(null);
   const [reportedUsers, setReportedUsers] = useState([]);
@@ -21,7 +35,6 @@ const Dashboard = () => {
   const [notifications, setNotifications] = useState([]);
   const [timeFilter, setTimeFilter] = useState("all");
   const [loading, setLoading] = useState(true);
-  const [showNotifications, setShowNotifications] = useState(false);
   const [userStats, setUserStats] = useState({
     totalUsers: 0,
     activeUsers: 0,
@@ -33,7 +46,7 @@ const Dashboard = () => {
     longInactiveUsers: 0,
     underReviewUsers: 0,
     suspendedUsers: 0,
-    bannedUsers: 0
+    bannedUsers: 0,
   });
   const [postStats, setPostStats] = useState({
     totalPosts: 0,
@@ -46,20 +59,22 @@ const Dashboard = () => {
       engagement: 0,
       avgLikes: 0,
       avgComments: 0,
-      avgShares: 0
+      avgShares: 0,
     },
     popularTags: [],
     contentDistribution: {
       text: 0,
       image: 0,
       video: 0,
-      link: 0
-    }
+      link: 0,
+    },
   });
   const [reportedPosts, setReportedPosts] = useState([]);
   const [stats, setStats] = useState(null);
   const [error, setError] = useState(null);
-  const API_BASE_URL = 'http://localhost:3000';
+  const API_BASE_URL = "http://localhost:3000";
+
+  // Check token on mount
   useEffect(() => {
     const token = reactLocalStorage.get("access_token");
     if (token) {
@@ -68,6 +83,13 @@ const Dashboard = () => {
       navigate("/login");
     }
   }, [navigate]);
+
+  // Re-check token on every render (in case of logout)
+  useEffect(() => {
+    if (!localStorage.getItem("access_token")) {
+      navigate("/login");
+    }
+  }, [accessToken, navigate]);
 
   useEffect(() => {
     if (accessToken) {
@@ -80,7 +102,7 @@ const Dashboard = () => {
   const fetchUserStats = async () => {
     try {
       const response = await axios.get(
-        `http://localhost:3000/api/dashboard/userStats`,
+        `${API_BASE_URL}/api/dashboard/userStats`,
         {
           headers: {
             Authorization: `Bearer ${accessToken}`,
@@ -103,7 +125,7 @@ const Dashboard = () => {
           longInactiveUsers: stats.userStats.longInactiveUsers || 0,
           underReviewUsers: stats.userStats.underReviewUsers || 0,
           suspendedUsers: stats.userStats.suspendedUsers || 0,
-          bannedUsers: stats.userStats.bannedUsers || 0
+          bannedUsers: stats.userStats.bannedUsers || 0,
         });
 
         // Set post stats
@@ -113,47 +135,55 @@ const Dashboard = () => {
           reportedPosts: stats.postStats.reportedPosts || 0,
           deletedPosts: stats.postStats.deletedPosts || 0,
           todayPosts: stats.postStats.todayPosts || 0,
-          trendingPosts: stats.trendingPosts?.map(post => ({
-            ...post,
-            thumbnail: post.thumbnail || "default-thumbnail.jpg",
-            engagement: post.engagement || 0,
-            likes: post.likes || 0,
-            comments: post.comments || 0,
-            shares: post.shares || 0
-          })) || [],
+          trendingPosts:
+            stats.trendingPosts?.map((post) => ({
+              ...post,
+              thumbnail: post.thumbnail || "default-thumbnail.jpg",
+              engagement: post.engagement || 0,
+              likes: post.likes || 0,
+              comments: post.comments || 0,
+              shares: post.shares || 0,
+            })) || [],
           postAnalytics: {
             engagement: stats.postAnalytics?.engagement || 0,
             avgLikes: stats.postAnalytics?.avgLikes || 0,
             avgComments: stats.postAnalytics?.avgComments || 0,
-            avgShares: stats.postAnalytics?.avgShares || 0
+            avgShares: stats.postAnalytics?.avgShares || 0,
           },
           popularTags: stats.popularTags || [],
-          contentDistribution: stats.contentDistribution || {
-            text: 0,
-            image: 0,
-            video: 0,
-            link: 0
-          }
+          contentDistribution:
+            stats.contentDistribution || {
+              text: 0,
+              image: 0,
+              video: 0,
+              link: 0,
+            },
         });
 
         // Set reported users and posts
         setReportedUsers(stats.reportedUsers || []);
-        setReportedPosts(stats.reportedPosts?.map(post => ({
-          _id: post._id,
-          title: post.title,
-          content: post.content,
-          thumbnail: post.thumbnail || "/default-post.jpg",
-          reportCount: post.reportCount,
-          author: post.author,
-          status: post.status
-        })) || []);
+        setReportedPosts(
+          stats.reportedPosts?.map((post) => ({
+            _id: post._id,
+            title: post.title,
+            content: post.content,
+            thumbnail: post.thumbnail || "/default-post.jpg",
+            reportCount: post.reportCount,
+            author: post.author,
+            status: post.status,
+          })) || []
+        );
 
         setStats(stats);
         setError(null);
       }
     } catch (err) {
-      console.error('Error fetching user stats:', err);
-      setError(err.response?.data?.message || err.message || 'Failed to fetch user statistics');
+      console.error("Error fetching user stats:", err);
+      setError(
+        err.response?.data?.message ||
+          err.message ||
+          "Failed to fetch user statistics"
+      );
       toast.error(`Error loading dashboard data: ${err.message}`);
     } finally {
       setLoading(false);
@@ -165,26 +195,28 @@ const Dashboard = () => {
   };
 
   const handleExportData = () => {
-    const csvContent = reportedUsers.map(user =>
-      Object.values(user).join(',')
-    ).join('\n');
+    const csvContent = reportedUsers.map((user) =>
+      Object.values(user).join(",")
+    ).join("\n");
 
-    const blob = new Blob([csvContent], { type: 'text/csv' });
+    const blob = new Blob([csvContent], { type: "text/csv" });
     const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
+    const a = document.createElement("a");
     a.href = url;
-    a.download = 'reported-users.csv';
+    a.download = "reported-users.csv";
     a.click();
   };
 
-  const filteredUsers = reportedUsers.filter(user =>
-    user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    user.email.toLowerCase().includes(searchTerm.toLowerCase())
+  const filteredUsers = reportedUsers.filter(
+    (user) =>
+      user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      user.email.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   return (
     <div className="flex h-screen bg-gray-50">
-      <Sidebar />
+      {/* Pass setIsAuthenticated so Sidebar can trigger logout */}
+      <Sidebar setIsAuthenticated={setIsAuthenticated} />
       <div className="flex-1 overflow-hidden">
         {/* Header */}
         <div className="bg-white shadow-sm">
@@ -202,11 +234,12 @@ const Dashboard = () => {
                 />
               </div>
             </div>
-
             <div className="flex items-center space-x-4">
               <div className="relative">
                 <button
-                  onClick={() => setShowNotifications(!showNotifications)}
+                  onClick={() =>
+                    setNotifications((prev) => !prev)
+                  }
                   className="p-2 rounded-full hover:bg-gray-100 relative"
                 >
                   <FaBell className="text-gray-600" />
@@ -216,16 +249,24 @@ const Dashboard = () => {
                     </span>
                   )}
                 </button>
-
-                {showNotifications && (
+                {notifications.length > 0 && (
                   <div className="absolute right-0 mt-2 w-80 bg-white rounded-lg shadow-lg z-50 border">
                     <div className="p-4">
-                      <h3 className="text-lg font-semibold mb-2">Notifications</h3>
+                      <h3 className="text-lg font-semibold mb-2">
+                        Notifications
+                      </h3>
                       <div className="space-y-3 max-h-64 overflow-y-auto">
                         {notifications.map((notif, index) => (
-                          <div key={index} className="p-2 hover:bg-gray-50 rounded">
-                            <p className="text-sm text-gray-800">{notif.message}</p>
-                            <p className="text-xs text-gray-500 mt-1">{notif.time}</p>
+                          <div
+                            key={index}
+                            className="p-2 hover:bg-gray-50 rounded"
+                          >
+                            <p className="text-sm text-gray-800">
+                              {notif.message}
+                            </p>
+                            <p className="text-xs text-gray-500 mt-1">
+                              {notif.time}
+                            </p>
                           </div>
                         ))}
                       </div>
@@ -233,7 +274,6 @@ const Dashboard = () => {
                   </div>
                 )}
               </div>
-
               <button className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
                 <FaUserShield className="mr-2" />
                 Admin Actions
@@ -244,11 +284,7 @@ const Dashboard = () => {
 
         {/* Main Content */}
         <div className="p-6 overflow-y-auto h-[calc(100vh-4rem)]">
-          <UserBar
-            stats={userStats}
-            loading={loading}
-            error={error}
-          />
+          <UserBar stats={userStats} loading={loading} error={error} />
 
           {/* Post Analytics Overview */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mt-6">
@@ -257,7 +293,9 @@ const Dashboard = () => {
               <div className="flex justify-between items-start">
                 <div>
                   <p className="text-white/80 text-sm">Total Posts</p>
-                  <h3 className="text-3xl font-bold mt-1">{postStats.totalPosts.toLocaleString()}</h3>
+                  <h3 className="text-3xl font-bold mt-1">
+                    {postStats.totalPosts.toLocaleString()}
+                  </h3>
                   <p className="text-sm mt-2">
                     <span className="bg-purple-400/30 px-2 py-1 rounded">
                       +{postStats.todayPosts} today
@@ -273,7 +311,9 @@ const Dashboard = () => {
               <div className="flex justify-between items-start">
                 <div>
                   <p className="text-white/80 text-sm">Engagement Rate</p>
-                  <h3 className="text-3xl font-bold mt-1">{postStats.postAnalytics.engagement}%</h3>
+                  <h3 className="text-3xl font-bold mt-1">
+                    {postStats.postAnalytics.engagement}%
+                  </h3>
                   <p className="text-sm mt-2">
                     <span className="bg-blue-400/30 px-2 py-1 rounded">
                       Avg. {postStats.postAnalytics.avgLikes} likes per post
@@ -289,7 +329,9 @@ const Dashboard = () => {
               <div className="flex justify-between items-start">
                 <div>
                   <p className="text-white/80 text-sm">Active Posts</p>
-                  <h3 className="text-3xl font-bold mt-1">{postStats.activePosts.toLocaleString()}</h3>
+                  <h3 className="text-3xl font-bold mt-1">
+                    {postStats.activePosts.toLocaleString()}
+                  </h3>
                   <div className="flex gap-2 mt-2 text-xs">
                     <span className="bg-green-400/30 px-2 py-1 rounded">
                       {postStats.contentDistribution.image}% Images
@@ -308,7 +350,9 @@ const Dashboard = () => {
               <div className="flex justify-between items-start">
                 <div>
                   <p className="text-white/80 text-sm">Reported Posts</p>
-                  <h3 className="text-3xl font-bold mt-1">{postStats.reportedPosts.toLocaleString()}</h3>
+                  <h3 className="text-3xl font-bold mt-1">
+                    {postStats.reportedPosts.toLocaleString()}
+                  </h3>
                   <p className="text-sm mt-2">
                     <span className="bg-red-400/30 px-2 py-1 rounded">
                       Needs Review
@@ -335,7 +379,7 @@ const Dashboard = () => {
                 </select>
               </div>
               <div className="space-y-4">
-                {postStats.trendingPosts.map((post, index) => (
+                {postStats.trendingPosts.map((post) => (
                   <div
                     key={post._id}
                     className="flex items-center justify-between p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-all cursor-pointer"
@@ -353,8 +397,10 @@ const Dashboard = () => {
                         />
                       </div>
                       <div className="flex-1 min-w-0">
-                        <div className="text-sm font-medium text-gray-900 line-clamp-2"
-                          dangerouslySetInnerHTML={{ __html: post.title }} />
+                        <div
+                          className="text-sm font-medium text-gray-900 line-clamp-2"
+                          dangerouslySetInnerHTML={{ __html: post.title }}
+                        />
                         <div className="flex items-center space-x-4 mt-2">
                           <div className="flex items-center text-sm text-gray-500">
                             <FaHeart className="mr-1 text-red-500" size={12} />
@@ -410,14 +456,18 @@ const Dashboard = () => {
                 {postStats.popularTags.map((tag, index) => (
                   <div key={index} className="flex items-center justify-between">
                     <div className="flex items-center">
-                      <span className="text-sm font-medium text-gray-900">#{tag.name}</span>
+                      <span className="text-sm font-medium text-gray-900">
+                        #{tag.name}
+                      </span>
                     </div>
                     <div className="flex items-center space-x-2">
                       <span className="text-sm text-gray-500">{tag.count} posts</span>
                       <div className="w-24 h-2 bg-gray-200 rounded-full">
                         <div
                           className="h-2 bg-purple-500 rounded-full"
-                          style={{ width: `${(tag.count / postStats.totalPosts) * 100}%` }}
+                          style={{
+                            width: `${(tag.count / postStats.totalPosts) * 100}%`,
+                          }}
                         />
                       </div>
                     </div>
@@ -439,7 +489,6 @@ const Dashboard = () => {
                       Reported Users Management
                     </h2>
                   </div>
-
                   <div className="flex items-center space-x-4">
                     <select
                       className="bg-gray-100 border-none rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -451,7 +500,6 @@ const Dashboard = () => {
                       <option value="week">This Week</option>
                       <option value="month">This Month</option>
                     </select>
-
                     <button
                       onClick={handleExportData}
                       className="flex items-center px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
@@ -461,7 +509,6 @@ const Dashboard = () => {
                     </button>
                   </div>
                 </div>
-
                 <div className="overflow-x-auto">
                   <table className="w-full">
                     <thead>
@@ -491,7 +538,10 @@ const Dashboard = () => {
                         </tr>
                       ) : reportedUsers.length === 0 ? (
                         <tr>
-                          <td colSpan="4" className="px-6 py-4 text-center text-gray-500">
+                          <td
+                            colSpan="4"
+                            className="px-6 py-4 text-center text-gray-500"
+                          >
                             No reported users found
                           </td>
                         </tr>
@@ -510,17 +560,25 @@ const Dashboard = () => {
                                     src={
                                       user.profile_image
                                         ? `${API_BASE_URL}/${user.profile_image}`
-                                        : `${API_BASE_URL}/api/avatar?name=${encodeURIComponent(user.name)}`
+                                        : `${API_BASE_URL}/api/avatar?name=${encodeURIComponent(
+                                            user.name
+                                          )}`
                                     }
                                     alt={user.name}
                                     onError={(e) => {
-                                      e.target.src = `${API_BASE_URL}/api/avatar?name=${encodeURIComponent(user.name)}`;
+                                      e.target.src = `${API_BASE_URL}/api/avatar?name=${encodeURIComponent(
+                                        user.name
+                                      )}`;
                                     }}
                                   />
                                 </div>
                                 <div className="ml-4">
-                                  <div className="text-sm font-medium text-gray-900">{user.name}</div>
-                                  <div className="text-sm text-gray-500">{user.email}</div>
+                                  <div className="text-sm font-medium text-gray-900">
+                                    {user.name}
+                                  </div>
+                                  <div className="text-sm text-gray-500">
+                                    {user.email}
+                                  </div>
                                 </div>
                               </div>
                             </td>
@@ -530,8 +588,13 @@ const Dashboard = () => {
                               </div>
                             </td>
                             <td className="px-6 py-4">
-                              <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${user.status === 'Blocked' ? 'bg-red-100 text-red-800' : 'bg-yellow-100 text-yellow-800'
-                                }`}>
+                              <span
+                                className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
+                                  user.status === "Blocked"
+                                    ? "bg-red-100 text-red-800"
+                                    : "bg-yellow-100 text-yellow-800"
+                                }`}
+                              >
                                 {user.status}
                               </span>
                             </td>
@@ -556,11 +619,13 @@ const Dashboard = () => {
                   <h2 className="text-xl font-bold text-gray-800 flex items-center">
                     <FaFlag className="mr-2 text-red-500" /> Reported Posts
                   </h2>
-                  <button className="flex items-center px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700" onClick={() => navigate('/reported-posts')}>
+                  <button
+                    className="flex items-center px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700"
+                    onClick={() => navigate("/posts/report")}
+                  >
                     <FaFlag className="mr-2" /> Review All
                   </button>
                 </div>
-
                 {reportedPosts.length === 0 ? (
                   <div className="text-center py-8 text-gray-500">
                     No reported posts found
@@ -601,16 +666,23 @@ const Dashboard = () => {
                                     e.target.src = "https://via.placeholder.com/32";
                                   }}
                                 />
-                                <span className="text-xs text-gray-500">{post.author.name}</span>
+                                <span className="text-xs text-gray-500">
+                                  {post.author.name}
+                                </span>
                               </div>
                               <div className="flex items-center space-x-2 mt-2">
                                 <span className="px-2 py-1 bg-red-100 text-red-800 rounded-full text-xs">
                                   {post.reportCount} reports
                                 </span>
-                                <span className={`px-2 py-1 rounded-full text-xs ${post.status === 'Active' ? 'bg-green-100 text-green-800' :
-                                    post.status === 'Blocked' ? 'bg-red-100 text-red-800' :
-                                      'bg-yellow-100 text-yellow-800'
-                                  }`}>
+                                <span
+                                  className={`px-2 py-1 rounded-full text-xs ${
+                                    post.status === "Active"
+                                      ? "bg-green-100 text-green-800"
+                                      : post.status === "Blocked"
+                                      ? "bg-red-100 text-red-800"
+                                      : "bg-yellow-100 text-yellow-800"
+                                  }`}
+                                >
                                   {post.status}
                                 </span>
                               </div>

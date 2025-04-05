@@ -1,5 +1,15 @@
 const mongoose = require("mongoose");
 
+// Define a dedicated media schema with its own _id.
+const mediaSchema = new mongoose.Schema(
+  {
+    media_path: { type: String, required: true },
+    media_type: { type: String },
+    description: { type: String, maxlength: 200 },
+  },
+  { _id: true } // Each media document will automatically get a unique _id.
+);
+
 // Schema for individual reports on a post
 const reportSchema = new mongoose.Schema({
   reported_by: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
@@ -19,6 +29,7 @@ const moderationHistorySchema = new mongoose.Schema({
   date: { type: Date, default: Date.now }
 });
 
+// Main post schema
 const postSchema = new mongoose.Schema(
   {
     user_id: {
@@ -32,13 +43,7 @@ const postSchema = new mongoose.Schema(
       required: true
     },
     text_content: { type: String, maxlength: 500 },
-    media: [
-      {
-        media_path: { type: String },
-        media_type: { type: String },
-        description: { type: String, maxlength: 200 }
-      }
-    ],
+    media: [mediaSchema], // Use the dedicated media schema here.
     tags: [{ type: String }],
     location: { type: String, maxlength: 100 },
     visibility: {
@@ -68,7 +73,7 @@ const postSchema = new mongoose.Schema(
       default: "Active"
     },
     isSuspended: { type: Boolean, default: false },
-    isBlocked: { type: Boolean, default: false }, // Indicates if the post is blocked
+    isBlocked: { type: Boolean, default: false },
     isUnderReview: { type: Boolean, default: false },
     suspended_from: { type: Date, default: null },
     suspended_until: { type: Date, default: null },

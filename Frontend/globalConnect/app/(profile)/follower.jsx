@@ -11,6 +11,7 @@ import { userAuth } from "../../contexts/AuthContext";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import Icon from "../../assets/icons";
 import BackButton from "../../components/BackButton";
+import ScreenWrapper from "../../components/ScreenWrapper";
 
 
 const FollowerPage = () => {
@@ -138,6 +139,7 @@ const FollowerPage = () => {
   }
 
   return (
+    <ScreenWrapper>
     <View style={styles.container}>
       <Header />
       <View style={styles.tabContainer}>
@@ -161,6 +163,7 @@ const FollowerPage = () => {
         showsVerticalScrollIndicator={false}
       />
     </View>
+    </ScreenWrapper>
   );
 };
 

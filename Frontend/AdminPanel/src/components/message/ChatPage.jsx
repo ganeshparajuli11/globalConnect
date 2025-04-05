@@ -9,9 +9,9 @@ const SEND_MESSAGE_URL = "http://localhost:3000/api/message";
 const SOCKET_SERVER_URL = "http://localhost:3000";
 
 const ChatPage = () => {
-  // Extract conversation partner's ID from URL (renamed as receiverId)
+  // Extract conversation partner's ID from URL (as receiverId)
   const { id: receiverId } = useParams();
-  console.log("receiver id ", receiverId);
+  console.log("Receiver ID:", receiverId);
 
   // Admin's ID and token from localStorage
   const adminId = localStorage.getItem("adminId");
@@ -39,7 +39,7 @@ const ChatPage = () => {
     socketRef.current.on("connect", () => {
       console.log("✅ Socket Connected");
       setSocketConnected(true);
-      // Join with admin's id
+      // Join the chat room using admin's id
       socketRef.current.emit("join", adminId);
     });
 
@@ -48,9 +48,10 @@ const ChatPage = () => {
       setSocketConnected(false);
     });
 
-    // Listen for incoming messages
+    // Listen for incoming messages in real time
     socketRef.current.on("receiveMessage", (message) => {
       console.log("📩 Received message:", message);
+      // Check if the message belongs to the current conversation
       if (
         (message.senderId === adminId && message.receiverId === receiverId) ||
         (message.senderId === receiverId && message.receiverId === adminId)
@@ -67,6 +68,7 @@ const ChatPage = () => {
             messageType: message.messageType,
             timestamp: message.timestamp,
             isAdmin: message.isAdmin,
+            media: message.media, // Contains media info for images
           },
         ]);
         scrollToBottom();
@@ -83,8 +85,7 @@ const ChatPage = () => {
     };
   }, [receiverId, token, adminId, targetUser]);
 
-  // Fetch conversation for admin:
-  // The admin API expects { userId: <conversation partner's ID> } in the request body.
+  // Fetch conversation messages from API
   const fetchConversation = async () => {
     setLoading(true);
     try {
@@ -97,7 +98,6 @@ const ChatPage = () => {
         setMessages(response.data.data);
         if (response.data.data.length > 0) {
           const firstMsg = response.data.data[0];
-          // Determine partner: if the first message's sender is "You", use receiver; otherwise, sender.
           const partner =
             firstMsg.sender.name === "You" ? firstMsg.receiver : firstMsg.sender;
           setTargetUser(partner);
@@ -127,14 +127,13 @@ const ChatPage = () => {
     scrollToBottom();
   }, [messages]);
 
-  // Send new message with HTTP API and socket emission
+  // Send new message using HTTP API and emit via Socket.IO
   const sendMessageFunc = async () => {
     if (!newMessage.trim() || !socketConnected) return;
-
     try {
       const messageData = {
-        receiverId, // conversation partner's id
-        messageType: "text",
+        receiverId,
+        messageType: "text", // For now, only text messages are supported here
         content: newMessage,
       };
 
@@ -180,9 +179,13 @@ const ChatPage = () => {
     }
   };
 
+  console.log("checkig targetUser", targetUser);
+  // Helper function to construct profile image URL for partner
   const getProfilePicUrl = (avatar) => {
     if (!avatar) return "https://via.placeholder.com/100";
-    return avatar.startsWith("http") ? avatar : `http://localhost:3000/${avatar}`;
+    return avatar.startsWith("http")
+      ? avatar
+      : `http://localhost:3000/${avatar}`;
   };
 
   return (
@@ -217,22 +220,28 @@ const ChatPage = () => {
             messages.map((msg) => (
               <div
                 key={msg._id}
-                className={`mb-2 flex ${
-                  msg.sender.name === "You" ? "justify-end" : "justify-start"
-                }`}
-              >
-                <div
-                  className={`p-2 rounded-lg max-w-xs ${
-                    msg.sender.name === "You"
-                      ? "bg-blue-500 text-white"
-                      : "bg-gray-200 text-gray-800"
+                className={`mb-2 flex ${msg.sender.name === "You" ? "justify-end" : "justify-start"
                   }`}
-                >
-                  <p className="text-sm">{msg.content}</p>
-                  <span className="text-xs block text-right">
-                    {new Date(msg.timestamp).toLocaleTimeString()}
-                  </span>
-                </div>
+              >
+                {msg.messageType === "image" ? (
+                  <img
+                    src={`http://localhost:3000${msg.media[0]?.media_path}`}
+                    alt="Sent"
+                    className="max-w-xs rounded-lg"
+                  />
+                ) : (
+                  <div
+                    className={`p-2 rounded-lg max-w-xs ${msg.sender.name === "You"
+                        ? "bg-blue-500 text-white"
+                        : "bg-gray-200 text-gray-800"
+                      }`}
+                  >
+                    <p className="text-sm">{msg.content}</p>
+                    <span className="text-xs block text-right">
+                      {new Date(msg.timestamp).toLocaleTimeString()}
+                    </span>
+                  </div>
+                )}
               </div>
             ))
           )}
