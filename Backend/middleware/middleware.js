@@ -38,12 +38,13 @@ const checkAuthentication = (req, res, next) => {
 // Middleware to check if the user is an admin
 const checkIsAdmin = (req, res, next) => {
   console.log("User role in checkIsAdmin:", req.user?.role);
-  if (req.user?.role === "admin") {
+  if (req.user?.role === "admin" || req.user?.role === "superadmin") {
     next();
   } else {
     res.status(403).json({ msg: "Access denied: Admins only." });
   }
 };
+
 
 // Middleware to check if the user is a normal user
 const checkIsUser = (req, res, next) => {
@@ -56,7 +57,7 @@ const checkIsUser = (req, res, next) => {
 
 // Middleware to allow both admin and user access
 const bothUser = (req, res, next) => {
-  if (req.user?.role === "admin" || req.user?.role === "user") {
+  if (req.user?.role === "admin" || req.user?.role === "user" || req.user?.role === "superadmin") {
     next();
   } else {
     res.status(403).json({ msg: "Access denied: Admins or Users only." });

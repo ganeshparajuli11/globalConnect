@@ -182,7 +182,7 @@ const ReportedPostsAdmin = () => {
       // Build base payload with postId and action.
       let payload = { postId: selectedPost._id, action };
 
-      // If suspending, include suspension details. Here we calculate the suspension period
+      
       // based on the selected duration (for Permanent, suspended_until is set to null).
       if (action === "suspend") {
         if (!suspensionReason || !selectedSuspensionDuration) {

@@ -64,7 +64,7 @@ router.delete(
 );
 
 router.get("/:postId", checkAuthentication, getPostById);
-router.put("/status/:postId", checkAuthentication, checkIsAdmin, updatePostStatus);
+router.put("/admin/action", checkAuthentication, checkIsAdmin, updatePostStatus);
 
 router.put("/like-unlike/:postId", checkAuthentication, likeUnlikePost);
 

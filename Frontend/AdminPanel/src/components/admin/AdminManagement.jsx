@@ -18,7 +18,7 @@ function formatDateForInput(dateString) {
 function formatDateForDisplay(dateString) {
   if (!dateString) return "";
   const dateObj = new Date(dateString);
-  return dateObj.toLocaleDateString(); 
+  return dateObj.toLocaleDateString();
   // Adjust locale or formatting as needed, e.g. en-GB for DD/MM/YYYY
 }
 
@@ -36,7 +36,7 @@ const AdminManagement = () => {
   const [isConfirmationOpen, setIsConfirmationOpen] = useState(false);
   const [confirmationMessage, setConfirmationMessage] = useState("");
   // confirmationAction holds the function to run when confirmed
-  const [confirmationAction, setConfirmationAction] = useState(() => () => {});
+  const [confirmationAction, setConfirmationAction] = useState(() => () => { });
 
   // Form state for new admin or editing an admin
   const [adminForm, setAdminForm] = useState({
@@ -289,7 +289,7 @@ const AdminManagement = () => {
                         src={
                           admin.profile_image?.startsWith("http")
                             ? admin.profile_image
-                            : `http://localhost:3000/${admin.profile_image}`
+                            : `http://localhost:3000${admin.profile_image}`
                         }
                         alt={admin.name}
                         className="w-10 h-10 rounded-full object-cover"
@@ -457,7 +457,7 @@ const AdminManagement = () => {
                     value={adminForm.dob}
                     onChange={handleFormChange}
                     className="w-full border px-3 py-2 rounded"
-          
+
                   />
                 </div>
                 <div className="mb-4">

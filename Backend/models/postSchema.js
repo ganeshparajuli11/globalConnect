@@ -7,13 +7,13 @@ const mediaSchema = new mongoose.Schema(
     media_type: { type: String },
     description: { type: String, maxlength: 200 },
   },
-  { _id: true } // Each media document will automatically get a unique _id.
+  { _id: true }
 );
 
 // Schema for individual reports on a post
 const reportSchema = new mongoose.Schema({
   reported_by: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
-  reason: { type: String, required: true },  // The name of the report category
+  reason: { type: String, required: true },
   reported_at: { type: Date, default: Date.now }
 });
 
@@ -29,7 +29,7 @@ const moderationHistorySchema = new mongoose.Schema({
   date: { type: Date, default: Date.now }
 });
 
-// Main post schema
+// Main post schema with soft delete fields added
 const postSchema = new mongoose.Schema(
   {
     user_id: {
@@ -43,7 +43,7 @@ const postSchema = new mongoose.Schema(
       required: true
     },
     text_content: { type: String, maxlength: 500 },
-    media: [mediaSchema], // Use the dedicated media schema here.
+    media: [mediaSchema],
     tags: [{ type: String }],
     location: { type: String, maxlength: 100 },
     visibility: {
@@ -83,7 +83,10 @@ const postSchema = new mongoose.Schema(
     pinned: { type: Boolean, default: false },
     // Edit tracking
     edited: { type: Boolean, default: false },
-    edited_at: { type: Date }
+    edited_at: { type: Date },
+    // Soft Delete Fields
+    is_deleted: { type: Boolean, default: false },
+    deletedAt: { type: Date, default: null }
   },
   { timestamps: true }
 );

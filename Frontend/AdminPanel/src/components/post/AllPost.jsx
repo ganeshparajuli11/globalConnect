@@ -4,6 +4,7 @@ import axios from "axios";
 import { reactLocalStorage } from "reactjs-localstorage";
 import Sidebar from "../sidebar/Sidebar";
 import { toast, ToastContainer } from "react-toastify";
+import PostActionModal from "../../assets/postHelper/PostActionModal";
 
 const AllPost = () => {
   // State for posts & pagination
@@ -35,12 +36,9 @@ const AllPost = () => {
   // State for which post's action dropdown is open
   const [openActionId, setOpenActionId] = useState(null);
 
-  // Modal state for status update
-  const [modalPostId, setModalPostId] = useState(null);
-  const [modalAction, setModalAction] = useState(""); // e.g., "Suspended", "Blocked", "Under Review"
-  const [modalReason, setModalReason] = useState("");
-  const [suspendFrom, setSuspendFrom] = useState("");
-  const [suspendUntil, setSuspendUntil] = useState("");
+  // Modal state for action modal
+  const [actionModalVisible, setActionModalVisible] = useState(false);
+  const [selectedPost, setSelectedPost] = useState(null);
 
   const navigate = useNavigate();
 
@@ -130,87 +128,57 @@ const AllPost = () => {
     }
   };
 
-  // Call the API to update a post’s status.
-  const updatePostStatus = async (postId, action, reason = "", suspendFromVal = "", suspendUntilVal = "") => {
-    try {
-      const payload = { status: action };
+  // Callback for when action is completed
+  const handleActionComplete = async () => {
+    // Refresh the posts data
+    const fetchPosts = async () => {
+      try {
+        const params = new URLSearchParams({
+          page: page,
+          limit: limit,
+          ...(selectedStatus && { status: selectedStatus }),
+          ...(searchTerm && { search: searchTerm }),
+          ...(filterType !== "all" && { type: filterType }),
+          ...(sortBy && { sort: sortBy }),
+          ...(dateRange.from && { from: dateRange.from }),
+          ...(dateRange.to && { to: dateRange.to }),
+        });
 
-      // For statuses that require a reason
-      if (["Suspended", "Blocked", "Under Review"].includes(action)) {
-        payload.reason = reason;
+        const url = `http://localhost:3000/api/post/admin/all?${params}`;
+        const response = await axios.get(url, {
+          headers: { Authorization: `Bearer ${accessToken}` },
+        });
+
+        setPostData(response.data.data);
+        setTotalCount(response.data.totalCount || 0);
+      } catch (error) {
+        console.error("Error fetching posts", error);
+        toast.error("Failed to fetch posts");
       }
+    };
 
-      // For Suspended, include suspension dates
-      if (action === "Suspended") {
-        payload.suspended_from = suspendFromVal;
-        payload.suspended_until = suspendUntilVal;
+    await fetchPosts();
+    // Also refresh the stats
+    const fetchStats = async () => {
+      try {
+        const response = await axios.get(
+          "http://localhost:3000/api/post/admin/stats",
+          { headers: { Authorization: `Bearer ${accessToken}` } }
+        );
+        setStats(response.data);
+      } catch (error) {
+        console.error("Error fetching post stats", error);
       }
-
-      await axios.put(
-        `http://localhost:3000/api/post/status/${postId}`,
-        payload,
-        { headers: { Authorization: `Bearer ${accessToken}` } }
-      );
-
-      // Update the local state for that post.
-      setPostData((prevData) =>
-        prevData.map((post) => {
-          // Compare using _id (or id if available)
-          const id = post._id || post.id;
-          if (id.toString() === postId.toString()) {
-            return { ...post, status: action };
-          }
-          return post;
-        })
-      );
-      toast.success("Post status updated successfully.");
-    } catch (error) {
-      console.error("Error updating post status", error);
-      alert("Failed to update post status.");
-    }
+    };
+    fetchStats();
   };
 
   // When an admin clicks an action from the dropdown
-  const handleActionClick = (action, postId) => {
-    if (["Suspended", "Blocked", "Under Review"].includes(action)) {
-      setModalPostId(postId);
-      setModalAction(action);
-      setModalReason("");
-      setSuspendFrom("");
-      setSuspendUntil("");
-      setOpenActionId(null);
-    } else {
-      updatePostStatus(postId, action);
-      setOpenActionId(null);
-    }
-  };
-
-  // Confirm the modal action (for statuses needing extra info)
-  const handleConfirmStatusUpdate = async () => {
-    if (!modalReason) {
-      alert("Please provide a reason.");
-      return;
-    }
-    if (modalAction === "Suspended" && (!suspendFrom || !suspendUntil)) {
-      alert("Please provide both suspension start and end dates.");
-      return;
-    }
-    await updatePostStatus(modalPostId, modalAction, modalReason, suspendFrom, suspendUntil);
-    // Clear modal state
-    setModalPostId(null);
-    setModalAction("");
-    setModalReason("");
-    setSuspendFrom("");
-    setSuspendUntil("");
-  };
-
-  // Cancel and close the modal
-  const handleCancelModal = () => {
-    setModalPostId(null);
-    setModalAction("");
-    setModalReason("");
-    setSuspendFrom("");
-    setSuspendUntil("");
+  const handleActionClick = (e, post) => {
+    e.stopPropagation();
+    setSelectedPost(post);
+    setActionModalVisible(true);
+    setOpenActionId(null); // Close the dropdown
   };
 
   // Calculate total pages for pagination
@@ -385,7 +353,6 @@ const AllPost = () => {
             <thead className="bg-indigo-500 text-white">
               <tr>
                 <th className="px-6 py-3">No</th>
-                <th className="px-6 py-3">Post ID</th>
                 <th className="px-6 py-3">User</th>
                 <th className="px-6 py-3">Type</th>
                 <th className="px-6 py-3">Status</th>
@@ -395,7 +362,6 @@ const AllPost = () => {
             </thead>
             <tbody>
               {postData.map((post, index) => {
-                // Use _id if available.
                 const postId = post._id || post.id;
                 return (
                   <tr key={postId} className="border-b hover:bg-gray-200">
@@ -407,15 +373,23 @@ const AllPost = () => {
                     </td>
                     <td
                       onClick={() => handlePostClick(postId)}
-                      className="px-6 py-4 cursor-pointer truncate"
-                    >
-                      {postId}
-                    </td>
-                    <td
-                      onClick={() => handlePostClick(postId)}
                       className="px-6 py-4 cursor-pointer"
                     >
-                      {post.user?.name || "Unknown"}
+                      <div className="flex items-center space-x-3">
+                        <img
+                          src={
+                            post.user?.profile_image
+                              ? `http://localhost:3000/${post.user.profile_image}`
+                              : "https://via.placeholder.com/40"
+                          }
+                          alt={post.user?.name || "Unknown"}
+                          className="w-10 h-10 rounded-full object-cover"
+                        />
+                        <div>
+                          <div className="font-medium text-gray-900">{post.user?.name || "Unknown"}</div>
+                          <div className="text-sm text-gray-500">ID: {post.user?._id || "N/A"}</div>
+                        </div>
+                      </div>
                     </td>
                     <td
                       onClick={() => handlePostClick(postId)}
@@ -440,35 +414,16 @@ const AllPost = () => {
                       {new Date(post.createdAt).toLocaleString()}
                     </td>
                     <td className="px-6 py-4 relative">
-                      {/* Action Button (Three Dots) */}
+                      {/* Action Button */}
                       <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setOpenActionId(openActionId === postId ? null : postId);
-                        }}
-                        className="p-2 rounded-full hover:bg-gray-200 focus:outline-none"
+                        onClick={(e) => handleActionClick(e, post)}
+                        className="inline-flex items-center px-3 py-1.5 border border-gray-300 text-sm leading-5 font-medium rounded-md text-gray-700 bg-white hover:text-gray-500 focus:outline-none focus:border-blue-300 focus:shadow-outline-blue active:text-gray-800 active:bg-gray-50 transition ease-in-out duration-150"
                       >
-                        <svg
-                          className="w-6 h-6"
-                          fill="currentColor"
-                          viewBox="0 0 20 20"
-                        >
-                          <path d="M10 3a1.5 1.5 0 110 3 1.5 1.5 0 010-3zM10 8a1.5 1.5 0 110 3 1.5 1.5 0 010-3zM10 13a1.5 1.5 0 110 3 1.5 1.5 0 010-3z" />
+                        Manage
+                        <svg className="ml-2 -mr-0.5 h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
                         </svg>
                       </button>
-                      {openActionId === postId && (
-                        <div className="absolute right-0 mt-2 w-40 bg-white border rounded shadow-md z-10">
-                          {["Active", "Suspended", "Blocked", "Under Review", "Deleted"].map((action) => (
-                            <button
-                              key={action}
-                              onClick={() => handleActionClick(action, postId)}
-                              className="block w-full text-left px-4 py-2 text-gray-700 hover:bg-gray-200"
-                            >
-                              {action}
-                            </button>
-                          ))}
-                        </div>
-                      )}
                     </td>
                   </tr>
                 );
@@ -499,58 +454,14 @@ const AllPost = () => {
         </div>
       </div>
 
-      {/* Modal for statuses that require extra info */}
-      {modalPostId && (
-        <div className="fixed inset-0 flex items-center justify-center z-20">
-          <div className="bg-white p-6 rounded shadow-md w-96">
-            <h2 className="text-xl font-bold mb-4">{modalAction} Post</h2>
-            {/* Input for reason */}
-            <div className="mb-4">
-              <label className="block mb-2">Reason:</label>
-              <input
-                type="text"
-                className="border p-2 w-full"
-                value={modalReason}
-                onChange={(e) => setModalReason(e.target.value)}
-              />
-            </div>
-            {/* If Suspended, show date fields */}
-            {modalAction === "Suspended" && (
-              <>
-                <div className="mb-4">
-                  <label className="block mb-2">Suspend From:</label>
-                  <input
-                    type="date"
-                    className="border p-2 w-full"
-                    value={suspendFrom}
-                    onChange={(e) => setSuspendFrom(e.target.value)}
-                  />
-                </div>
-                <div className="mb-4">
-                  <label className="block mb-2">Suspend Until:</label>
-                  <input
-                    type="date"
-                    className="border p-2 w-full"
-                    value={suspendUntil}
-                    onChange={(e) => setSuspendUntil(e.target.value)}
-                  />
-                </div>
-              </>
-            )}
-            <div className="flex justify-end">
-              <button onClick={handleCancelModal} className="mr-4 px-4 py-2">
-                Cancel
-              </button>
-              <button
-                onClick={handleConfirmStatusUpdate}
-                className="bg-yellow-500 text-white px-4 py-2 rounded"
-              >
-                Confirm
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* PostActionModal */}
+      <PostActionModal
+        post={selectedPost}
+        isVisible={actionModalVisible}
+        setIsVisible={setActionModalVisible}
+        onActionComplete={handleActionComplete}
+        accessToken={accessToken}
+      />
     </div>
   );
 };

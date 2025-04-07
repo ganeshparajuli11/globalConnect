@@ -182,190 +182,192 @@ const Sidebar = ({ setIsAuthenticated }) => {
   };
 
   return (
-    <div
-      className={`h-screen flex flex-col justify-between bg-white border-r border-gray-200 transition-all duration-300 ${
-        isCollapsed ? "w-20" : "w-64"
-      }`}
-    >
-      {/* SIDEBAR HEADER */}
-      <div className="flex items-center justify-between h-16 px-4 border-b border-gray-200">
-        {!isCollapsed && (
-          <div className="text-xl font-bold bg-gradient-to-r from-blue-600 to-blue-800 bg-clip-text text-transparent">
-            Admin Panel
-          </div>
-        )}
-        <button
-          onClick={() => setIsCollapsed(!isCollapsed)}
-          className="p-2 rounded-lg hover:bg-gray-100 text-gray-500 transition-colors"
-        >
-          {isCollapsed ? <BiChevronRight size={20} /> : <BiChevronLeft size={20} />}
-        </button>
-      </div>
+    <div className="h-screen sticky top-0 overflow-hidden">
+      <div
+        className={`h-screen flex flex-col justify-between bg-white border-r border-gray-200 transition-all duration-300 ${
+          isCollapsed ? "w-20" : "w-64"
+        }`}
+      >
+        {/* SIDEBAR HEADER */}
+        <div className="flex items-center justify-between h-16 px-4 border-b border-gray-200">
+          {!isCollapsed && (
+            <div className="text-xl font-bold bg-gradient-to-r from-blue-600 to-blue-800 bg-clip-text text-transparent">
+              Admin Panel
+            </div>
+          )}
+          <button
+            onClick={() => setIsCollapsed(!isCollapsed)}
+            className="p-2 rounded-lg hover:bg-gray-100 text-gray-500 transition-colors"
+          >
+            {isCollapsed ? <BiChevronRight size={20} /> : <BiChevronLeft size={20} />}
+          </button>
+        </div>
 
-      {/* MAIN MENU - scrollable area */}
-      <div className="overflow-y-auto flex-1">
-        {menuItems.map((item, index) =>
-          item.submenu ? (
-            <div key={index}>
-              <div
-                onClick={() => toggleMenu(item.title)}
-                className={`flex items-center justify-between px-4 py-3 cursor-pointer hover:bg-gray-50 transition-colors ${
-                  activeMenu === item.title ? "bg-blue-50" : ""
-                }`}
-              >
-                <div className="flex items-center space-x-3">
-                  <span
-                    className={`text-lg ${
-                      activeMenu === item.title ? "text-blue-600" : "text-gray-500"
-                    }`}
-                  >
-                    {item.icon}
-                  </span>
+        {/* MAIN MENU - scrollable area */}
+        <div className="overflow-y-auto flex-1">
+          {menuItems.map((item, index) =>
+            item.submenu ? (
+              <div key={index}>
+                <div
+                  onClick={() => toggleMenu(item.title)}
+                  className={`flex items-center justify-between px-4 py-3 cursor-pointer hover:bg-gray-50 transition-colors ${
+                    activeMenu === item.title ? "bg-blue-50" : ""
+                  }`}
+                >
+                  <div className="flex items-center space-x-3">
+                    <span
+                      className={`text-lg ${
+                        activeMenu === item.title ? "text-blue-600" : "text-gray-500"
+                      }`}
+                    >
+                      {item.icon}
+                    </span>
+                    {!isCollapsed && (
+                      <span
+                        className={
+                          activeMenu === item.title
+                            ? "font-medium text-blue-600"
+                            : "text-gray-700"
+                        }
+                      >
+                        {item.title}
+                      </span>
+                    )}
+                  </div>
                   {!isCollapsed && (
                     <span
-                      className={
+                      className={`transition-transform duration-200 ${
                         activeMenu === item.title
-                          ? "font-medium text-blue-600"
-                          : "text-gray-700"
-                      }
+                          ? "rotate-90 text-blue-600"
+                          : "text-gray-400"
+                      }`}
                     >
-                      {item.title}
+                      <BiChevronRight />
                     </span>
                   )}
                 </div>
-                {!isCollapsed && (
-                  <span
-                    className={`transition-transform duration-200 ${
-                      activeMenu === item.title
-                        ? "rotate-90 text-blue-600"
-                        : "text-gray-400"
-                    }`}
-                  >
-                    <BiChevronRight />
-                  </span>
+                {activeMenu === item.title && !isCollapsed && (
+                  <div className="bg-gray-50">
+                    {item.submenuItems.map((subItem, subIndex) => (
+                      <NavLink
+                        key={subIndex}
+                        to={subItem.path}
+                        className={({ isActive }) =>
+                          `block py-2 px-12 hover:bg-gray-100 transition-colors ${
+                            isActive
+                              ? "text-blue-600 font-medium bg-blue-50"
+                              : "text-gray-600"
+                          }`
+                        }
+                      >
+                        {subItem.title}
+                      </NavLink>
+                    ))}
+                  </div>
                 )}
               </div>
-              {activeMenu === item.title && !isCollapsed && (
-                <div className="bg-gray-50">
-                  {item.submenuItems.map((subItem, subIndex) => (
-                    <NavLink
-                      key={subIndex}
-                      to={subItem.path}
-                      className={({ isActive }) =>
-                        `block py-2 px-12 hover:bg-gray-100 transition-colors ${
-                          isActive
-                            ? "text-blue-600 font-medium bg-blue-50"
-                            : "text-gray-600"
-                        }`
-                      }
-                    >
-                      {subItem.title}
-                    </NavLink>
-                  ))}
-                </div>
-              )}
-            </div>
-          ) : (
-            <NavLink
-              key={index}
-              to={item.path}
-              end
-              className={({ isActive }) =>
-                `flex items-center px-4 py-3 hover:bg-gray-50 transition-colors ${
-                  isActive ? "bg-blue-50 text-blue-600 font-medium" : "text-gray-700"
-                }`
-              }
-            >
-              <span
-                className={`text-lg ${
-                  location.pathname === item.path ? "text-blue-600" : "text-gray-500"
-                }`}
+            ) : (
+              <NavLink
+                key={index}
+                to={item.path}
+                end
+                className={({ isActive }) =>
+                  `flex items-center px-4 py-3 hover:bg-gray-50 transition-colors ${
+                    isActive ? "bg-blue-50 text-blue-600 font-medium" : "text-gray-700"
+                  }`
+                }
               >
-                {item.icon}
-              </span>
-              {!isCollapsed && <span className="ml-3">{item.title}</span>}
-            </NavLink>
-          )
-        )}
-      </div>
+                <span
+                  className={`text-lg ${
+                    location.pathname === item.path ? "text-blue-600" : "text-gray-500"
+                  }`}
+                >
+                  {item.icon}
+                </span>
+                {!isCollapsed && <span className="ml-3">{item.title}</span>}
+              </NavLink>
+            )
+          )}
+        </div>
 
-      {/* USER PROFILE SECTION */}
-      <div className="border-t border-gray-200">
-        <div
-          className={`flex items-center justify-between p-3 ${
-            isCollapsed ? "w-20" : "w-64"
-          } transition-all duration-300`}
-        >
-          <div className="flex items-center space-x-3">
-            <div>
-              {userData.profile_image ? (
-                <img
-                  src={`${API_BASE_URL}${userData.profile_image}`}
-                  alt={userData.name}
-                  className="w-10 h-10 rounded-lg object-cover shadow-sm"
-                  onError={handleImageError}
-                />
-              ) : (
-                <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg flex items-center justify-center text-white text-lg font-medium shadow-sm">
-                  {userData.name ? userData.name.charAt(0).toUpperCase() : "U"}
+        {/* USER PROFILE SECTION */}
+        <div className="border-t border-gray-200">
+          <div
+            className={`flex items-center justify-between p-3 ${
+              isCollapsed ? "w-20" : "w-64"
+            } transition-all duration-300`}
+          >
+            <div className="flex items-center space-x-3">
+              <div>
+                {userData.profile_image ? (
+                  <img
+                    src={`${API_BASE_URL}${userData.profile_image}`}
+                    alt={userData.name}
+                    className="w-10 h-10 rounded-lg object-cover shadow-sm"
+                    onError={handleImageError}
+                  />
+                ) : (
+                  <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg flex items-center justify-center text-white text-lg font-medium shadow-sm">
+                    {userData.name ? userData.name.charAt(0).toUpperCase() : "U"}
+                  </div>
+                )}
+              </div>
+              {!isCollapsed && (
+                <div className="leading-tight">
+                  <div className="text-sm font-semibold text-gray-900">
+                    {userData.name || "User"}
+                  </div>
+                  <div className="text-xs text-gray-500 capitalize">
+                    {userData.role || "Loading..."}
+                  </div>
                 </div>
               )}
             </div>
             {!isCollapsed && (
-              <div className="leading-tight">
-                <div className="text-sm font-semibold text-gray-900">
-                  {userData.name || "User"}
-                </div>
-                <div className="text-xs text-gray-500 capitalize">
-                  {userData.role || "Loading..."}
-                </div>
-              </div>
+              <button
+                onClick={() => setShowLogoutDialog(true)}
+                className="p-2 rounded-full hover:bg-gray-100 text-gray-500 transition-colors"
+                title="Logout"
+              >
+                <BiLogOut size={18} />
+              </button>
             )}
           </div>
-          {!isCollapsed && (
-            <button
-              onClick={() => setShowLogoutDialog(true)}
-              className="p-2 rounded-full hover:bg-gray-100 text-gray-500 transition-colors"
-              title="Logout"
-            >
-              <BiLogOut size={18} />
-            </button>
-          )}
         </div>
-      </div>
 
-      {/* LOGOUT DIALOG */}
-      {showLogoutDialog && (
-        <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-30 z-50">
-          <div className="bg-white rounded-2xl p-6 w-[320px] shadow-xl transform transition-all scale-100">
-            <div className="text-center">
-              <div className="w-12 h-12 bg-red-50 rounded-full flex items-center justify-center mx-auto mb-4">
-                <BiLogOut className="text-2xl text-red-500" />
+        {/* LOGOUT DIALOG */}
+        {showLogoutDialog && (
+          <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-30 z-50">
+            <div className="bg-white rounded-2xl p-6 w-[320px] shadow-xl transform transition-all scale-100">
+              <div className="text-center">
+                <div className="w-12 h-12 bg-red-50 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <BiLogOut className="text-2xl text-red-500" />
+                </div>
+                <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                  Confirm Logout
+                </h3>
+                <p className="text-sm text-gray-500 mb-6">
+                  Are you sure you want to log out?
+                </p>
               </div>
-              <h3 className="text-lg font-semibold text-gray-900 mb-2">
-                Confirm Logout
-              </h3>
-              <p className="text-sm text-gray-500 mb-6">
-                Are you sure you want to log out?
-              </p>
-            </div>
-            <div className="flex space-x-3">
-              <button
-                className="flex-1 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors text-sm font-medium"
-                onClick={() => setShowLogoutDialog(false)}
-              >
-                Cancel
-              </button>
-              <button
-                className="flex-1 px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors text-sm font-medium"
-                onClick={handleLogout}
-              >
-                Logout
-              </button>
+              <div className="flex space-x-3">
+                <button
+                  className="flex-1 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors text-sm font-medium"
+                  onClick={() => setShowLogoutDialog(false)}
+                >
+                  Cancel
+                </button>
+                <button
+                  className="flex-1 px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors text-sm font-medium"
+                  onClick={handleLogout}
+                >
+                  Logout
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 };

@@ -195,13 +195,20 @@ const PostCard = ({ post, accessToken, getMediaUrl }) => {
           <h3 className="text-lg font-semibold text-gray-700 mb-2">Media</h3>
           <div className="grid grid-cols-2 gap-4">
             {post.media.map((m, index) => {
-              const mediaPath = typeof m === "string" ? m : m.media_path;
+              // For backwards compatibility, check if m is a string.
+              // Otherwise, use m.url if available, and derive media type from the URL.
+              const mediaPath = typeof m === "string" ? m : (m.url || m.media_path);
               const mediaType =
-                typeof m === "string" ? getFileMimeType(m) : m.media_type;
-              const description = typeof m === "string" ? "" : m.description;
+                typeof m === "string"
+                  ? getFileMimeType(m)
+                  : m.media_type
+                    ? m.media_type
+                    : getFileMimeType(m.url);
+              const description =
+                typeof m === "string" ? "" : m.description || "";
               return (
                 <div
-                  key={typeof m === "string" ? index : m._id}
+                  key={typeof m === "string" ? index : m.id || m._id}
                   className="border rounded overflow-hidden"
                 >
                   {mediaType.startsWith("image") ? (
@@ -226,6 +233,7 @@ const PostCard = ({ post, accessToken, getMediaUrl }) => {
           </div>
         </div>
       )}
+
 
       {/* Statistics */}
       <div className="flex justify-around border-t pt-4 mb-6">

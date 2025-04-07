@@ -128,7 +128,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
           bannedUsers: stats.userStats.bannedUsers || 0,
         });
 
-        // Set post stats
+        // Set post stats with limited trending posts
         setPostStats({
           totalPosts: stats.postStats.totalPosts || 0,
           activePosts: stats.postStats.activePosts || 0,
@@ -136,14 +136,17 @@ const Dashboard = ({ setIsAuthenticated }) => {
           deletedPosts: stats.postStats.deletedPosts || 0,
           todayPosts: stats.postStats.todayPosts || 0,
           trendingPosts:
-            stats.trendingPosts?.map((post) => ({
-              ...post,
-              thumbnail: post.thumbnail || "default-thumbnail.jpg",
-              engagement: post.engagement || 0,
-              likes: post.likes || 0,
-              comments: post.comments || 0,
-              shares: post.shares || 0,
-            })) || [],
+            stats.trendingPosts
+              ?.filter((post) => post.thumbnail) // Only include posts with thumbnails
+              .slice(0, 4) // Limit to 4 posts
+              .map((post) => ({
+                ...post,
+                thumbnail: post.thumbnail || null,
+                engagement: post.engagement || 0,
+                likes: post.likes || 0,
+                comments: post.comments || 0,
+                shares: post.shares || 0,
+              })) || [],
           postAnalytics: {
             engagement: stats.postAnalytics?.engagement || 0,
             avgLikes: stats.postAnalytics?.avgLikes || 0,
@@ -379,67 +382,80 @@ const Dashboard = ({ setIsAuthenticated }) => {
                 </select>
               </div>
               <div className="space-y-4">
-                {postStats.trendingPosts.map((post) => (
-                  <div
-                    key={post._id}
-                    className="flex items-center justify-between p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-all cursor-pointer"
-                    onClick={() => navigate(`/posts/${post._id}`)}
-                  >
-                    <div className="flex items-center space-x-4">
-                      <div className="flex-shrink-0 h-16 w-16">
-                        <img
-                          src={`http://localhost:3000${post.thumbnail}` || "https://via.placeholder.com/64"}
-                          alt=""
-                          className="h-16 w-16 rounded-lg object-cover"
-                          onError={(e) => {
-                            e.target.src = "https://via.placeholder.com/64";
-                          }}
-                        />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div
-                          className="text-sm font-medium text-gray-900 line-clamp-2"
-                          dangerouslySetInnerHTML={{ __html: post.title }}
-                        />
-                        <div className="flex items-center space-x-4 mt-2">
-                          <div className="flex items-center text-sm text-gray-500">
-                            <FaHeart className="mr-1 text-red-500" size={12} />
-                            {post.likes}
+                {postStats.trendingPosts.length > 0 ? (
+                  postStats.trendingPosts.map((post) => (
+                    <div
+                      key={post._id}
+                      className="flex items-center justify-between p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-all cursor-pointer"
+                      onClick={() => navigate(`/posts/${post._id}`)}
+                    >
+                      <div className="flex items-center space-x-4">
+                        {post.thumbnail && (
+                          <div className="flex-shrink-0 h-16 w-16">
+                            <img
+                              src={`http://localhost:3000${post.thumbnail}`}
+                              alt=""
+                              className="h-16 w-16 rounded-lg object-cover"
+                              onError={(e) => {
+                                e.target.style.display = "none";
+                              }}
+                            />
                           </div>
-                          <div className="flex items-center text-sm text-gray-500">
-                            <FaComments className="mr-1 text-blue-500" size={12} />
-                            {post.comments}
-                          </div>
-                          <div className="flex items-center text-sm text-gray-500">
-                            <FaShare className="mr-1 text-green-500" size={12} />
-                            {post.shares}
-                          </div>
-                          <div className="flex items-center text-sm text-gray-500">
-                            <FaEye className="mr-1 text-purple-500" size={12} />
-                            {post.views}
-                          </div>
-                        </div>
-                        <div className="flex items-center mt-2">
-                          <img
-                            src={`http://localhost:3000/${post.author.profile_image}` || "https://via.placeholder.com/32"}
-                            alt={post.author.name}
-                            className="h-5 w-5 rounded-full mr-2"
-                            onError={(e) => {
-                              e.target.src = "https://via.placeholder.com/32";
-                            }}
+                        )}
+                        <div className="flex-1 min-w-0">
+                          <div
+                            className="text-sm font-medium text-gray-900 line-clamp-2"
+                            dangerouslySetInnerHTML={{ __html: post.title }}
                           />
-                          <span className="text-xs text-gray-500">{post.author.name}</span>
+                          <div className="flex items-center space-x-4 mt-2">
+                            <div className="flex items-center text-sm text-gray-500">
+                              <FaHeart className="mr-1 text-red-500" size={12} />
+                              {post.likes}
+                            </div>
+                            <div className="flex items-center text-sm text-gray-500">
+                              <FaComments className="mr-1 text-blue-500" size={12} />
+                              {post.comments}
+                            </div>
+                            <div className="flex items-center text-sm text-gray-500">
+                              <FaShare className="mr-1 text-green-500" size={12} />
+                              {post.shares}
+                            </div>
+                            <div className="flex items-center text-sm text-gray-500">
+                              <FaEye className="mr-1 text-purple-500" size={12} />
+                              {post.views}
+                            </div>
+                          </div>
+                          <div className="flex items-center mt-2">
+                            <img
+                              src={
+                                post.author.profile_image
+                                  ? `http://localhost:3000/${post.author.profile_image}`
+                                  : `http://localhost:3000/api/avatar?name=${encodeURIComponent(
+                                      post.author.name
+                                    )}`
+                              }
+                              alt={post.author.name}
+                              className="h-5 w-5 rounded-full mr-2"
+                              onError={(e) => {
+                                e.target.src = `http://localhost:3000/api/avatar?name=${encodeURIComponent(
+                                  post.author.name
+                                )}`;
+                              }}
+                            />
+                            <span className="text-xs text-gray-500">
+                              {post.author.name}
+                            </span>
+                          </div>
                         </div>
                       </div>
+                      <div className="text-sm font-medium">
+                        <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded-full">
+                          {post.engagement}% Engagement
+                        </span>
+                      </div>
                     </div>
-                    <div className="text-sm font-medium">
-                      <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded-full">
-                        {post.engagement}% Engagement
-                      </span>
-                    </div>
-                  </div>
-                ))}
-                {postStats.trendingPosts.length === 0 && (
+                  ))
+                ) : (
                   <div className="text-center py-8 text-gray-500">
                     No trending posts found
                   </div>

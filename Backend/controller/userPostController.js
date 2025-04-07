@@ -324,7 +324,7 @@ const getPostById = async (req, res) => {
       url: media.media_path
     }));
 
-    // Construct response in the same structure as getAllPost
+    // Construct response including additional fields from postSchema.js
     const formattedPost = {
       id: post._id,
       user: {
@@ -333,8 +333,8 @@ const getPostById = async (req, res) => {
         profile_image: post.user_id.profile_image,
       },
       category: {
-        id: post.category_id._id, // Include category ID
-        name: post.category_id.name, // Include category name
+        id: post.category_id._id,
+        name: post.category_id.name,
       },
       time: post.createdAt,
       content: post.text_content,
@@ -343,7 +343,16 @@ const getPostById = async (req, res) => {
       likeCount: post.likes.length,
       commentCount: post.comments.length,
       shareCount: post.shares,
-      comments: post.comments, // Format comments further if needed
+      comments: post.comments,
+      // Additional postSchema fields
+      status: post.status,
+      isSuspended: post.isSuspended,
+      suspended_from: post.suspended_from,
+      suspended_until: post.suspended_until,
+      suspension_reason: post.suspension_reason,
+      isBlocked: post.isBlocked,
+      is_deleted: post.is_deleted,
+      deletedAt: post.deletedAt,
     };
 
     return res.status(200).json({
@@ -357,26 +366,23 @@ const getPostById = async (req, res) => {
 };
 
 
-// Configure transporter (adjust according to your SMTP configuration)
+
 const transporter = nodemailer.createTransport({
-  host: process.env.EMAIL_HOST, // e.g., "smtp.example.com"
-  port: process.env.EMAIL_PORT, // e.g., 587
-  secure: false,
-  auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASS
-  }
+  service: "Gmail",
+  auth: { user: process.env.EMAIL, pass: process.env.EMAIL_PASSWORD },
 });
 
 // Helper function to send email
-const sendEmail = (to, subject, text) => {
+const sendEmail = (to, subject, text, html = "") => {
   const mailOptions = {
-    from: process.env.EMAIL_FROM, // e.g., '"MyApp" <no-reply@myapp.com>'
+    from: process.env.EMAIL, // e.g., '"globalConnect" <no-reply@globalconnect.com>'
     to,
     subject,
     text
   };
-
+  if (html) {
+    mailOptions.html = html;
+  }
   transporter.sendMail(mailOptions, (error, info) => {
     if (error) {
       console.error("Error sending email:", error);
@@ -386,10 +392,9 @@ const sendEmail = (to, subject, text) => {
   });
 };
 
-
 const handlePostAdminAction = async (req, res) => {
   try {
-    const { postId, action, resetReports } = req.body;
+    const { postId, action, resetReports, reason } = req.body;
     if (!postId || !action) {
       return res.status(400).json({ message: "postId and action are required." });
     }
@@ -400,7 +405,10 @@ const handlePostAdminAction = async (req, res) => {
       return res.status(404).json({ message: "Post not found." });
     }
 
-    let emailSubject = "", emailText = "";
+    let emailSubject = "";
+    let emailText = "";
+    const defaultReason = "Violation of our policies";
+    const finalReason = reason || defaultReason;
 
     switch (action) {
       case "resetReports":
@@ -412,17 +420,19 @@ const handlePostAdminAction = async (req, res) => {
         break;
 
       case "suspend": {
-        const { reason, suspended_from, suspended_until } = req.body;
-        if (!reason || !suspended_from || !suspended_until) {
-          return res.status(400).json({ message: "A reason, suspended_from, and suspended_until are required for suspension." });
+        const { suspended_from, suspended_until } = req.body;
+        if (!suspended_from || !suspended_until) {
+          return res.status(400).json({ message: "suspended_from and suspended_until are required for suspension." });
         }
         post.status = "Suspended";
         post.suspended_from = new Date(suspended_from);
         post.suspended_until = new Date(suspended_until);
         post.isSuspended = true;
+        // Optionally, you can store the finalReason in a suspension_reason field:
+        post.suspension_reason = finalReason;
         await post.save();
         emailSubject = "Your post has been suspended";
-        emailText = `Hello ${post.user_id.name},\n\nYour post has been suspended for the following reason:\n\n"${reason}"\n\nSuspension period: ${suspended_from} to ${suspended_until}.\n\nRegards,\nAdmin Team`;
+        emailText = `Hello ${post.user_id.name},\n\nYour post has been suspended for the following reason:\n\n"${finalReason}"\n\nSuspension period: ${suspended_from} to ${suspended_until}.\n\nRegards,\nAdmin Team`;
         break;
       }
 
@@ -438,16 +448,16 @@ const handlePostAdminAction = async (req, res) => {
         post.suspension_reason = "";
         await post.save();
         emailSubject = "Your post has been reinstated";
-        emailText = `Hello ${post.user_id.name},\n\nYour post has been unsuspended and is now active.\n\nRegards,\nAdmin Team`;
+        // Use finalReason if provided or default to a generic message
+        emailText = `Hello ${post.user_id.name},\n\nYour post has been unsuspended.${reason ? "\nReason: " + finalReason + "." : ""}\n\nRegards,\nAdmin Team`;
         break;
 
       case "block":
-        // Block the post
         post.status = "Blocked";
         post.isBlocked = true;
         await post.save();
         emailSubject = "Your post has been blocked";
-        emailText = `Hello ${post.user_id.name},\n\nYour post has been blocked due to a violation of our policies.\n\nRegards,\nAdmin Team`;
+        emailText = `Hello ${post.user_id.name},\n\nYour post has been blocked.\nReason: ${finalReason}.\n\nRegards,\nAdmin Team`;
         break;
 
       case "unblock":
@@ -459,14 +469,14 @@ const handlePostAdminAction = async (req, res) => {
         post.isBlocked = false;
         await post.save();
         emailSubject = "Your post has been unblocked";
-        emailText = `Hello ${post.user_id.name},\n\nYour post has been unblocked and is now active.\n\nRegards,\nAdmin Team`;
+        emailText = `Hello ${post.user_id.name},\n\nYour post has been unblocked.\nReason: ${finalReason}.\n\nRegards,\nAdmin Team`;
         break;
 
       case "delete":
         // For deletion, we remove the post entirely.
         await Post.findByIdAndDelete(postId);
         emailSubject = "Your post has been deleted";
-        emailText = `Hello ${post.user_id.name},\n\nYour post has been deleted due to a violation of our policies.\n\nRegards,\nAdmin Team`;
+        emailText = `Hello ${post.user_id.name},\n\nYour post has been deleted.\nReason: ${finalReason}.\n\nRegards,\nAdmin Team`;
         break;
 
       default:
@@ -567,22 +577,32 @@ const getAllPostAdmin = async (req, res) => {
     // Get total count for pagination
     const totalCount = await Post.countDocuments(query);
 
-    // Format the response
+    // Format the response with additional fields from postSchema.js
     const formattedPosts = posts.map(post => ({
       _id: post._id,
       id: post._id,
       user: {
         _id: post.user_id?._id,
         name: post.user_id?.name || "Unknown User",
-        profile_image: post.user_id?.profile_image || null
+        profile_image: post.user_id?.profile_image || null,
+        email: post.user_id?.email || ""
       },
       type: post.category_id?.name || "Uncategorized",
       status: post.status || "Active",
       createdAt: post.createdAt,
       content: post.text_content,
       media: post.media,
-      reported_count: post.reported_count || 0,
-      likes: post.likes?.length || 0
+      reports: post.reports,
+      // For reported count, you could use the length of the reports array.
+      reported_count: post.reports?.length || 0,
+      likes: post.likes?.length || 0,
+      isSuspended: post.isSuspended,
+      suspended_from: post.suspended_from,
+      suspended_until: post.suspended_until,
+      suspension_reason: post.suspension_reason,
+      isBlocked: post.isBlocked,
+      is_deleted: post.is_deleted,
+      deletedAt: post.deletedAt
     }));
 
     return res.status(200).json({
@@ -592,7 +612,6 @@ const getAllPostAdmin = async (req, res) => {
       currentPage: page,
       totalPages: Math.ceil(totalCount / limit)
     });
-
   } catch (error) {
     console.error("Error retrieving posts for admin:", error);
     return res.status(500).json({
@@ -625,7 +644,7 @@ const getPostStatsAdmin = async (req, res) => {
   }
 };
 
-// Function to format posts
+
 
 
 // Get posts that have been reported (i.e. at least one report exists)
@@ -974,98 +993,143 @@ const likeUnlikePost = async (req, res) => {
 };
 
 
+
 const updatePostStatus = async (req, res) => {
   try {
-    const { postId } = req.params;
-    const { status, reason, suspended_from, suspended_until } = req.body;
-
-    // Define allowed statuses.
-    const allowedStatuses = [
-      "Active",
-      "Suspended",
-      "Blocked",
-      "Under Review",
-      "Deleted",
-    ];
-
-    // Validate the provided status.
-    if (!allowedStatuses.includes(status)) {
-      return res.status(400).json({ message: "Invalid status provided." });
+    const { postId, action, resetReports, reason } = req.body;
+    if (!postId || !action) {
+      return res.status(400).json({ message: "postId and action are required." });
     }
 
-    // For statuses that require a reason, enforce its presence.
-    if (
-      (status === "Suspended" ||
-        status === "Blocked" ||
-        status === "Under Review") &&
-      !reason
-    ) {
-      return res
-        .status(400)
-        .json({ message: "A reason is required for the selected status." });
-    }
-
-    // Find the post by its ID.
-    const post = await Post.findById(postId);
+    // Fetch the post for every action
+    const post = await Post.findById(postId).populate("user_id", "email name");
     if (!post) {
       return res.status(404).json({ message: "Post not found." });
     }
 
-    // If status is "Suspended", validate and update suspension dates.
-    if (status === "Suspended") {
-      if (!suspended_from || !suspended_until) {
-        return res.status(400).json({
-          message:
-            "Both 'suspended_from' and 'suspended_until' dates are required for suspension.",
-        });
-      }
-      const suspendedFromDate = new Date(suspended_from);
-      const suspendedUntilDate = new Date(suspended_until);
-      const now = new Date();
+    let emailSubject = "";
+    let emailText = "";
+    const actionReason = reason ? reason : "Violation of our policies";
 
-      if (suspendedFromDate < now || suspendedUntilDate < now) {
-        return res
-          .status(400)
-          .json({ message: "Suspension dates must be in the future." });
+    switch (action) {
+      case "resetReports":
+        // Reset reports: clear the reports array.
+        post.reports = [];
+        await post.save();
+        emailSubject = "Your post's report count has been reset";
+        emailText = `Your post's report count has been reset. Reason: ${actionReason}.`;
+        break;
+
+      case "suspend": {
+        const { suspended_from, suspended_until } = req.body;
+        if (!reason || !suspended_from || !suspended_until) {
+          return res.status(400).json({ message: "A reason, suspended_from, and suspended_until are required for suspension." });
+        }
+        post.status = "Suspended";
+        post.suspended_from = new Date(suspended_from);
+        post.suspended_until = new Date(suspended_until);
+        post.isSuspended = true;
+        await post.save();
+        emailSubject = "Your post has been suspended";
+        emailText = `Your post has been suspended.\nReason: ${actionReason}.\nSuspension period: ${suspended_from} to ${suspended_until}.`;
+        break;
       }
 
-      post.suspended_from = suspendedFromDate;
-      post.suspended_until = suspendedUntilDate;
-      post.isSuspended = true;
-    } else {
-      // Clear suspension details if status is not "Suspended".
-      post.suspended_from = null;
-      post.suspended_until = null;
-      post.isSuspended = false;
+      case "unsuspend":
+        if (post.status !== "Suspended") {
+          return res.status(400).json({ message: "Post is not suspended." });
+        }
+        post.status = "Active";
+        post.isSuspended = false;
+        post.suspended_from = null;
+        post.suspended_until = null;
+        post.suspension_reason = "";
+        await post.save();
+        emailSubject = "Your post has been reinstated";
+        emailText = `Your post has been unsuspended.\nReason: ${actionReason}.`;
+        break;
+
+      case "block":
+        post.status = "Blocked";
+        post.isBlocked = true;
+        await post.save();
+        emailSubject = "Your post has been blocked";
+        emailText = `Your post has been blocked.\nReason: ${actionReason}.`;
+        break;
+
+      case "unblock":
+        if (post.status !== "Blocked") {
+          return res.status(400).json({ message: "Post is not blocked." });
+        }
+        post.status = "Active";
+        post.isBlocked = false;
+        await post.save();
+        emailSubject = "Your post has been unblocked";
+        emailText = `Your post has been unblocked.\nReason: ${actionReason}.`;
+        break;
+
+      case "activate":
+        // Reset the post to active state.
+        post.status = "Active";
+        post.isBlocked = false;
+        post.isSuspended = false;
+        post.suspended_from = null;
+        post.suspended_until = null;
+        post.suspension_reason = "";
+        post.reports = [];
+        await post.save();
+        emailSubject = "Your post has been reactivated";
+        emailText = `Your post has been reactivated and all issues have been cleared.`;
+        break;
+
+      case "delete":
+        post.is_deleted = true;
+        post.deletedAt = new Date();
+        post.status = "Deleted";
+        await post.save();
+        emailSubject = "Your post has been deleted";
+        emailText = `Your post has been deleted.\nReason: ${actionReason}.`;
+        break;
+
+      case "permanentDelete":
+        await Post.findByIdAndDelete(postId);
+        emailSubject = "Your post has been permanently deleted";
+        emailText = `Your post has been permanently deleted.\nReason: ${actionReason}.`;
+        break;
+
+      default:
+        return res.status(400).json({ message: "Invalid action." });
     }
 
-    // Set additional boolean flags based on the status.
-    post.isBlocked = status === "Blocked";
-    post.isUnderReview = status === "Under Review";
+    // Create a beautiful HTML email similar to the one in userSelfController.js.
+    const emailHtml = `
+      <html>
+      <head>
+        <meta charset="UTF-8">
+        <title>${emailSubject}</title>
+      </head>
+      <body style="margin:0; padding:0; background-color:#f4f4f4;">
+        <div style="max-width:600px; margin:20px auto; background-color:#fff; padding:20px; border-radius:8px; box-shadow:0 2px 8px rgba(0,0,0,0.1);">
+          <h2 style="text-align:center; color:#4F46E5;">globalConnect</h2>
+          <p style="font-size:16px; color:#333;">Hello ${post.user_id.name},</p>
+          ${emailText.split('\n').map(line => `<p style="font-size:16px; color:#333;">${line.trim()}</p>`).join('')}
+          <p style="margin-top:20px; font-size:16px; color:#333;">Regards,<br/>Admin Team</p>
+        </div>
+      </body>
+      </html>
+    `;
 
-    // Update the main status.
-    post.status = status;
-
-    // For statuses that require a reason, update the schema's reason field.
-    // (Assuming the schema uses 'suspension_reason' as the field to store the reason.)
-    if (["Suspended", "Blocked", "Under Review"].includes(status)) {
-      post.suspension_reason = reason;
-    } else {
-      post.suspension_reason = "";
-    }
-
-    // Save the updated post.
-    await post.save();
+    // Send email notification to post owner using both text and HTML.
+    sendEmail(post.user_id.email, emailSubject, emailText, emailHtml);
 
     return res.status(200).json({
-      message: "Post status updated successfully.",
-      data: post,
+      message: `Post ${action} action completed successfully.`
     });
   } catch (error) {
-    console.error("Error updating post status:", error);
+    console.error("Error handling admin post action:", error);
     return res.status(500).json({
-      message: "Internal server error.",
-      error: error.message,
+      message: "Failed to perform admin post action.",
+      error: error.message
     });
   }
 };
@@ -1172,10 +1236,6 @@ const editPost = async (req, res) => {
 
 
 
-
-/**
- * Controller: Delete a post by ID (only by post owner)
- */
 const deletePost = async (req, res) => {
   try {
     const { postId } = req.params;
