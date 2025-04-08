@@ -7,8 +7,13 @@ const mongoose = require("mongoose");
 const notificationRoutes = require("./routes/notificationRoutes");
 const pushTokenRoute = require("./routes/pushTokenRoute");
 const logoController = require('./controller/logoController');
+const cron = require("node-cron");
 const cors = require("cors");
 require("dotenv").config();
+
+// Import your models (make sure these paths are correct)
+const User = require("./models/userSchema");
+const Post = require("./models/postSchema");
 
 const app = express();
 const server = http.createServer(app);
@@ -38,7 +43,6 @@ const userPostRoute = require("./routes/userPostRoute");
 const userCommentRoute = require("./routes/userCommentRoute");
 const getUserProfileRoute = require("./routes/userSelfroutes");
 const userMessagingRoute = require("./routes/userMessagingRoute")(io);
-
 const userFollowRoute = require("./routes/userFollowRoute");
 const adminPolicyRoutes = require("./routes/adminPrivacyPolicy");
 
@@ -59,6 +63,50 @@ app.use("/api", pushTokenRoute);
 app.use('/api', logoController);
 
 app.use("/uploads", express.static("uploads"));
+
+// Define checkSuspensions to check and update suspension statuses
+const checkSuspensions = async () => {
+  console.log("Running suspension check at", new Date().toLocaleString());
+
+  // Check suspended users – assuming a suspended user has a 'suspended_until' field.
+  try {
+    // Find users with status Suspended and a defined suspended_until value.
+    const suspendedUsers = await User.find({ status: "Suspended", suspended_until: { $ne: null } });
+    for (const user of suspendedUsers) {
+      if (user.suspended_until && new Date() > user.suspended_until) {
+        user.status = "Active";
+        // Optionally clear the suspension field if needed.
+        user.suspended_until = null;
+        console.log(`User ${user._id} suspension expired, setting status to Active.`);
+        await user.save();
+      }
+    }
+  } catch (err) {
+    console.error("Error checking user suspensions:", err);
+  }
+
+  // Check suspended posts
+  try {
+    // Find posts with status Suspended and a defined suspended_until value.
+    const suspendedPosts = await Post.find({ status: "Suspended", suspended_until: { $ne: null } });
+    for (const post of suspendedPosts) {
+      if (post.suspended_until && new Date() > post.suspended_until) {
+        post.status = "Active";
+        post.isSuspended = false;
+        post.suspended_from = null;
+        post.suspended_until = null;
+        post.suspension_reason = "";
+        console.log(`Post ${post._id} suspension expired, setting status to Active.`);
+        await post.save();
+      }
+    }
+  } catch (err) {
+    console.error("Error checking post suspensions:", err);
+  }
+};
+
+// Schedule checkSuspensions to run at the start of every hour
+cron.schedule("0 * * * *", checkSuspensions);
 
 // MongoDB Connection
 mongoose

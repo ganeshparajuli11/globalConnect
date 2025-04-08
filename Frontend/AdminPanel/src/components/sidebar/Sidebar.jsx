@@ -301,7 +301,7 @@ const Sidebar = ({ setIsAuthenticated }) => {
               <div>
                 {userData.profile_image ? (
                   <img
-                    src={`${API_BASE_URL}${userData.profile_image}`}
+                    src={`${API_BASE_URL}/${userData.profile_image}`}
                     alt={userData.name}
                     className="w-10 h-10 rounded-lg object-cover shadow-sm"
                     onError={handleImageError}

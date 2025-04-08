@@ -65,6 +65,7 @@ async function createPost(req, res) {
 
 
 
+
 // Get all posts based on query/interest/search logic
 const getAllPost = async (req, res) => {
   try {
@@ -77,8 +78,8 @@ const getAllPost = async (req, res) => {
       return res.status(401).json({ message: "Unauthorized access." });
     }
 
-    // Include liked_posts in the user selection
-    const user = await User.findById(userId).select("preferred_categories following liked_posts");
+    // Include blocked_users along with preferred_categories, following, and liked_posts
+    const user = await User.findById(userId).select("preferred_categories following liked_posts blocked_users");
     if (!user) {
       return res.status(404).json({ message: "User not found." });
     }
@@ -111,7 +112,11 @@ const getAllPost = async (req, res) => {
           $or: [
             { 'author.is_suspended': false },
             { 'author.is_suspended': true, 'author.suspended_until': { $lt: currentDate } }
-          ]
+          ],
+          // Exclude posts authored by blocked users:
+          'author._id': { $nin: user.blocked_users },
+          // Exclude posts if the current user has reported them
+          reports: { $not: { $elemMatch: { reported_by: req.user.id } } }
         }
       }
     ];
@@ -174,6 +179,7 @@ const getAllPost = async (req, res) => {
     return res.status(500).json({ message: "Failed to retrieve posts." });
   }
 };
+
 
 // function to search for posts
 const formatPosts = (posts, user, req) => {

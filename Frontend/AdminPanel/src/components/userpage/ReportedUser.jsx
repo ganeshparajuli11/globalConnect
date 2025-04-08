@@ -13,13 +13,119 @@ import {
   FaChevronLeft,
   FaChevronRight,
   FaTimes,
-  FaUserLock,
-  FaUserMinus,
-  FaUndo,
 } from "react-icons/fa";
 
 import Sidebar from "../sidebar/Sidebar";
 import UserManagementComponent from "./UserManagementComponent";
+
+const ReportDetailModal = ({ reportItem, onClose }) => {
+  // Destructure the reported data for easier use
+  const { reportedTo, reportedCount, reportedReasons, reportCategoryDetails, reportedBy } = reportItem;
+
+  return (
+    <div className="fixed inset-0 z-40 flex items-center justify-center bg-black bg-opacity-50">
+      <div className="bg-white rounded-lg shadow-lg max-w-2xl w-full mx-4 overflow-y-auto max-h-full">
+        <div className="flex justify-between items-center border-b p-4">
+          <h2 className="text-xl font-semibold">Report Details</h2>
+          <button onClick={onClose} className="text-gray-600 hover:text-gray-800">
+            <FaTimes size={20} />
+          </button>
+        </div>
+
+        <div className="p-4 space-y-6">
+          {/* Reported User Details */}
+          <div className="flex items-center space-x-4">
+            <img
+              src={
+                reportedTo.profile_image
+                  ? `http://localhost:3000/${reportedTo.profile_image}`
+                  : "https://via.placeholder.com/80"
+              }
+              alt={reportedTo.name}
+              className="w-16 h-16 rounded-full object-cover"
+            />
+            <div>
+              <h3 className="text-lg font-bold">{reportedTo.name}</h3>
+              <p className="text-sm text-gray-500">{reportedTo.email}</p>
+              <p className="text-sm">
+                Status:{" "}
+                {reportedTo.is_blocked ? (
+                  <span className="text-red-600">Blocked</span>
+                ) : reportedTo.is_suspended ? (
+                  <span className="text-yellow-600">Suspended</span>
+                ) : (
+                  <span className="text-green-600">{reportedTo.status || "Active"}</span>
+                )}
+              </p>
+            </div>
+          </div>
+
+          {/* Report Summary */}
+          <div>
+            <p className="text-base">
+              <span className="font-semibold">Total Reports: </span>{reportedCount}
+            </p>
+          </div>
+
+          {/* Reported Reasons */}
+          <div>
+            <h4 className="text-lg font-semibold mb-2">Reported Reasons</h4>
+            {reportCategoryDetails && reportCategoryDetails.length > 0 ? (
+              <ul className="list-disc list-inside space-y-1">
+                {reportCategoryDetails.map((category) => (
+                  <li key={category._id}>
+                    <span className="font-semibold">{category.report_title}:</span>{" "}
+                    {reportedReasons && reportedReasons[category._id] ? reportedReasons[category._id] : 0} report(s)
+                    <p className="text-sm text-gray-500">{category.description}</p>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-sm text-gray-500">No specific reasons provided.</p>
+            )}
+          </div>
+
+          {/* Reported By */}
+          <div>
+            <h4 className="text-lg font-semibold mb-2">Reported By</h4>
+            {reportedBy && reportedBy.length > 0 ? (
+              <div className="space-y-2">
+                {reportedBy.map((reporter) => (
+                  <div key={reporter._id} className="flex items-center space-x-3">
+                    <img
+                      src={
+                        reporter.profile_image
+                          ? `http://localhost:3000/${reporter.profile_image}`
+                          : "https://via.placeholder.com/40"
+                      }
+                      alt={reporter.name}
+                      className="w-10 h-10 rounded-full object-cover"
+                    />
+                    <div>
+                      <p className="font-medium">{reporter.name}</p>
+                      <p className="text-xs text-gray-500">{reporter.email}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-gray-500">No reporters found.</p>
+            )}
+          </div>
+        </div>
+
+        <div className="flex justify-end border-t p-4">
+          <button
+            onClick={onClose}
+            className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
+          >
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
 
 const ReportedUser = () => {
   const [accessToken, setAccessToken] = useState(null);
@@ -40,11 +146,9 @@ const ReportedUser = () => {
     reportedUsers: 0,
   });
 
-  // Detail Modal (to show reported reasons, who reported, etc.)
+  // Modal states
   const [detailModalVisible, setDetailModalVisible] = useState(false);
   const [selectedReport, setSelectedReport] = useState(null);
-
-  // Action Modal state using the reusable component
   const [selectedUser, setSelectedUser] = useState(null);
   const [actionModalVisible, setActionModalVisible] = useState(false);
 
@@ -78,12 +182,8 @@ const ReportedUser = () => {
         setUserData(data);
 
         const total = data.length;
-        const blockedCount = data.filter(
-          (item) => item.reportedTo?.is_blocked
-        ).length;
-        const suspendedCount = data.filter(
-          (item) => item.reportedTo?.is_suspended
-        ).length;
+        const blockedCount = data.filter((item) => item.reportedTo?.is_blocked).length;
+        const suspendedCount = data.filter((item) => item.reportedTo?.is_suspended).length;
         const reportedCount = total;
 
         setStats({
@@ -105,7 +205,7 @@ const ReportedUser = () => {
     fetchReportedUsers();
   }, [accessToken]);
 
-  // Filter data by search term
+  // Filter reported users by search term
   const filteredUsers = userData.filter((item) => {
     const user = item.reportedTo;
     if (!user) return false;
@@ -125,24 +225,24 @@ const ReportedUser = () => {
     setCurrentPage(pageNumber);
   };
 
-  // ===== Detail Modal
+  // Open detail modal on table row click (except the three-dot action button)
   const handleViewDetails = (reportItem) => {
     setSelectedReport(reportItem);
     setDetailModalVisible(true);
   };
 
-  // ===== Action Modal (3 dots)
+  // Open action modal when clicking the three-dots button
   const handleActionClick = (e, reportItem) => {
     e.stopPropagation();
-    setSelectedUser(reportItem);
+    // Transform the report item so that the action modal gets a user object 
+    // with an expected "userId" property (taken from reportedTo._id)
+    const userForManagement = {
+      ...reportItem.reportedTo,
+      userId: reportItem.reportedTo._id,
+    };
+    setSelectedUser(userForManagement);
     setActionModalVisible(true);
   };
-
-  const isBlocked = selectedUser?.reportedTo?.is_blocked;
-  const isSuspended = selectedUser?.reportedTo?.is_suspended;
-
-  // Inline action side-drawer code has been removed.
-  // Instead, the reusable UserManagementComponent will be rendered when actionModalVisible is true.
 
   return (
     <div className="flex h-screen">
@@ -159,9 +259,7 @@ const ReportedUser = () => {
         <div className="fixed top-0 right-0 left-64 bg-white shadow-sm z-20">
           <div className="px-6 py-4">
             <div className="flex items-center justify-between mb-4">
-              <h1 className="text-2xl font-semibold text-gray-800">
-                Reported Users
-              </h1>
+              <h1 className="text-2xl font-semibold text-gray-800">Reported Users</h1>
               <div className="relative">
                 <FaSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
                 <input
@@ -180,9 +278,7 @@ const ReportedUser = () => {
                 <div className="flex items-center">
                   <FaUsers className="text-2xl opacity-80" />
                   <div className="ml-3">
-                    <p className="text-sm font-medium opacity-80">
-                      Total Reports
-                    </p>
+                    <p className="text-sm font-medium opacity-80">Total Reports</p>
                     <p className="text-xl font-semibold">{stats.totalUsers}</p>
                   </div>
                 </div>
@@ -191,9 +287,7 @@ const ReportedUser = () => {
                 <div className="flex items-center">
                   <FaUserTimes className="text-2xl opacity-80" />
                   <div className="ml-3">
-                    <p className="text-sm font-medium opacity-80">
-                      Blocked Users
-                    </p>
+                    <p className="text-sm font-medium opacity-80">Blocked Users</p>
                     <p className="text-xl font-semibold">{stats.blockedUsers}</p>
                   </div>
                 </div>
@@ -202,12 +296,8 @@ const ReportedUser = () => {
                 <div className="flex items-center">
                   <FaUserClock className="text-2xl opacity-80" />
                   <div className="ml-3">
-                    <p className="text-sm font-medium opacity-80">
-                      Suspended Users
-                    </p>
-                    <p className="text-xl font-semibold">
-                      {stats.suspendedUsers}
-                    </p>
+                    <p className="text-sm font-medium opacity-80">Suspended Users</p>
+                    <p className="text-xl font-semibold">{stats.suspendedUsers}</p>
                   </div>
                 </div>
               </div>
@@ -215,12 +305,8 @@ const ReportedUser = () => {
                 <div className="flex items-center">
                   <FaExclamationTriangle className="text-2xl opacity-80" />
                   <div className="ml-3">
-                    <p className="text-sm font-medium opacity-80">
-                      Total Reported
-                    </p>
-                    <p className="text-xl font-semibold">
-                      {stats.reportedUsers}
-                    </p>
+                    <p className="text-sm font-medium opacity-80">Total Reported</p>
+                    <p className="text-xl font-semibold">{stats.reportedUsers}</p>
                   </div>
                 </div>
               </div>
@@ -235,27 +321,13 @@ const ReportedUser = () => {
               <table className="w-full">
                 <thead className="bg-gray-50">
                   <tr>
-                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600">
-                      SN
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600">
-                      Profile
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600">
-                      Name
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600">
-                      Email
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600">
-                      Status
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600">
-                      Report Count
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600">
-                      Actions
-                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600">SN</th>
+                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600">Profile</th>
+                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600">Name</th>
+                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600">Email</th>
+                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600">Status</th>
+                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600">Report Count</th>
+                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200">
@@ -297,9 +369,7 @@ const ReportedUser = () => {
                             </div>
                           </td>
                           <td className="px-6 py-4">
-                            <div className="font-medium text-gray-800">
-                              {user.name}
-                            </div>
+                            <div className="font-medium text-gray-800">{user.name}</div>
                           </td>
                           <td className="px-6 py-4 text-sm text-gray-600">
                             {user.email}
@@ -363,9 +433,7 @@ const ReportedUser = () => {
 
                 <div className="flex items-center space-x-2">
                   <span className="text-sm text-gray-700">
-                    Showing {indexOfFirstUser + 1} to{" "}
-                    {Math.min(indexOfLastUser, filteredUsers.length)} of{" "}
-                    {filteredUsers.length} entries
+                    Showing {indexOfFirstUser + 1} to {Math.min(indexOfLastUser, filteredUsers.length)} of {filteredUsers.length} entries
                   </span>
                   <div className="flex items-center space-x-1">
                     <button
@@ -413,7 +481,7 @@ const ReportedUser = () => {
         </div>
       </div>
 
-      {/* Render the reusable UserManagementComponent for user actions */}
+      {/* Reusable action modal for user actions */}
       {actionModalVisible && selectedUser && (
         <UserManagementComponent
           selectedUser={selectedUser}
@@ -425,6 +493,11 @@ const ReportedUser = () => {
           isVisible={actionModalVisible}
           setIsVisible={setActionModalVisible}
         />
+      )}
+
+      {/* Report Detail Modal */}
+      {detailModalVisible && selectedReport && (
+        <ReportDetailModal reportItem={selectedReport} onClose={() => setDetailModalVisible(false)} />
       )}
     </div>
   );

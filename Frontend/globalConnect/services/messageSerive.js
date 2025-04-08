@@ -70,7 +70,7 @@ export const sendMessage = async (messageData, authToken) => {
     if (messageData.content) {
       formData.append('content', messageData.content);
     }
-
+    
     // Add image if present
     if (messageData.media) {
       const imageUri = messageData.media;
@@ -84,22 +84,38 @@ export const sendMessage = async (messageData, authToken) => {
         type,
       });
     }
-
+    
     formData.append('receiverId', messageData.receiverId);
     formData.append('messageType', messageData.messageType);
-
+    
     const response = await axios.post(SEND_MESSAGE_API_URL, formData, {
       headers: {
         'Content-Type': 'multipart/form-data',
         Authorization: `Bearer ${authToken}`,
       },
     });
-
+    
     return response.data;
   } catch (error) {
-    console.error('Error sending message:', error);
+    console.error('Error sending message:');
+    console.error('Error message:', error.message);
+    if (error.response) {
+      console.error('Response status:', error.response.status);
+      console.error('Response headers:', error.response.headers);
+      console.error('Response data:', error.response.data);
+    } else if (error.request) {
+      console.error('No response received. Request details:', error.request);
+    }
+    console.error('Error config:', error.config);
+    console.error('Full error details:', error.toJSON ? error.toJSON() : error);
     throw error;
   }
+};
+
+const getProfileImageUrl = (imagePath) => {
+  if (!imagePath) return null;
+  if (imagePath.startsWith('http')) return imagePath;
+  return `http://localhost:3000${imagePath}`;
 };
 
 export const getFullMediaUrl = (mediaPath) => {

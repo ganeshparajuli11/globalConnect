@@ -221,6 +221,7 @@ const getAllMessages = async (req, res) => {
   try {
     const currentUserId = req.user.id;
     const isAdmin = req.user.role === "admin";
+    const isSuperAdmin = req.user.role === "superadmin";
     const { searchQuery = "", page = 1, limit = 20 } = req.query;
 
     // Base query: match name based on search
@@ -228,39 +229,42 @@ const getAllMessages = async (req, res) => {
       name: { $regex: searchQuery, $options: "i" }
     };
 
-    if (!isAdmin) {
+    // If the user is NOT an admin AND NOT a superadmin, restrict the contacts
+    if (!isAdmin && !isSuperAdmin) {
       const currentUser = await User.findById(currentUserId, "following followers").lean();
-
+    
       const mutualFollowers = currentUser.followers.filter(follower =>
         currentUser.following.some(following => following._id.toString() === follower._id.toString())
       );
-
+    
       const userIdsToSearch = new Set([
         ...currentUser.following.map(user => user.toString()),
         ...currentUser.followers.map(user => user.toString()),
         ...mutualFollowers.map(user => user.toString())
       ]);
-
-      // Include any user with role "admin" automatically.
+    
+      // Include any user with role "admin" OR "superadmin" automatically.
       query.$or = [
         { _id: { $in: Array.from(userIdsToSearch) } },
-        { role: "admin" }
+        { role: { $in: ["admin", "superadmin"] } }
       ];
     }
-
-    const users = await User.find(query, "_id name avatar profile_image")
+    
+    // For admin and superadmin we do not restrict the query.
+    // Also include role data in the projection.
+    const users = await User.find(query, "_id name avatar profile_image role")
       .sort({ name: 1 })
       .skip((page - 1) * limit)
       .limit(parseInt(limit))
       .lean();
 
-    const conversations = await Promise.all(
+    let conversations = await Promise.all(
       users.map(async (user) => {
         const lastMessage = await Message.findOne({
           $or: [
             { sender: currentUserId, receiver: user._id },
-            { sender: user._id, receiver: currentUserId },
-          ],
+            { sender: user._id, receiver: currentUserId }
+          ]
         })
           .sort({ timestamp: -1 })
           .lean();
@@ -269,6 +273,7 @@ const getAllMessages = async (req, res) => {
           userId: user._id,
           name: user.name,
           avatar: user.avatar || user.profile_image,
+          role: user.role,
           lastMessage: lastMessage
             ? lastMessage.messageType === "text"
               ? decrypt(lastMessage.content)
@@ -282,11 +287,33 @@ const getAllMessages = async (req, res) => {
       })
     );
 
+    // Group admin conversations for superadmin:
+if (isSuperAdmin) {
+  // Filter conversations where the participant's role is "admin" or "superadmin"
+  const adminConvs = conversations.filter(conv => conv.role === "admin" || conv.role === "superadmin");
+  if (adminConvs.length > 1) {
+    // Separate those with messages and those without
+    const adminNoMessage = adminConvs.filter(conv => !conv.hasMessages);
+    const adminWithMessage = adminConvs.filter(conv => conv.hasMessages);
+    // For those without messages, pick only the first one (after sorting by name)
+    let groupedAdminConvs = [];
+    if (adminNoMessage.length > 0) {
+      groupedAdminConvs.push(adminNoMessage[0]);
+    }
+    // Always include conversations that already have messages
+    groupedAdminConvs = groupedAdminConvs.concat(adminWithMessage);
+    // Remove both admin and superadmin conversations from the original list...
+    conversations = conversations.filter(conv => conv.role !== "admin" && conv.role !== "superadmin");
+    // ...and then add the grouped admin/superadmin conversations.
+    conversations = conversations.concat(groupedAdminConvs);
+  }
+}
+    // Sort the final conversations array descending by timestamp.
     conversations.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
 
     res.status(200).json({
       success: true,
-      message: isAdmin
+      message: (isAdmin || isSuperAdmin)
         ? "Admin: All users fetched with last messages."
         : "User: Allowed contacts fetched with last messages.",
       data: conversations,
@@ -301,8 +328,8 @@ const getAllMessages = async (req, res) => {
 
 const getMessagesForAdmin = async (req, res) => {
   try {
-    if (req.user.role !== "admin") {
-      return res.status(403).json({ error: "Forbidden: Admins only." });
+    if (req.user.role !== "admin" && req.user.role !== "superadmin") {
+      return res.status(403).json({ error: "Forbidden: Admins or Superadmins only." });
     }
 
     const currentUserId = req.user.id;

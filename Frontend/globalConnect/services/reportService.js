@@ -49,8 +49,7 @@ export const useFetchCategories = () => {
  * @param {string}  - The ID of the report category.
  * @returns {Promise<Object>} - The response data.
  */
-export const reportUser = async (reportedUserId, reportCategoryId) => {
-  const { authToken } = userAuth();  // Dynamically get authToken from the context
+export const reportUser = async (reportedUserId, reportCategoryId, authToken) => {
   try {
     const response = await axios.post(
       REPORT_USER_API_URL,

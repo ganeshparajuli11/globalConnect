@@ -18,7 +18,7 @@ import { theme } from "../constants/theme";
 import { hp } from "../helpers/common";
 import config from "../constants/config";
 import { userAuth } from "../contexts/AuthContext";
-import { reportUser } from "../services/reportService"; // Ensure this is imported
+import { reportUser } from "../services/reportService"; 
 import ReportCategoryCard from "./ReportCategoryCard";
 import { useFetchCategories } from "../services/reportService";
 
@@ -108,13 +108,36 @@ const UserProfileCard = ({ user, isFollowing, onFollowToggle }) => {
         {
           text: "Block",
           style: "destructive",
-          onPress: () => {
-            // Block logic will go here
+          onPress: async () => {
+            try {
+              // Note: you can also use user._id or any other dynamic target here
+              const response = await axios.put(
+                `http://${ip}:3000/api/profile/block-unblock`,
+                { targetUserId:user._id },
+                {
+                  headers: {
+                    "Content-Type": "application/json",
+                    Authorization: `Bearer ${authToken}`,
+                  },
+                }
+              );
+              if (response.status === 200) {
+                Alert.alert("Success", `${user.name} has been successfully blocked.`);
+                await refreshUserProfile()
+                router.replace("/home"); // Redirect to home after blocking
+              } else {
+                Alert.alert("Error", "Unable to block the user. Please try again.");
+              }
+            } catch (error) {
+              console.error("Block user error:", error.response?.data || error.message);
+              Alert.alert("Error", "An error occurred while blocking the user.");
+            }
           },
         },
       ]
     );
   };
+  
 
   // Instead of directly alerting, open the report user modal (Report Card)
   const handleReportUser = () => {
@@ -131,7 +154,7 @@ const UserProfileCard = ({ user, isFollowing, onFollowToggle }) => {
 
     try {
       setIsSubmitting(true);
-      const response = await reportUser(user._id, selectedCategory);
+      const response = await reportUser(user._id, selectedCategory,authToken);
 
       if (response.success) {
         setReportUserModalVisible(false);

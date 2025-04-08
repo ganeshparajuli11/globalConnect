@@ -278,8 +278,12 @@ LogBox.ignoreLogs([
   "Warning: TNodeChildrenRenderer",
   "Warning: MemoizedTNodeRenderer",
   "Warning: TRenderEngineProvider",
-  "Permission to access location was denied" // Added this line
+  "Permission to access location was denied",
+  "Setting a timer for a long period of time",
+  "AsyncStorage has been extracted from react-native core",
+  "Current location is unavailable. Make sure that location services are enabled"
 ]);
+
 
 const Layout = () => {
   return (

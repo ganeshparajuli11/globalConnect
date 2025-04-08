@@ -99,7 +99,7 @@ async function adminSignup(req, res) {
   if (req.file) {
     // Construct the file URL based on your storage destination.
     // For example, if the storage destination is "./uploads/profile/", then:
-    profileImageUrl = `/uploads/profile/${req.file.filename}`;
+    profileImageUrl = `uploads/profile/${req.file.filename}`;
   }
 
   try {

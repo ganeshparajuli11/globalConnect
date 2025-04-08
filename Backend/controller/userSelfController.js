@@ -6,6 +6,7 @@ const crypto = require("crypto"); // To generate a random OTP
 const bcrypt = require("bcrypt");
 const mongoose = require("mongoose");
 
+
 const getUserProfile = async (req, res) => {
   try {
     const user = req.user;
@@ -448,6 +449,11 @@ const blockUnblockUser = async (req, res) => {
 
     if (!targetUserId) {
       return res.status(400).json({ message: "Target user ID is required." });
+    }
+
+    // Prevent a user from blocking themselves
+    if (userId === targetUserId) {
+      return res.status(400).json({ message: "You cannot block yourself." });
     }
 
     const user = await User.findById(userId);
