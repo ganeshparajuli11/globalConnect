@@ -42,13 +42,7 @@ export const useFetchCategories = () => {
   return { categories, loading };
 };
 
-/**
- * reportUser
- * Reports a user.
- * @param {string} reportedUserId - The ID of the user being reported.
- * @param {string}  - The ID of the report category.
- * @returns {Promise<Object>} - The response data.
- */
+
 export const reportUser = async (reportedUserId, reportCategoryId, authToken) => {
   try {
     const response = await axios.post(
@@ -58,20 +52,19 @@ export const reportUser = async (reportedUserId, reportCategoryId, authToken) =>
     );
     return response.data;
   } catch (error) {
-    console.error("Error reporting user:", error);
-    throw error;
+    console.error("Error reporting user:", error.response?.data || error.message);
+    // Return a standard response to be handled in UI
+    let message = "An error occurred while reporting.";
+    if (error.response && error.response.data && error.response.data.message) {
+      message = error.response.data.message;
+    }
+    return { success: false, message };
   }
 };
 
-/**
- * reportPost
- * Reports a post.
- * @param {string} reportedPostId - The ID of the post being reported.
- * @param {string} reportCategoryId - The ID of the report category.
- * @returns {Promise<Object>} - The response data.
- */
+
 export const reportPost = async (postId, selectedCategory, authToken) => {
-  console.log('Checking from report service');
+ 
   
   try {
     const response = await axios.post(
@@ -81,22 +74,17 @@ export const reportPost = async (postId, selectedCategory, authToken) => {
     );
     return response.data;
   } catch (error) {
-    if (error.response) {
-      // The server responded with a status code that falls out of the range of 2xx
-      console.error("Error reporting post:", {
-        status: error.response.status,
-        statusText: error.response.statusText,
-        data: error.response.data,
-        headers: error.response.headers,
-      });
-    } else if (error.request) {
-      // The request was made but no response was received
-      console.error("Error reporting post (no response received):", error.request);
-    } else {
-      // Something happened in setting up the request
-      console.error("Error reporting post (request setup):", error.message);
+    const errorMessage =
+      (error.response && error.response.data && error.response.data.message) ||
+      error.message ||
+      "An error occurred while reporting.";
+      
+    // Only log if it is NOT the self-report error message
+    if (errorMessage !== "You cannot report your own post.") {
+      console.error("Error reporting post:", errorMessage);
     }
-    throw error;
+      
+    return { success: false, message: errorMessage };
   }
 };
 

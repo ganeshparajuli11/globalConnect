@@ -167,53 +167,76 @@ const Chat = () => {
     }
   };
 
-  const renderMessage = (msg, index) => {
-    const isSender = msg.sender._id === user?.user?.id;
-    switch (msg.messageType) {
-      case "text":
-        return (
-          <View
-            key={msg._id + index}
-            style={[styles.messageContainer, isSender ? styles.sender : styles.receiver]}
-          >
+// Inside your renderMessage function in chat.jsx
+const renderMessage = (msg, index) => {
+  const isSender = msg.sender._id === user?.user?.id;
+  switch (msg.messageType) {
+    case "text":
+      return (
+        <View
+          key={msg._id + index}
+          style={[styles.messageContainer, isSender ? styles.sender : styles.receiver]}
+        >
+          <Text style={isSender ? styles.senderText : styles.receiverText}>
+            {msg.content}
+          </Text>
+        </View>
+      );
+    case "image":
+      const imageUrl = msg.media && msg.media.length > 0 ? getFullMediaUrl(msg.media) : null;
+      return (
+        <View
+          key={msg._id + index}
+          style={[styles.messageContainer, isSender ? styles.sender : styles.receiver]}
+        >
+          {imageUrl && (
+            <TouchableOpacity
+              onLongPress={() => handleLongPressImage(imageUrl)}
+              onPress={() => setIsPreviewModalVisible(true)}
+            >
+              <Image
+                source={{ uri: imageUrl }}
+                style={styles.messageImage}
+                resizeMode="cover"
+                onError={() => {}}
+              />
+            </TouchableOpacity>
+          )}
+          {msg.content && (
             <Text style={isSender ? styles.senderText : styles.receiverText}>
               {msg.content}
             </Text>
-          </View>
-        );
-      case "image":
-        const imageUrl = msg.media && msg.media.length > 0 ? getFullMediaUrl(msg.media) : null;
-        return (
-          <View
-            key={msg._id + index}
-            style={[styles.messageContainer, isSender ? styles.sender : styles.receiver]}
-          >
-            {imageUrl && (
-              <TouchableOpacity
-                onLongPress={() => handleLongPressImage(imageUrl)}
-                onPress={() => setIsPreviewModalVisible(true)}
-              >
-                <Image
-                  source={{ uri: imageUrl }}
-                  style={styles.messageImage}
-                  resizeMode="cover"
-                  onError={() => {
-                    // Suppress error silently.
-                  }}
-                />
-              </TouchableOpacity>
+          )}
+        </View>
+      );
+    case "post":
+      // Render a shared post preview and handle navigation on press.
+      return (
+        <TouchableOpacity
+          key={msg._id + index}
+          style={[styles.messageContainer, isSender ? styles.sender : styles.receiver]}
+          onPress={() => router.push(`/postDetails?postId=${msg.postId}`)}
+          activeOpacity={0.8}
+        >
+          <View style={styles.sharedPostContainer}>
+            <Text style={styles.sharedPostLabel}>Shared Post</Text>
+            {msg.media && msg.media.length > 0 && (
+              <Image
+                source={{ uri: getFullMediaUrl(msg.media) }}
+                style={styles.sharedPostImage}
+                resizeMode="cover"
+              />
             )}
             {msg.content && (
-              <Text style={isSender ? styles.senderText : styles.receiverText}>
-                {msg.content}
-              </Text>
+              <Text style={styles.sharedPostContent}>{msg.content}</Text>
             )}
           </View>
-        );
-      default:
-        return null;
-    }
-  };
+        </TouchableOpacity>
+      );
+    default:
+      return null;
+  }
+};
 
   return (
     <ScreenWrapper>
@@ -394,30 +417,28 @@ const styles = StyleSheet.create({
     top: 40,
     right: 20,
   },
-  sharedPostContainer: {
-    padding: 15,
-    width: 250,
-  },
-  sharedPostLabel: {
-    fontWeight: "bold",
-    marginBottom: 5,
-    fontSize: 14,
-  },
-  sharedPostImage: {
-    width: "100%",
-    height: 150,
-    borderRadius: 8,
-    marginVertical: 8,
-  },
-  sharedPostContent: {
-    fontSize: 14,
-    marginVertical: 5,
-  },
-  sharedPostAuthor: {
-    fontSize: 12,
-    fontStyle: "italic",
-    marginTop: 5,
-  },
+ // Add these in your StyleSheet.create({...}) in chat.jsx
+sharedPostContainer: {
+  padding: 15,
+  width: 250,
+  backgroundColor: "#f0f0f0",
+  borderRadius: 8,
+},
+sharedPostLabel: {
+  fontWeight: "bold",
+  marginBottom: 5,
+  fontSize: 14,
+},
+sharedPostImage: {
+  width: "100%",
+  height: 150,
+  borderRadius: 8,
+  marginVertical: 8,
+},
+sharedPostContent: {
+  fontSize: 14,
+  color: "#333",
+},
 });
 
 export default Chat;

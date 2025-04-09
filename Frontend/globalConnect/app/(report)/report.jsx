@@ -23,25 +23,29 @@ const Report = ({ visible }) => {
   const [reporting, setReporting] = useState(false);
 const {authToken} = userAuth()
   
-  const handleReportPost = async () => {
-    if (!selectedCategory) {
-      Alert.alert("Select Category", "Please select a category to report.");
-      return;
-    }
-  
-    console.log("Reporting post with:", { postId, selectedCategory }); // Debugging log
-  
-    try {
-      setReporting(true);
-      await reportPost(postId, selectedCategory,authToken);
+const handleReportPost = async () => {
+  if (!selectedCategory) {
+    Alert.alert("Select Category", "Please select a category to report.");
+    return;
+  }
+
+  console.log("Reporting post with:", { postId, selectedCategory });
+  try {
+    setReporting(true);
+    // Capture the returned result from reportPost
+    const result = await reportPost(postId, selectedCategory, authToken);
+    if (result.success) {
       Alert.alert("Report Submitted", "Your report has been submitted successfully.");
       router.back();
-    } catch (error) {
-      Alert.alert("Error", "Failed to submit report. Please try again.");
-    } finally {
-      setReporting(false);
+    } else {
+      Alert.alert("Report Failed", result.message || "Unable to submit report. Please try again.");
     }
-  };
+  } catch (error) {
+    Alert.alert("Report Failed", error.message || "Unable to submit report. Please try again.");
+  } finally {
+    setReporting(false);
+  }
+};
   
 
   const handleClose = () => {

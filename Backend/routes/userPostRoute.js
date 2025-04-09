@@ -22,7 +22,8 @@ const {
 
 } = require("../controller/userPostController");
 const { uploadPostMedia } = require("../middleware/uploadMiddleware");
-const { sharePost } = require("../controller/userShareController");
+const { sharePost } = require("../controller/userMessaging");
+
 
 // Define a POST route for creating posts with file upload
 router.post(

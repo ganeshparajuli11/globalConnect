@@ -3,7 +3,7 @@ const User = require("../models/userSchema");
 const Message = require("../models/messageSchema");
 const { sendRealTimeMessage } = require("./socketController"); // Ensure socketController exports a valid io instance
 const { sendExpoPushNotification } = require("./pushTokenController");
-
+const Post = require("../models/postSchema");
 const ENCRYPTION_KEY = Buffer.from(process.env.ENCRYPTION_KEY, "hex");
 const IV_LENGTH = 16;
 
@@ -213,10 +213,7 @@ const getMessages = async (req, res) => {
   }
 };
 
-/**
- * Fetch all conversations for the current user.
- * For non-admins, the query includes users from their following/followers as well as any user with role "admin".
- */
+
 const getAllMessages = async (req, res) => {
   try {
     const currentUserId = req.user.id;
@@ -403,10 +400,125 @@ const getMessagesForAdmin = async (req, res) => {
 };
 
 
+const sharePost = async (req, res) => {
+  try {
+    const { postId, recipientId, customMessage } = req.body; // customMessage is optional
+    const senderId = req.user.id;
+
+    // Validate request data
+    if (!postId || !recipientId) {
+      return res.status(400).json({ 
+        success: false, 
+        message: "Post ID and recipient ID are required" 
+      });
+    }
+
+    // Validate post exists and get post details
+    const post = await Post.findById(postId);
+    if (!post) {
+      return res.status(404).json({ success: false, message: "Post not found" });
+    }
+
+    // Validate sender and recipient exist and get their details
+    const [sender, recipient] = await Promise.all([
+      User.findById(senderId).select('name following profile_image'),
+      User.findById(recipientId).select('name profile_image blocked_users')
+    ]);
+
+    if (!sender || !recipient) {
+      return res.status(404).json({ success: false, message: "User not found" });
+    }
+
+    // Check if sender follows recipient
+    if (!sender.following.includes(recipientId)) {
+      return res.status(403).json({ 
+        success: false, 
+        message: "You can only share with users you follow" 
+      });
+    }
+
+    // Check if recipient has blocked sender
+    if (recipient.blocked_users.includes(senderId)) {
+      return res.status(403).json({ 
+        success: false, 
+        message: "Cannot share post with this user" 
+      });
+    }
+
+    // Create a new message with messageType "post"
+    // If a custom message is provided, include it; otherwise use a default content
+    const content = customMessage && customMessage.trim() !== ""
+      ? customMessage.trim()
+      : "Shared a post with you";
+
+    const message = new Message({
+      sender: senderId,
+      receiver: recipientId,
+      messageType: "post",
+      content, // store the custom message (or default) as content
+      post: postId,
+      timestamp: new Date()
+    });
+
+    await message.save();
+
+    // Prepare the message payload for real-time delivery
+    const messagePayload = {
+      _id: message._id,
+      sender: { _id: senderId, name: sender.name },
+      receiver: { _id: recipientId, name: recipient.name },
+      messageType: "post",
+      content, // Include the custom content
+      postId: post._id,
+      // When available, include a preview of post media if exists
+      media: post.media && post.media.length > 0 ? post.media[0] : null,
+      timestamp: message.timestamp,
+    };
+
+    // Emit real-time message using socket
+    sendRealTimeMessage(senderId, recipientId, messagePayload);
+
+    // Send push notification if recipient is offline
+    const senderData = await User.findById(senderId, "name").lean();
+    const receiverData = await User.findById(recipientId, "expoPushToken name").lean();
+    if (receiverData?.expoPushToken) {
+      let pushMessage = (messageType => {
+        if (messageType === "post") return `${senderData.name} shared a post with you`;
+        return `${senderData.name} sent you a message`;
+      })("post");
+      const payload = { screen: "chat", senderId, name: senderData.name };
+      await sendExpoPushNotification(receiverData.expoPushToken, "New Post Shared", pushMessage, payload, "message");
+    }
+
+    // Update post share count
+    await Post.findByIdAndUpdate(postId, { $inc: { shares: 1 } });
+
+    return res.status(200).json({
+      success: true,
+      message: "Post shared successfully",
+      data: {
+        messageId: message._id,
+        timestamp: message.timestamp,
+        status: "delivered",
+        messagePayload
+      }
+    });
+  } catch (error) {
+    console.error("Error sharing post:", error);
+    return res.status(500).json({ 
+      success: false, 
+      message: "Failed to share post",
+      error: error.message 
+    });
+  }
+};
+
+
 module.exports = {
   sendMessage,
   getMessages,
   markMessageAsRead,
   getAllMessages,
   getMessagesForAdmin,
+  sharePost 
 };

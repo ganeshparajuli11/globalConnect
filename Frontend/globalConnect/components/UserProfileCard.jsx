@@ -36,7 +36,6 @@ const UserProfileCard = ({ user, isFollowing, onFollowToggle }) => {
   const [reportUserModalVisible, setReportUserModalVisible] = useState(false);
   // State for report category (or reason) input
   const [reportCategory, setReportCategory] = useState("");
-  // Add these states inside UserProfileCard component
   const [selectedCategory, setSelectedCategory] = useState(null);
   const { categories, loading: categoriesLoading } = useFetchCategories();
 
@@ -151,11 +150,11 @@ const UserProfileCard = ({ user, isFollowing, onFollowToggle }) => {
       Alert.alert("Error", "Please select a reason for reporting");
       return;
     }
-
+  
     try {
       setIsSubmitting(true);
-      const response = await reportUser(user._id, selectedCategory,authToken);
-
+      const response = await reportUser(user._id, selectedCategory, authToken);
+  
       if (response.success) {
         setReportUserModalVisible(false);
         setSelectedCategory(null);
@@ -165,6 +164,7 @@ const UserProfileCard = ({ user, isFollowing, onFollowToggle }) => {
           [{ text: "OK" }]
         );
       } else {
+        // Show the popup using the response error message
         Alert.alert(
           "Report Failed",
           response.message || "Unable to submit report. Please try again.",
