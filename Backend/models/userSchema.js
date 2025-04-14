@@ -48,7 +48,7 @@ const userSchema = new mongoose.Schema(
       },
     },
     in_destination: { type: Boolean, default: false },
-
+    email_verfied: { type: Boolean, default: false },
     // Account and moderation status
     is_blocked: { type: Boolean, default: false },
     is_suspended: { type: Boolean, default: false },

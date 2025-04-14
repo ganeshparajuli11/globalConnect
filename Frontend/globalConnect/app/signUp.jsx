@@ -39,6 +39,16 @@ const SignUp = () => {
   const router = useRouter();
   const { setAuth } = userAuth();
 
+  // Email validation regex
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+  // Enhanced password validation using regex:
+  // At least 8 characters, one uppercase, one lowercase, one number, and one special character.
+  const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]).{8,}$/;
+  const isValidPassword = (pwd) => {
+    return passwordRegex.test(pwd);
+  };
+
   const formatDate = (date) => {
     let day = date.getDate();
     let month = date.getMonth() + 1;
@@ -53,23 +63,43 @@ const SignUp = () => {
     const birthDate = new Date(dob);
     let age = today.getFullYear() - birthDate.getFullYear();
     const monthDifference = today.getMonth() - birthDate.getMonth();
-    if (monthDifference < 0 || (monthDifference === 0 && today.getDate() < birthDate.getDate())) {
+    if (
+      monthDifference < 0 ||
+      (monthDifference === 0 && today.getDate() < birthDate.getDate())
+    ) {
       age--;
     }
     return age;
   };
 
   const handleSignup = async () => {
+    // Validate that all fields are filled
     if (!name || !email || !password || !confirmPassword || !dob) {
       setErrorMessage("Please fill in all fields.");
       setShowErrorModal(true);
       return;
     }
+    // Validate email format
+    if (!emailRegex.test(email)) {
+      setErrorMessage("Please enter a valid email address.");
+      setShowErrorModal(true);
+      return;
+    }
+    // Validate enhanced password strength
+    if (!isValidPassword(password)) {
+      setErrorMessage(
+        "Password must be at least 8 characters long and include at least one uppercase letter, one lowercase letter, one digit, and one special character."
+      );
+      setShowErrorModal(true);
+      return;
+    }
+    // Validate matching passwords
     if (password !== confirmPassword) {
       setErrorMessage("Passwords do not match.");
       setShowErrorModal(true);
       return;
     }
+    // Validate age requirement
     if (calculateAge(dob) < 18) {
       setErrorMessage("You must be at least 18 years old to sign up.");
       setShowErrorModal(true);
@@ -85,23 +115,21 @@ const SignUp = () => {
         dob: dob.toISOString(),
       });
 
-      console.log("Signup response:", response.data);
-
       // Check for the authToken key as returned from the backend.
       if (response.data?.authToken) {
-        // Use the authContext to store user data and token.
+        // Store user data and token using the auth context.
         await setAuth(response.data.data.user, response.data.authToken);
 
         // Send OTP to the user's email
-        const otpResponse = await axios.post(`http://${ip}:3000/api/profile/forgot-password`, {
-          email,
-        });
+        const otpResponse = await axios.post(
+          `http://${ip}:3000/api/profile/newuser`,
+          { email }
+        );
 
         const message = otpResponse.data?.message;
-
         if (message === "OTP sent to your email.") {
           // Redirect to verifyOTP page with the user's email
-          router.replace(`/verifyOTP?email=${encodeURIComponent(email)}`);
+          router.replace(`/verifyNewUserOtp?email=${encodeURIComponent(email)}`);
         } else {
           setErrorMessage(message || "Something went wrong. Please try again.");
           setShowErrorModal(true);
@@ -111,8 +139,18 @@ const SignUp = () => {
         setShowErrorModal(true);
       }
     } catch (error) {
-      console.error("Signup error:", error.response?.data || error.message);
-      setErrorMessage("Something went wrong. Please try again.");
+      // Extract message from error response if available
+      const backendMessage =
+        error.response && error.response.data && error.response.data.message
+          ? error.response.data.message
+          : error.message;
+
+      // Suppress detailed backend error and show a user-friendly message
+      if (backendMessage.includes("Password must be at least 8 characters")) {
+        setErrorMessage("Your password does not meet the strength requirements.");
+      } else {
+        setErrorMessage("Something went wrong. Please try again.");
+      }
       setShowErrorModal(true);
     } finally {
       setLoading(false);
@@ -179,9 +217,7 @@ const SignUp = () => {
             onChangeText={setConfirmPassword}
           />
           <TouchableOpacity
-            onPress={() =>
-              setIsConfirmPasswordVisible(!isConfirmPasswordVisible)
-            }
+            onPress={() => setIsConfirmPasswordVisible(!isConfirmPasswordVisible)}
           >
             <Ionicons
               name={isConfirmPasswordVisible ? "eye-off" : "eye"}

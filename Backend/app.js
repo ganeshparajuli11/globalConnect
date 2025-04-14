@@ -64,7 +64,7 @@ app.use('/api', logoController);
 
 app.use("/uploads", express.static("uploads"));
 
-// Define checkSuspensions to check and update suspension statuses
+
 const checkSuspensions = async () => {
   console.log("Running suspension check at", new Date().toLocaleString());
 

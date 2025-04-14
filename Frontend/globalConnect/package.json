@@ -3,7 +3,7 @@
   "main": "expo-router/entry",
   "version": "1.0.0",
   "scripts": {
-    "start": "expo start",
+    "start": "node generateConfig.mjs && expo start",
     "reset-project": "node ./scripts/reset-project.js",
     "android": "expo start --android",
     "ios": "expo start --ios",
@@ -44,6 +44,7 @@
     "expo-web-browser": "~14.0.2",
     "express-socket.io": "^1.0.3",
     "firebase": "^11.4.0",
+    "internal-ip": "^8.0.0",
     "moment": "^2.30.1",
     "react": "18.3.1",
     "react-dom": "18.3.1",

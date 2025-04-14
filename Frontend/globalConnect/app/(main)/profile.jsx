@@ -21,9 +21,10 @@ import * as ImagePicker from "expo-image-picker";
 import UserPostCardDetails from "../../components/UserPostCardDetails";
 import axios from "axios";
 
+
 const Profile = () => {
   const router = useRouter();
-  const { user, authToken, setUserData, refreshUserProfile } = userAuth();
+  const { user, authToken, refreshUserProfile } = userAuth();
   const ip = config.API_IP;
   const profileImagePath =
     user?.user?.profile_image?.uri || user?.user?.profile_image || "";
@@ -40,23 +41,20 @@ const Profile = () => {
     return null; // Return null while loading
   }
 
-  // State to show the full-screen profile image modal
+  // State for full-screen profile image modal
   const [fullImageModalVisible, setFullImageModalVisible] = useState(false);
-  // State for showing our custom camera options dialog
+  // State for showing custom camera options dialog
   const [cameraOptionsVisible, setCameraOptionsVisible] = useState(false);
 
-  // Called when the profile image (or camera icon) is tapped
   const handleCameraPress = () => {
     setCameraOptionsVisible(true);
   };
 
-  // Option: View the image in full screen
   const handleViewImage = () => {
     setCameraOptionsVisible(false);
     setFullImageModalVisible(true);
   };
 
-  // Option: Update the profile image by picking an image from the library
   const handleUpdateImage = async () => {
     setCameraOptionsVisible(false);
 
@@ -117,31 +115,6 @@ const Profile = () => {
     }
   };
 
-  user.posts.map((post) => {
-    const transformedPost = {
-      id: post._id, // Match backend's `_id`
-      content: post.content, // Match backend's `text_content`
-      time: post.createdAt, // Match backend's `createdAt`
-      commentCount: post.commentsCount, // Match backend's `commentsCount`
-      likeCount: post.likesCount, // Match backend's `likesCount`
-      liked: post.likes?.includes(user.user.id) || false, // Handle `liked` logic
-      media:
-        post.media?.map((m) => ({
-          id: m._id, // Use `_id` from media object
-          url: `http://${ip}:3000${m.media_path}`, // Construct media URL using `media_path`
-        })) || [],
-      user: {
-        id: user.user.id, // Use current user's ID
-        name: user.user.name, // Use current user's name
-        profile_image: user.user.profile_image, // Use current user's profile image
-        verified: user.user.verified ?? false, // Handle `verified` logic
-      },
-    };
-
-
-  
-  })
-
   return (
     <ScreenWrapper>
       <StatusBar style="dark" />
@@ -164,7 +137,7 @@ const Profile = () => {
                   style={styles.profileImage}
                 />
 
-                {/* Camera Icon overlay */}
+                {/* Camera Icon Overlay */}
                 <TouchableOpacity
                   style={styles.cameraIcon}
                   onPress={handleCameraPress}
@@ -229,25 +202,26 @@ const Profile = () => {
           {/* Posts Section */}
           <View style={styles.postsSection}>
             <Text style={styles.postsTitle}>Posts</Text>
-            {user?.posts && user.posts.length > 0 ? (
-              user.posts.map((post) => {
+            {user?.posts?.length > 0 ? (
+              // Use optional chaining or fallback to an empty array
+              (user.posts || []).map((post) => {
                 const transformedPost = {
                   id: post.id, // Match backend's `_id`
                   content: post.content, // Match backend's `text_content`
                   time: post.createdAt, // Match backend's `createdAt`
                   commentCount: post.commentsCount, // Match backend's `commentsCount`
                   likeCount: post.likesCount, // Match backend's `likesCount`
-                  liked: post.likes?.includes(user.user.id) || false, // Handle `liked` logic
+                  liked: post.likes?.includes(user.user.id) || false, // Handle liked logic
                   media:
                     post.media?.map((m) => ({
-                      id: m._id, // Use `_id` from media object
-                      url: `http://${ip}:3000${m.media_path}`, // Construct media URL using `media_path`
+                      id: m._id,
+                      url: `http://${ip}:3000${m.media_path}`,
                     })) || [],
                   user: {
-                    id: user.user.id, // Use current user's ID
-                    name: user.user.name, // Use current user's name
-                    profile_image: user.user.profile_image, // Use current user's profile image
-                    verified: user.user.verified ?? false, // Handle `verified` logic
+                    id: user.user.id,
+                    name: user.user.name,
+                    profile_image: user.user.profile_image,
+                    verified: user.user.verified ?? false,
                   },
                 };
 
@@ -272,7 +246,7 @@ const Profile = () => {
             <View style={styles.interestsSection}>
               <Text style={styles.interestsTitle}>Interests</Text>
               <Text style={styles.interestsText}>
-                {user?.interests.join(", ")}
+                {user.interests.join(", ")}
               </Text>
             </View>
           )}

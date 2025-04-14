@@ -56,7 +56,7 @@ export default function VerifyOTP() {
 
     try {
       // Make API call to verify OTP
-      const response = await axios.post(`http://${ip}:3000/api/profile/verify-otp`, {
+      const response = await axios.post(`http://${ip}:3000/api/profile/verify-newuser`, {
         email,
         otp,
       });
@@ -64,10 +64,10 @@ export default function VerifyOTP() {
       const message = response.data?.message;
       
       // Check if the OTP verification is successful
-      if (message === "OTP verified. You can now reset your password.") {
+      if (message === "Email verified successfully.") {
         Alert.alert("Success", message);
         // Navigate to the ConfirmPassword page with email as query parameter
-        router.replace("/login");
+        router.replace("/destination");
       } else {
         Alert.alert("Error", message || "Invalid OTP. Please try again.");
       }
@@ -143,7 +143,7 @@ const styles = StyleSheet.create({
   button: {
     width: "80%",
     padding: 12,
-    backgroundColor: theme.colors.primary, // Updated button background color
+    backgroundColor: theme.colors.primary,
     borderRadius: 8,
     justifyContent: "center",
     alignItems: "center",

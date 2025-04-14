@@ -1,6 +1,6 @@
 const express = require('express');
 const { checkAuthentication, checkIsUser, bothUser, checkDOBUpdated } = require('../middleware/middleware');
-const { getUserProfile, sendOTP, verifyOTP, resetPassword, changePassword, updateProfileImage, getFollowCounts, getUserProfileById, getFollowingOrFollowers, sendProfileUpdateOTP, updateUserProfile, blockUnblockUser, getBlockedUsers, searchUser, getUserProfileForMobile, getSelfProfileForMobile, updateDOB, initiateAccountDeletion, deactivateAccount } = require('../controller/userSelfController');
+const { getUserProfile, sendOTP, verifyOTP, resetPassword, changePassword, updateProfileImage, getFollowCounts, getUserProfileById, getFollowingOrFollowers, sendProfileUpdateOTP, updateUserProfile, blockUnblockUser, getBlockedUsers, searchUser, getUserProfileForMobile, getSelfProfileForMobile, updateDOB, initiateAccountDeletion, deactivateAccount, sendVerificationOTP, verifyEmailOTP } = require('../controller/userSelfController');
 const { uploadProfileImage } = require('../middleware/uploadMiddleware');
 const router = express.Router();
 
@@ -11,7 +11,11 @@ router.get('/getMyProfile',checkAuthentication,checkIsUser,  getSelfProfileForMo
 
 
 router.post('/forgot-password', sendOTP);
+router.post('/newuser', sendVerificationOTP);
+
 router.post('/verify-otp', verifyOTP);
+router.post('/verify-newuser', verifyEmailOTP);
+
 router.post('/reset-password', resetPassword);
 router.post('/change-password',checkAuthentication,bothUser, changePassword);
 router.post(

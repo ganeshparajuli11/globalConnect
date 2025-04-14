@@ -15,14 +15,30 @@ async function signup(req, res) {
     destination_country,
   } = req.body;
 
+  // Basic validation checks
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!email || !emailRegex.test(email)) {
+    return res.status(400).json({ message: "Invalid email address." });
+  }
+
+  if (!password || password.length < 8) {
+    return res.status(400).json({
+      message: "Password must be at least 8 characters long.",
+    });
+  }
+
+  if (!name) {
+    return res.status(400).json({ message: "Name is required." });
+  }
+
+  if (!dob) {
+    return res.status(400).json({ message: "Date of birth is required." });
+  }
+
   try {
     const existingUser = await User.findOne({ email });
     if (existingUser) {
       return res.status(400).json({ message: "Email is already registered." });
-    }
-
-    if (!dob) {
-      return res.status(400).json({ message: "Date of birth is required." });
     }
 
     const currentDate = new Date();
@@ -52,7 +68,7 @@ async function signup(req, res) {
     const authToken = jwt.sign(
       { id: user._id, role: user.role },
       JWT_SECRET_KEY,
-      { expiresIn: "1h" }
+      { expiresIn: "7d" }
     );
 
     const userResponse = {

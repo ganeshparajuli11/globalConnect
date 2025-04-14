@@ -281,7 +281,9 @@ LogBox.ignoreLogs([
   "Permission to access location was denied",
   "Setting a timer for a long period of time",
   "AsyncStorage has been extracted from react-native core",
-  "Current location is unavailable. Make sure that location services are enabled"
+  "Current location is unavailable. Make sure that location services are enabled",
+ " AxiosError: Request failed with status code 401",
+ "Error: [AsyncStorage] Passing null/undefined as value is not supported. If you want to remove value, Use .removeItem method instead. Passed value: undefined Passed key: authToken"
 ]);
 
 

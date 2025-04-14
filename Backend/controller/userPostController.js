@@ -63,7 +63,134 @@ async function createPost(req, res) {
   }
 }
 
+const getDestinationPosts = async (req, res) => {
+  try {
+    // Master toggle controlled by admin. Set in your environment variables.
+    const adminToggle = process.env.ADMIN_FILTER_TOGGLE === "true"; 
 
+    const currentUserId = req.user.id;
+    if (!currentUserId) {
+      return res.status(401).json({ message: "Unauthorized access." });
+    }
+
+    // Fetch the current user's destination and setting
+    const user = await User.findById(currentUserId).select("destination_country showGlobalContent blocked_users liked_posts");
+    if (!user) {
+      return res.status(404).json({ message: "User not found." });
+    }
+
+    // Pagination and filter parameters from query
+    let { page = 1, limit = 5, category = "", search = "" } = req.query;
+    page = parseInt(page);
+    limit = parseInt(limit);
+    const currentDate = new Date();
+
+    // Build the aggregation pipeline; similar to getAllPost
+    const pipeline = [
+      {
+        $lookup: {
+          from: 'users',
+          localField: 'user_id',
+          foreignField: '_id',
+          as: 'author'
+        }
+      },
+      { $unwind: '$author' },
+      {
+        $match: {
+          status: 'Active',
+          isBlocked: false,
+          isUnderReview: false,
+          "reports.4": { $exists: false },
+          $or: [
+            { isSuspended: false },
+            { isSuspended: true, suspended_until: { $lt: currentDate } }
+          ],
+          'author.is_blocked': false,
+          'author.is_deactivate': false,
+          'author.is_deleted': false,
+          $or: [
+            { 'author.is_suspended': false },
+            { 'author.is_suspended': true, 'author.suspended_until': { $lt: currentDate } }
+          ],
+          // Exclude posts authored by users this user has blocked:
+          'author._id': { $nin: user.blocked_users },
+          // Exclude posts if the current user has reported them
+          reports: { $not: { $elemMatch: { reported_by: mongoose.Types.ObjectId(currentUserId) } } }
+        }
+      }
+    ];
+
+    // If admin master toggle is ON and user setting is false then filter by destination
+    if (adminToggle && !user.showGlobalContent && user.destination_country) {
+      pipeline.push({
+        $match: {
+          // assuming that the author's destination is stored in their "destination_country" field
+          "author.destination_country": user.destination_country
+        }
+      });
+    }
+    
+    // Apply additional category and search filters if provided
+    if (category || search) {
+      const additionalMatch = {};
+      if (category && category !== "All") {
+        const catArray = category.split(",").map(c => new mongoose.Types.ObjectId(c.trim()));
+        additionalMatch.category_id = catArray.length > 1 ? { $in: catArray } : catArray[0];
+      }
+      if (search && search.trim() !== "") {
+        additionalMatch.$or = [
+          { text_content: { $regex: search, $options: "i" } },
+          { "author.name": { $regex: search, $options: "i" } }
+        ];
+      }
+      pipeline.push({ $match: additionalMatch });
+    }
+
+    // Sorting and pagination
+    pipeline.push(
+      { $sort: { createdAt: -1 } },
+      { $skip: (page - 1) * limit },
+      { $limit: limit }
+    );
+
+    const posts = await Post.aggregate(pipeline);
+
+    // Populate category and comments if needed
+    await Post.populate(posts, [
+      { path: "category_id", select: "name" },
+      { path: "comments", select: "text user_id createdAt" }
+    ]);
+
+    // Format posts to include whether the post is liked by the current user
+    const formattedPosts = posts.map(post => ({
+      id: post._id,
+      user: {
+        id: post.author._id,
+        name: post.author.name,
+        profile_image: post.author.profile_image || "https://via.placeholder.com/40",
+        verified: post.author.verified
+      },
+      type: post.category_id?.name || "Unknown Category",
+      time: post.createdAt,
+      content: post.text_content || "No content available",
+      media: post.media?.map(m => m.media_path) || [],
+      liked: (user.liked_posts || []).some(likedId => likedId.toString() === post._id.toString()),
+      likeCount: post.likes?.length || 0,
+      commentCount: post.comments?.length || 0,
+      shareCount: post.shares || 0
+    }));
+
+    return res.status(200).json({
+      message: "Posts retrieved successfully.",
+      data: formattedPosts,
+      pagination: { page, limit, total: formattedPosts.length }
+    });
+  } catch (error) {
+    console.error("Error fetching destination posts:", error);
+    return res.status(500).json({ message: "Failed to retrieve posts." });
+  }
+};
 
 
 // Get all posts based on query/interest/search logic
@@ -201,6 +328,9 @@ const formatPosts = (posts, user, req) => {
     shareCount: post.shares || 0
   }));
 };
+
+
+
 const searchPosts = async (req, res) => {
   try {
     const { query } = req.query;
@@ -1300,5 +1430,6 @@ module.exports = {
   deletePost,
   updateReportStatus,
   handlePostAdminAction,
-  getLikedUsers
+  getLikedUsers,
+  getDestinationPosts
 };

@@ -2163,7 +2163,7 @@ const sendEmailToUsers = async (req, res) => {
     // Send emails
     const mailOptions = {
       from: process.env.EMAIL,
-      bcc: recipients, // Use BCC for privacy
+      bcc: recipients, 
       subject: subject,
       html: emailTemplate(message)
     };

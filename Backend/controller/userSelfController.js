@@ -52,6 +52,112 @@ const getUserProfile = async (req, res) => {
   }
 };
 
+// for new user
+// Controller to send OTP for new user email verification
+const sendVerificationOTP = async (req, res) => {
+  try {
+    const { email } = req.body;
+    console.log("Step 1: Email from request body:", email);
+
+    // Check if user exists
+    const user = await User.findOne({ email });
+    if (!user) {
+      return res.status(404).json({ message: "User not found." });
+    }
+    console.log("Step 2: User found:", user);
+
+    // Generate a random OTP and expiration time (15 minutes)
+    const otp = crypto.randomInt(100000, 999999).toString();
+    const otpExpiry = new Date(Date.now() + 15 * 60 * 1000);
+    console.log("Step 3: Generated OTP:", otp);
+
+    // Save OTP and expiry in the user's record
+    user.reset_otp = otp;
+    user.otp_expiry = otpExpiry;
+    await user.save();
+    console.log("Step 4: OTP saved to user record.");
+
+    // Configure Nodemailer transporter
+    const transporter = nodemailer.createTransport({
+      service: "Gmail",
+      auth: {
+        user: process.env.EMAIL,
+        pass: process.env.EMAIL_PASSWORD,
+      },
+    });
+    console.log("Step 5: Transporter configured.");
+
+    // Define mail options for email verification
+    const mailOptions = {
+      from: process.env.EMAIL,
+      to: email,
+      subject: "Verify your email for GlobalConnect",
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 20px auto; border: 1px solid #ddd; border-radius: 10px; padding: 20px;">
+          <div style="text-align: center; margin-bottom: 20px;">
+            <h2 style="color: #4CAF50;">Email Verification</h2>
+          </div>
+          <p style="font-size: 16px; color: #333;">
+            Hello,
+          </p>
+          <p style="font-size: 16px; color: #333;">
+            Thank you for signing up with GlobalConnect. Please use the OTP below to verify your email. This OTP is valid for <strong>15 minutes</strong>.
+          </p>
+          <div style="text-align: center; margin: 20px 0;">
+            <p style="font-size: 24px; font-weight: bold; color: #4CAF50;">${otp}</p>
+          </div>
+          <p style="font-size: 16px; color: #333;">
+            If you did not sign up for this account, please ignore this email or contact our support team.
+          </p>
+          <p style="font-size: 16px; color: #333;">
+            Thank you,<br />
+            <strong>GlobalConnect</strong>
+          </p>
+        </div>
+      `,
+    };
+
+    // Send the email
+    await transporter.sendMail(mailOptions);
+    console.log("Step 6: OTP email sent successfully.");
+
+    res.status(200).json({ message: "OTP sent to your email." });
+  } catch (error) {
+    console.error("Error sending OTP:", error);
+    res.status(500).json({ message: "Internal server error." });
+  }
+};
+
+// Controller to verify the OTP for email verification
+const verifyEmailOTP = async (req, res) => {
+  try {
+    const { email, otp } = req.body;
+
+    // Find the user by email
+    const user = await User.findOne({ email });
+    if (!user || user.reset_otp !== otp) {
+      return res.status(400).json({ message: "Invalid OTP." });
+    }
+
+    // Check if the OTP has expired
+    if (user.otp_expiry < new Date()) {
+      return res.status(400).json({ message: "OTP has expired." });
+    }
+
+    // OTP is valid - mark email as verified
+    user.email_verified = true; // Ensure the property name matches your schema (e.g., email_verified)
+    // Optionally, clear OTP fields after verification
+    user.reset_otp = null;
+    user.otp_expiry = null;
+    await user.save();
+
+    res.status(200).json({ message: "Email verified successfully." });
+  } catch (error) {
+    console.error("Error verifying OTP:", error);
+    res.status(500).json({ message: "Internal server error." });
+  }
+};
+
 // for admin
 const getUserProfileById = async (req, res) => {
   try {
@@ -178,21 +284,25 @@ const verifyOTP = async (req, res) => {
   try {
     const { email, otp } = req.body;
 
-    // Step 1: Find the user by email
+    // Find the user by email
     const user = await User.findOne({ email });
     if (!user || user.reset_otp !== otp) {
       return res.status(400).json({ message: "Invalid OTP." });
     }
 
-    // Step 2: Check if the OTP has expired
+    // Check if the OTP has expired
     if (user.otp_expiry < new Date()) {
       return res.status(400).json({ message: "OTP has expired." });
     }
 
-    // Step 3: OTP is valid
-    res
-      .status(200)
-      .json({ message: "OTP verified. You can now reset your password." });
+    // OTP is valid - mark email as verified
+    user.email_verfied = true;
+    // Optionally, clear OTP fields after verification
+    user.reset_otp = null;
+    user.otp_expiry = null;
+    await user.save();
+
+    res.status(200).json({ message: "OTP verified. You can now reset your password." });
   } catch (error) {
     console.error("Error verifying OTP:", error);
     res.status(500).json({ message: "Internal server error." });
@@ -417,7 +527,7 @@ const updateUserProfile = async (req, res) => {
   }
 };
 
-// get Blocked users from a user
+
 // Get blocked users with name and profile image
 const getBlockedUsers = async (req, res) => {
   try {
@@ -805,7 +915,7 @@ const getSelfProfileForMobile = async (req, res) => {
 };
 
 
-// Add these controllers after existing controllers
+
 
 const deactivateAccount = async (req, res) => {
   try {
@@ -969,5 +1079,7 @@ module.exports = {
   getSelfProfileForMobile,
   updateDOB,
   deactivateAccount,
-  initiateAccountDeletion
+  initiateAccountDeletion,
+  verifyEmailOTP,
+  sendVerificationOTP
 };
