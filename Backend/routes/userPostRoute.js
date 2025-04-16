@@ -19,6 +19,7 @@ const {
   getReportedPostsAdmin,
   handlePostAdminAction,
   getLikedUsers,
+  toggleDestinationPost
 
 } = require("../controller/userPostController");
 const { uploadPostMedia } = require("../middleware/uploadMiddleware");
@@ -44,7 +45,7 @@ router.get('/liked/:postId', checkAuthentication, getLikedUsers);
 router.get("/admin/stats", checkAuthentication, checkIsAdmin, getPostStatsAdmin);
 router.post("/share", checkAuthentication,  sharePost);
 
-
+router.put("/toggle-destination", checkAuthentication, checkIsUser, toggleDestinationPost);
 
 
 // Edit post route - must be placed before /:postId to avoid route conflicts
@@ -55,7 +56,7 @@ router.put(
   uploadPostMedia.array("media", 4),
   editPost
 );
-
+router.put("/toggle-destination", checkAuthentication, checkIsUser, toggleDestinationPost);
 // Delete post route
 router.delete(
   "/:postId",

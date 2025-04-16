@@ -222,6 +222,7 @@ const Home = () => {
                       name: item.user?.name,
                       profile_image: item.user?.profile_image,
                       verified: item.user?.verified ?? false,
+                      destination: item.user?.destination,
                     },
                   }}
                   verifiedStatus={item.user?.verified ?? false} // Passing verified status explicitly

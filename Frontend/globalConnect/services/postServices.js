@@ -5,6 +5,9 @@ import { userAuth } from "../contexts/AuthContext";
 
 const ip = config.API_IP;
 const API_URL = `http://${ip}:3000/api/post/all`;
+const DESTINATION_POST_URL = `http://${ip}:3000/api/post/toggle-destination`;
+
+
 
 // Helper function to format post data
 const formatPostData = (post) => ({
@@ -170,4 +173,42 @@ export const useSearchPosts = (searchQuery) => {
       setError(null);
     },
   };
+};
+
+export const useToggleDestinationPost = () => {
+  const { authToken } = userAuth();
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+
+  const toggleDestination = async () => {
+    setLoading(true);
+    setError(null);
+
+    try {
+      const response = await axios.put(
+        DESTINATION_POST_URL,
+        {},
+        {
+          headers: { Authorization: `Bearer ${authToken}` },
+        }
+      );
+
+      return {
+        success: true,
+        isEnabled: response.data.is_destinationPost,
+        message: response.data.message
+      };
+    } catch (error) {
+      console.error("Error toggling destination post:", error);
+      setError(error.response?.data?.message || "Failed to toggle destination post");
+      return {
+        success: false,
+        error: error.response?.data?.message || "Failed to toggle destination post"
+      };
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return { toggleDestination, loading, error };
 };

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import {
   View,
   Text,
@@ -15,6 +15,7 @@ import { theme } from "../../constants/theme";
 import { StatusBar } from "expo-status-bar";
 import { userAuth } from "../../contexts/AuthContext";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { useToggleDestinationPost } from "../../services/postServices";
 
 // Axios interceptor to catch and log 401 errors
 axios.interceptors.response.use(
@@ -34,11 +35,61 @@ const Setting = () => {
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
 
+  // State for destination posts
+  const [destinationPostEnabled, setDestinationPostEnabled] = useState(false);
+  const { toggleDestination, loading: toggleLoading } = useToggleDestinationPost();
+
+
+  const handleDestinationToggle = (newValue) => {
+    // Optimistically update the UI
+    const previousValue = destinationPostEnabled;
+    setDestinationPostEnabled(newValue);
+
+    // Prepare the confirmation message based on the new value
+    const message = newValue
+      ? "When enabled, you will only see posts from users in your selected destination country. Do you want to continue?"
+      : "When disabled, you will see posts from all countries. Do you want to continue?";
+
+    Alert.alert("Destination Posts", message, [
+      {
+        text: "Cancel",
+        style: "cancel",
+        onPress: () => {
+          // Revert the change if the user cancels
+          setDestinationPostEnabled(previousValue);
+        },
+      },
+      {
+        text: "Continue",
+        onPress: async () => {
+          try {
+            const result = await toggleDestination();
+            if (result.success) {
+              // Update the state with the value returned by the API.
+              setDestinationPostEnabled(result.isEnabled);
+              Alert.alert(
+                "Success",
+                `Destination posts ${result.isEnabled ? "enabled" : "disabled"} successfully`
+              );
+            } else {
+              // Revert the optimistic change if there is an error
+              setDestinationPostEnabled(previousValue);
+              Alert.alert("Error", result.error);
+            }
+          } catch (error) {
+            setDestinationPostEnabled(previousValue);
+            Alert.alert("Error", "Failed to toggle destination posts");
+          }
+        },
+      },
+    ]);
+  };
+
   const toggleNotifications = () => {
     setNotificationsEnabled(!notificationsEnabled);
   };
 
-  // ✅ Separate logout function that ensures React handles state updates correctly
+  // Separate logout function to correctly update state
   const confirmLogout = () => {
     Alert.alert("Logout", "Are you sure you want to logout?", [
       { text: "Cancel", style: "cancel" },
@@ -49,10 +100,8 @@ const Setting = () => {
   const handleLogout = async () => {
     try {
       setIsLoading(true);
-
       // Remove authToken from AsyncStorage
       await AsyncStorage.removeItem("authToken");
-
       // Navigate to login screen
       router.replace("/login");
     } catch (error) {
@@ -62,49 +111,47 @@ const Setting = () => {
       setIsLoading(false);
     }
   };
+
+  // Updated settings groups with the new toggle UI for Destination Posts
   const settingsGroups = [
     {
       title: "Account",
       options: [
+        { title: "Change Password", route: "/changePassword" },
+        { title: "Update Profile", route: "/updateProfile" },
+        { title: "Handle Account", route: "/handleAccount" },
         {
-          title: "Change Password",
-          route: "/changePassword",
+          title: "Destination Posts",
+          component: (
+            <TouchableOpacity 
+              style={styles.optionButton}
+              onPress={() => handleDestinationToggle(!destinationPostEnabled)}
+              disabled={toggleLoading}
+            >
+              <Text style={styles.optionText}>Destination Posts</Text>
+              <Switch
+                value={destinationPostEnabled}
+                onValueChange={handleDestinationToggle}
+                disabled={toggleLoading}
+                trackColor={{ false: "#767577", true: theme.colors.primary }}
+                thumbColor={destinationPostEnabled ? "#fff" : "#f4f3f4"}
+                style={styles.switch}
+              />
+            </TouchableOpacity>
+          ),
         },
-        {
-          title: "Update Profile",
-          route: "/updateProfile",
-        },
-        {
-          title: "Handle Account",
-          route: "/handleAccount",
-        },
-        {
-          title: "Destination",
-          route: "/destination",
-        },
+        { title: "Destination", route: "/destination" },
       ],
     },
     {
       title: "Privacy & Safety",
-      options: [
-        {
-          title: "Blocked Users",
-          route: "/blockedUser",
-        },
-        
-      ],
+      options: [{ title: "Blocked Users", route: "/blockedUser" }],
     },
     {
       title: "About",
       options: [
-        {
-          title: "Privacy Policy",
-          route: "/privacyPolicy",
-        },
-        {
-          title: "Terms and Conditions",
-          route: "/termsAndCondition",
-        },
+        { title: "Privacy Policy", route: "/privacyPolicy" },
+        { title: "Terms and Conditions", route: "/termsAndCondition" },
       ],
     },
   ];
@@ -121,22 +168,30 @@ const Setting = () => {
             </View>
           ) : (
             <View style={styles.content}>
-              {settingsGroups.map((group, groupIndex) => (
+              {settingsGroups.map((group) => (
                 <View key={group.title} style={styles.groupContainer}>
                   <Text style={styles.groupTitle}>{group.title}</Text>
                   <View style={styles.optionsContainer}>
                     {group.options.map((option, index) => (
-                      <TouchableOpacity
-                        key={option.route}
+                      <View
+                        key={option.route || index}
                         style={[
                           styles.option,
                           index === group.options.length - 1 && styles.lastOption,
                         ]}
-                        onPress={() => router.push(option.route)}
                       >
-                        <Text style={styles.optionText}>{option.title}</Text>
-                        <Text style={styles.chevron}>›</Text>
-                      </TouchableOpacity>
+                        {option.component ? (
+                          option.component
+                        ) : (
+                          <TouchableOpacity
+                            style={styles.optionButton}
+                            onPress={() => router.push(option.route)}
+                          >
+                            <Text style={styles.optionText}>{option.title}</Text>
+                            <Text style={styles.chevron}>›</Text>
+                          </TouchableOpacity>
+                        )}
+                      </View>
                     ))}
                   </View>
                 </View>
@@ -190,10 +245,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     marginHorizontal: 16,
     shadowColor: "#000",
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
+    shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05,
     shadowRadius: 3.84,
     elevation: 5,
@@ -227,10 +279,7 @@ const styles = StyleSheet.create({
     marginTop: "auto",
     marginBottom: 30,
     shadowColor: "#000",
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
+    shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05,
     shadowRadius: 3.84,
     elevation: 5,
@@ -240,6 +289,16 @@ const styles = StyleSheet.create({
     textAlign: "center",
     fontSize: 16,
     fontWeight: "600",
+  },
+  // New styles for the toggle option
+  optionButton: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    flex: 1,
+  },
+  switch: {
+    transform: [{ scale: 0.8 }],
   },
 });
 

@@ -192,6 +192,40 @@ const getDestinationPosts = async (req, res) => {
   }
 };
 
+// controller to set the is_destinationPost flag
+const toggleDestinationPost = async (req, res) => {
+  try {
+    const userId = req.user.id;
+
+    // Find the user
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found"
+      });
+    }
+
+    // Toggle the is_destinationPost flag
+    user.is_destinationPost = !user.is_destinationPost;
+    await user.save();
+
+    return res.status(200).json({
+      success: true,
+      message: `Destination post mode ${user.is_destinationPost ? 'enabled' : 'disabled'} successfully`,
+      is_destinationPost: user.is_destinationPost
+    });
+
+  } catch (error) {
+    console.error("Error toggling destination post:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to toggle destination post mode",
+      error: error.message
+    });
+  }
+};
+
 
 // Get all posts based on query/interest/search logic
 const getAllPost = async (req, res) => {
@@ -205,8 +239,8 @@ const getAllPost = async (req, res) => {
       return res.status(401).json({ message: "Unauthorized access." });
     }
 
-    // Include blocked_users along with preferred_categories, following, and liked_posts
-    const user = await User.findById(userId).select("preferred_categories following liked_posts blocked_users");
+    // Now, include additional fields: destination_country, current_location, and is_destination_post
+    const user = await User.findById(userId).select("preferred_categories following liked_posts blocked_users destination_country current_location is_destination_post");
     if (!user) {
       return res.status(404).json({ message: "User not found." });
     }
@@ -216,16 +250,16 @@ const getAllPost = async (req, res) => {
     const pipeline = [
       {
         $lookup: {
-          from: 'users',
-          localField: 'user_id',
-          foreignField: '_id',
-          as: 'author'
+          from: "users",
+          localField: "user_id",
+          foreignField: "_id",
+          as: "author"
         }
       },
-      { $unwind: '$author' },
+      { $unwind: "$author" },
       {
         $match: {
-          status: 'Active',
+          status: "Active",
           isBlocked: false,
           isUnderReview: false,
           "reports.4": { $exists: false },
@@ -233,26 +267,35 @@ const getAllPost = async (req, res) => {
             { isSuspended: false },
             { isSuspended: true, suspended_until: { $lt: currentDate } }
           ],
-          'author.is_blocked': false,
-          'author.is_deactivate': false,
-          'author.is_deleted': false,
+          "author.is_blocked": false,
+          "author.is_deactivate": false,
+          "author.is_deleted": false,
           $or: [
-            { 'author.is_suspended': false },
-            { 'author.is_suspended': true, 'author.suspended_until': { $lt: currentDate } }
+            { "author.is_suspended": false },
+            { "author.is_suspended": true, "author.suspended_until": { $lt: currentDate } }
           ],
-          // Exclude posts authored by blocked users:
-          'author._id': { $nin: user.blocked_users },
+          // Exclude posts authored by users this user has blocked:
+          "author._id": { $nin: user.blocked_users },
           // Exclude posts if the current user has reported them
-          reports: { $not: { $elemMatch: { reported_by: req.user.id } } }
+          reports: { $not: { $elemMatch: { reported_by: new mongoose.Types.ObjectId(userId) } } }
         }
       }
     ];
 
-    // Add category and search filters if provided
+    // If destination mode is enabled and user has a destination_country, filter posts accordingly.
+    if (user.is_destination_post && user.destination_country) {
+      pipeline.push({
+        $match: {
+          "author.destination_country": user.destination_country
+        }
+      });
+    }
+
+    // Apply additional category and search filters if provided
     if (category || search) {
       const additionalMatch = {};
       if (category && category !== "All") {
-        const catArray = category.split(",").map(c => new mongoose.Types.ObjectId(c.trim()));
+        const catArray = category.split(",").map((c) => new mongoose.Types.ObjectId(c.trim()));
         additionalMatch.category_id = catArray.length > 1 ? { $in: catArray } : catArray[0];
       }
       if (search && search.trim() !== "") {
@@ -264,9 +307,30 @@ const getAllPost = async (req, res) => {
       pipeline.push({ $match: additionalMatch });
     }
 
-    // Sorting and pagination
+    // If user has a current_location.city, add a computed field "cityMatch".
+    // Posts with a matching city will get a score of 1, others 0.
+    if (user.current_location && user.current_location.city) {
+      pipeline.push({
+        $addFields: {
+          cityMatch: {
+            $cond: [
+              { $eq: [ "$author.current_location.city", user.current_location.city ] },
+              1,
+              0
+            ]
+          }
+        }
+      });
+      // Sort first by cityMatch descending, then by createdAt descending.
+      pipeline.push(
+        { $sort: { cityMatch: -1, createdAt: -1 } }
+      );
+    } else {
+      // Default sort if city info is not available
+      pipeline.push({ $sort: { createdAt: -1 } });
+    }
+    
     pipeline.push(
-      { $sort: { createdAt: -1 } },
       { $skip: (page - 1) * limit },
       { $limit: limit }
     );
@@ -278,20 +342,22 @@ const getAllPost = async (req, res) => {
       { path: "comments", select: "text user_id createdAt" }
     ]);
 
-    // Format posts and check if post._id exists in user.liked_posts
-    const formattedPosts = posts.map(post => ({
+    // Format posts to include whether the post is liked by the current user.
+    const formattedPosts = posts.map((post) => ({
       id: post._id,
       user: {
         id: post.author._id,
         name: post.author.name,
         profile_image: post.author.profile_image || "https://via.placeholder.com/40",
-        verified: post.author.verified
+        verified: post.author.verified,
+        destination: post.author.destination_country || null,
+        city: (post.author.current_location && post.author.current_location.city) || null
       },
       type: post.category_id?.name || "Unknown Category",
       time: post.createdAt,
       content: post.text_content || "No content available",
-      media: post.media?.map(m => m.media_path) || [],
-      liked: (user.liked_posts || []).some(likedId => likedId.toString() === post._id.toString()),
+      media: post.media?.map((m) => m.media_path) || [],
+      liked: (user.liked_posts || []).some((likedId) => likedId.toString() === post._id.toString()),
       likeCount: post.likes?.length || 0,
       commentCount: post.comments?.length || 0,
       shareCount: post.shares || 0
@@ -299,7 +365,11 @@ const getAllPost = async (req, res) => {
 
     return res.status(200).json({
       message: "Posts retrieved successfully.",
-      data: formattedPosts
+      data: formattedPosts,
+      destination: {
+        country: user.destination_country,
+        city: user.current_location?.city || null
+      }
     });
   } catch (error) {
     console.error("Error retrieving posts:", error);
@@ -1370,8 +1440,6 @@ const editPost = async (req, res) => {
 };
 
 
-
-
 const deletePost = async (req, res) => {
   try {
     const { postId } = req.params;
@@ -1431,5 +1499,6 @@ module.exports = {
   updateReportStatus,
   handlePostAdminAction,
   getLikedUsers,
-  getDestinationPosts
+  getDestinationPosts,
+  toggleDestinationPost
 };
