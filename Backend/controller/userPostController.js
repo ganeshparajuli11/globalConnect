@@ -283,7 +283,7 @@ const getAllPost = async (req, res) => {
     ];
 
     // If destination mode is enabled and user has a destination_country, filter posts accordingly.
-    if (user.is_destination_post && user.destination_country) {
+    if (user.is_destinationPost && user.destination_country) {
       pipeline.push({
         $match: {
           "author.destination_country": user.destination_country
@@ -351,6 +351,7 @@ const getAllPost = async (req, res) => {
         profile_image: post.author.profile_image || "https://via.placeholder.com/40",
         verified: post.author.verified,
         destination: post.author.destination_country || null,
+        flag: post.author.flag || null,
         city: (post.author.current_location && post.author.current_location.city) || null
       },
       type: post.category_id?.name || "Unknown Category",

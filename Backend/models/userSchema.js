@@ -84,7 +84,8 @@ const userSchema = new mongoose.Schema(
     otp_expiry: { type: Date, default: null },
     otp_attempts: { type: Number, default: 0 },
     otp_blocked_until: { type: Date, default: null },
-
+    is_destinationPost : { type: Boolean, default: false },
+    flag:{type:String, default: null},
     // Notifications
     notifications_enabled: { type: Boolean, default: true },
     notification_preferences: {

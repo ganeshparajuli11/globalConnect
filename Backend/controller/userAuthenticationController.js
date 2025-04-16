@@ -521,24 +521,34 @@ async function editAdminDetails(req, res) {
   }
 }
 
+
 // selecting the destination country:
 async function updateDestinationCountry(req, res) {
   try {
     // Retrieve the user ID from the authenticated token
     const userId = req.user.id;
-    const { destination_country } = req.body;
+    const { destination_country, destination_flag } = req.body;
 
-    // Validate input
-    if (!destination_country) {
+    // Validate input: destination_country and destination_flag must be provided
+    if (!destination_country || !destination_flag) {
       return res
         .status(400)
-        .json({ message: "Destination country is required." });
+        .json({ message: "Both destination country and flag code are required." });
     }
 
-    // Update the user's destination country
+    // Ensure the ISO code is in lowercase (flagcdn requires lowercase)
+    const isoCode = destination_flag.toLowerCase();
+
+    // Construct the flag URL using the ISO code
+    const flagUrl = `https://flagcdn.com/48x36/${isoCode}.png`;
+
+    // Update the user's destination country and flag in the database
     const updatedUser = await User.findByIdAndUpdate(
       userId,
-      { destination_country },
+      { 
+        destination_country,
+        flag: flagUrl, // New field storing the computed flag URL
+      },
       { new: true } // Return the updated user document
     );
 
@@ -554,6 +564,7 @@ async function updateDestinationCountry(req, res) {
         name: updatedUser.name,
         email: updatedUser.email,
         destination_country: updatedUser.destination_country,
+        flag: updatedUser.flag, // Include the flag URL in the response
       },
     });
   } catch (error) {
@@ -563,6 +574,8 @@ async function updateDestinationCountry(req, res) {
       .json({ message: "An error occurred.", error: error.message });
   }
 }
+
+
 
 module.exports = {
   login,

@@ -7,7 +7,6 @@ import {
   ScrollView,
   ActivityIndicator,
   TouchableOpacity,
-  Image,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import axios from 'axios';
@@ -19,25 +18,28 @@ import ScreenWrapper from '../../components/ScreenWrapper';
 import { theme } from '../../constants/theme';
 import { Ionicons } from '@expo/vector-icons';
 
-// Popular countries to show initially
+// Popular countries to show initially with ISO code included (in lowercase)
 const POPULAR_COUNTRIES = [
-  { name: 'United States', flag: '🇺🇸' },
-  { name: 'United Kingdom', flag: '🇬🇧' },
-  { name: 'Canada', flag: '🇨🇦' },
-  { name: 'Australia', flag: '🇦🇺' },
-  { name: 'Germany', flag: '🇩🇪' },
-  { name: 'France', flag: '🇫🇷' },
+  { name: 'United States', code: 'us', flag: '🇺🇸' },
+  { name: 'United Kingdom', code: 'gb', flag: '🇬🇧' },
+  { name: 'Canada', code: 'ca', flag: '🇨🇦' },
+  { name: 'Australia', code: 'au', flag: '🇦🇺' },
+  { name: 'Germany', code: 'de', flag: '🇩🇪' },
+  { name: 'France', code: 'fr', flag: '🇫🇷' },
 ];
 
 const Destination = () => {
   const ip = config.API_IP;
   const router = useRouter();
 
+  // countries: full list of countries from API (each with { name, code, flag })
   const [countries, setCountries] = useState([]);
   const [filteredCountries, setFilteredCountries] = useState([]);
+  // Cities remain as strings
   const [cities, setCities] = useState([]);
   const [filteredCities, setFilteredCities] = useState([]);
-  const [selectedCountry, setSelectedCountry] = useState('');
+  // selectedCountry is now an object rather than a string
+  const [selectedCountry, setSelectedCountry] = useState(null);
   const [selectedCity, setSelectedCity] = useState('');
   const [loading, setLoading] = useState(false);
   const [countrySearch, setCountrySearch] = useState('');
@@ -50,11 +52,13 @@ const Destination = () => {
     fetch('https://restcountries.com/v3.1/all')
       .then((response) => response.json())
       .then((data) => {
+        // Map API response to our desired format: name, code (cca2), and flag emoji
         const countryList = data.map((country) => ({
           name: country.name.common,
-          code: country.cca2,
+          code: country.cca2 ? country.cca2.toLowerCase() : '', // ensure lowercase
           flag: country.flag || '🏳️',
         }));
+        // Sort countries alphabetically by name
         countryList.sort((a, b) => a.name.localeCompare(b.name));
         setCountries(countryList);
         setLoading(false);
@@ -65,7 +69,7 @@ const Destination = () => {
       });
   }, []);
 
-  // Fetch cities based on the selected country
+  // Fetch cities based on the selected country (using country name)
   const fetchCities = (countryName) => {
     setLoading(true);
     fetch('https://countriesnow.space/api/v0.1/countries/cities', {
@@ -76,7 +80,7 @@ const Destination = () => {
       .then((response) => response.json())
       .then((data) => {
         const cityList = data.data || [];
-        // Add a "None" option and sort cities
+        // Add a "None" option at the beginning and sort the list
         const sortedCities = ['None', ...cityList.sort()];
         setCities(sortedCities);
         setFilteredCities(sortedCities);
@@ -88,21 +92,21 @@ const Destination = () => {
       });
   };
 
-  // Handle country selection
-  const handleCountryChange = (country) => {
-    setSelectedCountry(country);
-    setCountrySearch(country); // Update search box with selected country
-    setFilteredCountries([]); // Collapse country suggestions
+  // Handle country selection: store the entire country object and update UI
+  const handleCountryChange = (countryObj) => {
+    setSelectedCountry(countryObj);
+    setCountrySearch(countryObj.name); // Update search box with selected country name
+    setFilteredCountries([]); // Collapse suggestions
     setSelectedCity(''); // Reset city selection
     setCitySearch('');
-    fetchCities(country);
+    fetchCities(countryObj.name);
   };
 
   // Handle city selection
   const handleCityChange = (city) => {
     setSelectedCity(city);
     setCitySearch(city); // Update search box with selected city
-    setFilteredCities([]); // Collapse city suggestions
+    setFilteredCities([]); // Collapse suggestions
   };
 
   // Filter countries based on user input
@@ -135,7 +139,7 @@ const Destination = () => {
     }
   };
 
-  // Handle destination submission
+  // Handle destination submission by sending both the country name and ISO code to the backend.
   const handleSubmit = async () => {
     if (!selectedCountry) {
       alert('Please select a country.');
@@ -143,9 +147,10 @@ const Destination = () => {
     }
     const accessToken = await AsyncStorage.getItem('authToken');
     const destination = {
-      destination_country: `${selectedCountry}${
+      destination_country: `${selectedCountry.name}${
         selectedCity && selectedCity !== 'None' ? `, ${selectedCity}` : ''
       }`,
+      destination_flag: selectedCountry.code, // ISO code from the selected country
     };
 
     axios
@@ -165,11 +170,12 @@ const Destination = () => {
       });
   };
 
-  const renderCountryItem = (item, isPopular = false) => (
+  // Render a country item (for both popular countries and search results)
+  const renderCountryItem = (item) => (
     <TouchableOpacity
       key={item.name}
       style={styles.countryItem}
-      onPress={() => handleCountryChange(item.name)}
+      onPress={() => handleCountryChange(item)}
     >
       <Text style={styles.flagEmoji}>{item.flag}</Text>
       <Text style={styles.countryName}>{item.name}</Text>
@@ -209,7 +215,7 @@ const Destination = () => {
                 {showPopularCountries ? (
                   <>
                     <Text style={styles.sectionSubtitle}>Popular Destinations</Text>
-                    {POPULAR_COUNTRIES.map((country) => renderCountryItem(country, true))}
+                    {POPULAR_COUNTRIES.map((country) => renderCountryItem(country))}
                   </>
                 ) : (
                   filteredCountries.map((country) => renderCountryItem(country))
