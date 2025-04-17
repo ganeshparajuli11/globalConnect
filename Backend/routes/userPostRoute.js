@@ -19,7 +19,8 @@ const {
   getReportedPostsAdmin,
   handlePostAdminAction,
   getLikedUsers,
-  toggleDestinationPost
+  toggleDestinationPost,
+  getDestinationPostState
 
 } = require("../controller/userPostController");
 const { uploadPostMedia } = require("../middleware/uploadMiddleware");
@@ -46,7 +47,7 @@ router.get("/admin/stats", checkAuthentication, checkIsAdmin, getPostStatsAdmin)
 router.post("/share", checkAuthentication,  sharePost);
 
 router.put("/toggle-destination", checkAuthentication, checkIsUser, toggleDestinationPost);
-
+router.get('/destination-post-state', checkAuthentication, getDestinationPostState);
 
 // Edit post route - must be placed before /:postId to avoid route conflicts
 router.put(

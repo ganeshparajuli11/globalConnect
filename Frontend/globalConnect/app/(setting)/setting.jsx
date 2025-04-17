@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -17,7 +17,7 @@ import { userAuth } from "../../contexts/AuthContext";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useToggleDestinationPost } from "../../services/postServices";
 
-// Axios interceptor to catch and log 401 errors
+// Axios interceptor to catch and log 401 errors (optional)
 axios.interceptors.response.use(
   (response) => response,
   (error) => {
@@ -35,17 +35,25 @@ const Setting = () => {
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
 
-  // State for destination posts
+  // Destination posts state: fetch current value and allow toggling
+  const {
+    toggleDestination,
+    destinationEnabled,
+    loading: toggleLoading,
+  } = useToggleDestinationPost();
   const [destinationPostEnabled, setDestinationPostEnabled] = useState(false);
-  const { toggleDestination, loading: toggleLoading } = useToggleDestinationPost();
 
+  // Sync local state with value returned from the hook
+  useEffect(() => {
+    setDestinationPostEnabled(destinationEnabled);
+  }, [destinationEnabled]);
 
+  // Handler for Destination Posts toggle
   const handleDestinationToggle = (newValue) => {
-    // Optimistically update the UI
+    // Optimistically update UI
     const previousValue = destinationPostEnabled;
     setDestinationPostEnabled(newValue);
 
-    // Prepare the confirmation message based on the new value
     const message = newValue
       ? "When enabled, you will only see posts from users in your selected destination country. Do you want to continue?"
       : "When disabled, you will see posts from all countries. Do you want to continue?";
@@ -55,7 +63,7 @@ const Setting = () => {
         text: "Cancel",
         style: "cancel",
         onPress: () => {
-          // Revert the change if the user cancels
+          // Revert if user cancels
           setDestinationPostEnabled(previousValue);
         },
       },
@@ -65,14 +73,13 @@ const Setting = () => {
           try {
             const result = await toggleDestination();
             if (result.success) {
-              // Update the state with the value returned by the API.
+              // Update with returned value
               setDestinationPostEnabled(result.isEnabled);
               Alert.alert(
                 "Success",
                 `Destination posts ${result.isEnabled ? "enabled" : "disabled"} successfully`
               );
             } else {
-              // Revert the optimistic change if there is an error
               setDestinationPostEnabled(previousValue);
               Alert.alert("Error", result.error);
             }
@@ -85,11 +92,12 @@ const Setting = () => {
     ]);
   };
 
+  // Toggle notifications function
   const toggleNotifications = () => {
     setNotificationsEnabled(!notificationsEnabled);
   };
 
-  // Separate logout function to correctly update state
+  // Logout functions remain unchanged
   const confirmLogout = () => {
     Alert.alert("Logout", "Are you sure you want to logout?", [
       { text: "Cancel", style: "cancel" },
@@ -100,9 +108,8 @@ const Setting = () => {
   const handleLogout = async () => {
     try {
       setIsLoading(true);
-      // Remove authToken from AsyncStorage
+      // Remove authToken from storage
       await AsyncStorage.removeItem("authToken");
-      // Navigate to login screen
       router.replace("/login");
     } catch (error) {
       console.error("Logout Error:", error);
@@ -112,7 +119,7 @@ const Setting = () => {
     }
   };
 
-  // Updated settings groups with the new toggle UI for Destination Posts
+  // Define settings groups containing various options and the toggle option
   const settingsGroups = [
     {
       title: "Account",
@@ -262,6 +269,12 @@ const styles = StyleSheet.create({
   lastOption: {
     borderBottomWidth: 0,
   },
+  optionButton: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    flex: 1,
+  },
   optionText: {
     fontSize: 16,
     color: theme.colors.text,
@@ -289,13 +302,6 @@ const styles = StyleSheet.create({
     textAlign: "center",
     fontSize: 16,
     fontWeight: "600",
-  },
-  // New styles for the toggle option
-  optionButton: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    flex: 1,
   },
   switch: {
     transform: [{ scale: 0.8 }],

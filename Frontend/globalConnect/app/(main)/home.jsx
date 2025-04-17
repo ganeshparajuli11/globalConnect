@@ -1,3 +1,4 @@
+// home.jsx
 import React, { useState, useEffect, useCallback } from "react";
 import {
   StyleSheet,
@@ -7,53 +8,53 @@ import {
   ActivityIndicator,
   TouchableOpacity,
 } from "react-native";
-import BottomNav from "../../components/bottomNav";
-import { theme } from "../../constants/theme";
-import ScreenWrapper from "../../components/ScreenWrapper";
-import { hp, wp } from "../../helpers/common";
-import { useRouter } from "expo-router";
-import { useFetchPosts, useSearchPosts } from "../../services/postServices";
-import PostCard from "../../components/PostCard";
 import { StatusBar } from "expo-status-bar";
+import { useRouter } from "expo-router";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+
+import BottomNav from "../../components/bottomNav";
+import Header from "../../components/Header";
+import ScreenWrapper from "../../components/ScreenWrapper";
 import SearchBar from "../../components/SearchBar";
 import SortCategory from "../../components/SortCategory";
+import PostCard from "../../components/PostCard";
 import UserCard from "../../components/UserCard";
-import { useSearchUsers } from "../../services/useSearchUsers";
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import { updateUserLocation } from "../../services/getLocationService";
 import DobCard from "../../components/DobCard";
+
+import { hp, wp } from "../../helpers/common";
+import { updateUserLocation } from "../../services/getLocationService";
 import { checkDOB, updateDOB } from "../../services/dobService";
+import { useFetchPosts, useSearchPosts } from "../../services/postServices";
+import { useSearchUsers } from "../../services/useSearchUsers";
 import { userAuth } from "../../contexts/AuthContext";
+import { theme } from "../../constants/theme";
 
 const Home = () => {
   const router = useRouter();
   const { authToken } = userAuth();
 
-  // if(!authToken){
-  //   router.replace("/login")
+  // Uncomment below if you need to enforce login if token is missing
+  // if (!authToken) {
+  //   router.replace("/login");
   // }
+
   const handleShareError = (error) => {
-    // Only log non-socket related errors
     if (!error?.error?.includes("getIO is not a function")) {
       console.error("Share error:", error);
     }
-
-    // For socket-specific errors, just log a debug message
     if (error?.error?.includes("getIO is not function")) {
       console.debug("Socket sharing temporarily unavailable");
     }
-
-    // Return false to prevent further error propagation
     return false;
   };
 
+  // Search and filter states
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("All");
   const [searchType, setSearchType] = useState("users");
-  // State to control display of DOB modal popup
   const [showDobModal, setShowDobModal] = useState(false);
 
-  // Hooks for posts & search
+  // Hooks for fetching posts and searching
   const {
     posts,
     fetchPosts,
@@ -71,27 +72,31 @@ const Home = () => {
     page: searchPage,
   } = useSearchPosts(searchQuery);
 
-  // Update search effects
+  // When search query or search type changes, fetch search posts (if applicable)
   useEffect(() => {
     if (searchQuery.trim() && searchType === "posts") {
       fetchSearchPosts(searchQuery, 1, true);
     }
   }, [searchQuery, searchType]);
 
+  // Load more search posts if available
   const handleLoadMoreSearchPosts = useCallback(() => {
     if (searchHasMore && !searchPostLoading && searchType === "posts") {
       fetchSearchPosts(searchQuery, searchPage, false);
     }
   }, [searchHasMore, searchPostLoading, searchQuery, searchPage, searchType]);
 
-  // When category changes, reset posts and fetch fresh data
+  // Refresh posts when category changes
   useEffect(() => {
     resetPosts();
     fetchPosts(1, true);
   }, [selectedCategory]);
 
+  // Determine search state
   const isSearching = searchQuery.trim().length > 0;
   const searchLoading = searchType === "users" ? searchUserLoading : searchPostLoading;
+
+  // Handler for switching search type (users or posts)
   const handleSearchTypeChange = (type) => {
     setSearchType(type);
     if (type === "posts" && searchQuery.trim()) {
@@ -99,6 +104,7 @@ const Home = () => {
     }
   };
 
+  // Render segmented control if searching
   const renderSearchToggle = () => {
     return (
       <View style={styles.toggleContainer}>
@@ -122,7 +128,7 @@ const Home = () => {
     );
   };
 
-  // Location update: run once on mount (if not updated today)
+  // Update user location on mount
   useEffect(() => {
     const updateLocationOnce = async () => {
       try {
@@ -137,7 +143,7 @@ const Home = () => {
     updateLocationOnce();
   }, []);
 
-  // Check if the user's DOB is set; if not, show the DOB popup.
+  // Check if user's DOB is set; if not, display DOB modal.
   useEffect(() => {
     const checkUserDOB = async () => {
       try {
@@ -154,7 +160,7 @@ const Home = () => {
     checkUserDOB();
   }, []);
 
-  // Handler to update the DOB when submitted from the DobCard.
+  // Handler for DOB modal submission
   const handleDobSubmit = async (selectedDate) => {
     try {
       if (authToken) {
@@ -181,7 +187,7 @@ const Home = () => {
         {/* Search Bar */}
         <SearchBar searchQuery={searchQuery} setSearchQuery={setSearchQuery} />
 
-        {/* Render segmented control when searching */}
+        {/* Show segmented control when searching */}
         {isSearching && renderSearchToggle()}
 
         {isSearching ? (
@@ -218,14 +224,16 @@ const Home = () => {
                   item={{
                     ...item,
                     user: {
-                      id: item.user?._id || item.user?.id, // Handle both formats
+                      id: item.user?._id || item.user?.id,
                       name: item.user?.name,
                       profile_image: item.user?.profile_image,
                       verified: item.user?.verified ?? false,
                       destination: item.user?.destination,
+                      flag: item.user?.flag,
+                      city: item.user?.city,
                     },
                   }}
-                  verifiedStatus={item.user?.verified ?? false} // Passing verified status explicitly
+                  verifiedStatus={item.user?.verified ?? false}
                   router={router}
                   onShareError={handleShareError}
                 />
@@ -245,9 +253,7 @@ const Home = () => {
               }
               ListFooterComponent={() => {
                 if (loading) {
-                  return (
-                    <ActivityIndicator style={{ marginVertical: 30 }} size="large" />
-                  );
+                  return <ActivityIndicator style={{ marginVertical: 30 }} size="large" />;
                 }
                 if (!hasMore && posts.length > 0) {
                   return (
@@ -276,10 +282,13 @@ const Home = () => {
                   item={{
                     ...item,
                     user: {
-                      id: item.user?._id || item.user?.id, // Handle both formats
+                      id: item.user?._id || item.user?.id,
                       name: item.user?.name,
                       profile_image: item.user?.profile_image,
                       verified: item.user?.verified ?? false,
+                      destination: item.user?.destination,
+                      flag: item.user?.flag,
+                      city: item.user?.city,
                     },
                   }}
                   verifiedStatus={item.user?.verified ?? false}
@@ -302,9 +311,7 @@ const Home = () => {
               }
               ListFooterComponent={() => {
                 if (loading) {
-                  return (
-                    <ActivityIndicator style={{ marginVertical: 30 }} size="large" />
-                  );
+                  return <ActivityIndicator style={{ marginVertical: 30 }} size="large" />;
                 }
                 if (!hasMore && posts.length > 0) {
                   return (

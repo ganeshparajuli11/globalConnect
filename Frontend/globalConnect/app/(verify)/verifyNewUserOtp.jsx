@@ -11,70 +11,97 @@ export default function VerifyOTP() {
   const [otpDigits, setOtpDigits] = useState(new Array(6).fill(""));
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
+  const [resendCooldown, setResendCooldown] = useState(0);
   const { email: emailFromQuery } = useLocalSearchParams(); 
   const router = useRouter();
   const inputRefs = useRef([]);
 
+  // If email is passed in query parameters, set it
   useEffect(() => {
     if (emailFromQuery) {
       setEmail(emailFromQuery); 
     }
   }, [emailFromQuery]);
 
+  // Resend OTP cooldown effect
+  useEffect(() => {
+    let timer;
+    if (resendCooldown > 0) {
+      timer = setInterval(() => {
+        setResendCooldown(prev => prev - 1);
+      }, 1000);
+    }
+    return () => clearInterval(timer);
+  }, [resendCooldown]);
+
   // Handler for each OTP digit change
   const handleChangeText = (value, index) => {
     if (value && !/^\d$/.test(value)) {
-      // Only allow a single numeric digit
+      // Allow only a single numeric digit
       return;
     }
     const newOtpDigits = [...otpDigits];
     newOtpDigits[index] = value;
     setOtpDigits(newOtpDigits);
 
-    // Auto-focus the next input if a value is entered
+    // Auto-focus the next input if a digit is entered
     if (value && index < 5) {
       inputRefs.current[index + 1].focus();
     }
   };
 
-  // Handler to detect backspace on an empty input to focus the previous field
+  // Handler to detect backspace on an empty input for refocusing previous field
   const handleKeyPress = ({ nativeEvent }, index) => {
     if (nativeEvent.key === "Backspace" && !otpDigits[index] && index > 0) {
       inputRefs.current[index - 1].focus();
     }
   };
 
+  // Verify OTP by calling the verify-newuser endpoint
   const handleVerifyOTP = async () => {
-    // Check if all fields are filled
     if (otpDigits.includes("")) {
       Alert.alert("Error", "Please fill in all the OTP fields.");
       return;
     }
-
     const otp = otpDigits.join("");
     setLoading(true);
-
     try {
-      // Make API call to verify OTP
       const response = await axios.post(`http://${ip}:3000/api/profile/verify-newuser`, {
         email,
         otp,
       });
-
       const message = response.data?.message;
-      
-      // Check if the OTP verification is successful
       if (message === "Email verified successfully.") {
         Alert.alert("Success", message);
-        // Navigate to the ConfirmPassword page with email as query parameter
+        // Navigate to destination page upon success
         router.replace("/destination");
       } else {
         Alert.alert("Error", message || "Invalid OTP. Please try again.");
       }
     } catch (error) {
-      const errMessage =
-        error.response?.data?.message ||
-        "Failed to verify OTP. Please try again later.";
+      const errMessage = error.response?.data?.message || "Failed to verify OTP. Please try again later.";
+      Alert.alert("Error", errMessage);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Resend OTP handler using the new user endpoint for email sending
+  const handleResendOTP = async () => {
+    if (resendCooldown > 0) return;
+    
+    setLoading(true);
+    try {
+      const response = await axios.post(`http://${ip}:3000/api/profile/newuser`, { email });
+      const message = response.data?.message;
+      if (message === "OTP sent to your email.") {
+        Alert.alert("Success", "OTP has been resent to your email");
+      } else {
+        Alert.alert("Error", message || "Failed to resend OTP");
+      }
+      setResendCooldown(30); // Start 30-second cooldown
+    } catch (error) {
+      const errMessage = error.response?.data?.message || "Failed to resend OTP";
       Alert.alert("Error", errMessage);
     } finally {
       setLoading(false);
@@ -106,6 +133,20 @@ export default function VerifyOTP() {
       <TouchableOpacity style={styles.button} onPress={handleVerifyOTP} disabled={loading}>
         {loading ? <Loading inline /> : <Text style={styles.buttonText}>Verify OTP</Text>}
       </TouchableOpacity>
+
+      {/* Resend OTP Button */}
+      <TouchableOpacity 
+        style={[
+          styles.resendButton, 
+          resendCooldown > 0 && styles.resendButtonDisabled
+        ]} 
+        onPress={handleResendOTP}
+        disabled={resendCooldown > 0 || loading}
+      >
+        <Text style={styles.resendButtonText}>
+          {resendCooldown > 0 ? `Resend OTP in ${resendCooldown}s` : "Resend OTP"}
+        </Text>
+      </TouchableOpacity>
     </View>
   );
 }
@@ -122,7 +163,7 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontWeight: "bold",
     marginBottom: 20,
-    color: theme.colors.primary, // Updated to use theme.colors.primary
+    color: theme.colors.primary,
   },
   otpContainer: {
     flexDirection: "row",
@@ -153,5 +194,18 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: 16,
     fontWeight: "bold",
+  },
+  // Styles for the Resend OTP button
+  resendButton: {
+    marginTop: 20,
+    padding: 10,
+  },
+  resendButtonDisabled: {
+    opacity: 0.6,
+  },
+  resendButtonText: {
+    color: theme.colors.primary,
+    fontSize: 14,
+    textDecorationLine: "underline",
   },
 });

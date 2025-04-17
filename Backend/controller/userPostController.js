@@ -226,6 +226,35 @@ const toggleDestinationPost = async (req, res) => {
   }
 };
 
+// Add this new controller function
+const getDestinationPostState = async (req, res) => {
+  try {
+    const userId = req.user.id;
+
+    // Find the user and select only the is_destinationPost field
+    const user = await User.findById(userId).select('is_destinationPost');
+    
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found"
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      is_destinationPost: user.is_destinationPost
+    });
+
+  } catch (error) {
+    console.error("Error fetching destination post state:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to fetch destination post state",
+      error: error.message
+    });
+  }
+};
 
 // Get all posts based on query/interest/search logic
 const getAllPost = async (req, res) => {
@@ -239,22 +268,25 @@ const getAllPost = async (req, res) => {
       return res.status(401).json({ message: "Unauthorized access." });
     }
 
-    // Now, include additional fields: destination_country, current_location, and is_destination_post
-    const user = await User.findById(userId).select("preferred_categories following liked_posts blocked_users destination_country current_location is_destination_post");
+    // Retrieve the current user with fields required for filtering
+    const user = await User.findById(userId).select(
+      "preferred_categories following liked_posts blocked_users destination_country current_location is_destinationPost"
+    );
     if (!user) {
       return res.status(404).json({ message: "User not found." });
     }
 
     const currentDate = new Date();
 
+    // Start building the aggregation pipeline
     const pipeline = [
       {
         $lookup: {
           from: "users",
           localField: "user_id",
           foreignField: "_id",
-          as: "author"
-        }
+          as: "author",
+        },
       },
       { $unwind: "$author" },
       {
@@ -265,84 +297,81 @@ const getAllPost = async (req, res) => {
           "reports.4": { $exists: false },
           $or: [
             { isSuspended: false },
-            { isSuspended: true, suspended_until: { $lt: currentDate } }
+            { isSuspended: true, suspended_until: { $lt: currentDate } },
           ],
           "author.is_blocked": false,
           "author.is_deactivate": false,
           "author.is_deleted": false,
           $or: [
             { "author.is_suspended": false },
-            { "author.is_suspended": true, "author.suspended_until": { $lt: currentDate } }
+            { "author.is_suspended": true, "author.suspended_until": { $lt: currentDate } },
           ],
-          // Exclude posts authored by users this user has blocked:
+          // Exclude posts from authors that this user has blocked
           "author._id": { $nin: user.blocked_users },
-          // Exclude posts if the current user has reported them
-          reports: { $not: { $elemMatch: { reported_by: new mongoose.Types.ObjectId(userId) } } }
-        }
-      }
+          // Exclude posts that the user has reported
+          reports: {
+            $not: { $elemMatch: { reported_by: new mongoose.Types.ObjectId(userId) } },
+          },
+        },
+      },
     ];
 
-    // If destination mode is enabled and user has a destination_country, filter posts accordingly.
-    if (user.is_destinationPost && user.destination_country) {
+    // If destination mode is enabled, filter posts by the user's destination_country.
+    if (user.is_destinationPost === true) {
+      if (!user.destination_country) {
+        return res.status(400).json({ message: "Please set your destination country first" });
+      }
       pipeline.push({
         $match: {
-          "author.destination_country": user.destination_country
-        }
+          $and: [
+            { "author.destination_country": user.destination_country },
+            { "author.destination_country": { $exists: true, $ne: null, $ne: "" } },
+          ],
+        },
       });
+      console.log("Filtering posts for destination:", user.destination_country);
     }
 
-    // Apply additional category and search filters if provided
-    if (category || search) {
-      const additionalMatch = {};
-      if (category && category !== "All") {
-        const catArray = category.split(",").map((c) => new mongoose.Types.ObjectId(c.trim()));
-        additionalMatch.category_id = catArray.length > 1 ? { $in: catArray } : catArray[0];
-      }
-      if (search && search.trim() !== "") {
-        additionalMatch.$or = [
-          { text_content: { $regex: search, $options: "i" } },
-          { "author.name": { $regex: search, $options: "i" } }
-        ];
-      }
-      pipeline.push({ $match: additionalMatch });
-    }
-
-    // If user has a current_location.city, add a computed field "cityMatch".
-    // Posts with a matching city will get a score of 1, others 0.
-    if (user.current_location && user.current_location.city) {
+    // Add search filter if a search query is provided
+    if (search && search.trim() !== "") {
       pipeline.push({
-        $addFields: {
-          cityMatch: {
-            $cond: [
-              { $eq: [ "$author.current_location.city", user.current_location.city ] },
-              1,
-              0
-            ]
-          }
-        }
+        $match: {
+          $or: [
+            { text_content: { $regex: search, $options: "i" } },
+            { "author.name": { $regex: search, $options: "i" } },
+            { tags: { $regex: search, $options: "i" } },
+          ],
+        },
       });
-      // Sort first by cityMatch descending, then by createdAt descending.
-      pipeline.push(
-        { $sort: { cityMatch: -1, createdAt: -1 } }
-      );
-    } else {
-      // Default sort if city info is not available
-      pipeline.push({ $sort: { createdAt: -1 } });
     }
-    
+
+    // Apply category filter if provided and not set to "All"
+    if (category && category !== "All") {
+      const catArray = category.split(",").map((c) => new mongoose.Types.ObjectId(c.trim()));
+      pipeline.push({
+        $match: {
+          category_id: catArray.length > 1 ? { $in: catArray } : catArray[0],
+        },
+      });
+    }
+
+    // Apply sorting (default: descending by creation date) and pagination
     pipeline.push(
+      { $sort: { createdAt: -1 } },
       { $skip: (page - 1) * limit },
       { $limit: limit }
     );
 
     const posts = await Post.aggregate(pipeline);
+    console.log("Found posts count:", posts.length);
 
+    // Populate the category and comments fields after aggregation
     await Post.populate(posts, [
       { path: "category_id", select: "name" },
       { path: "comments", select: "text user_id createdAt" }
     ]);
 
-    // Format posts to include whether the post is liked by the current user.
+    // Format the posts response
     const formattedPosts = posts.map((post) => ({
       id: post._id,
       user: {
@@ -352,16 +381,18 @@ const getAllPost = async (req, res) => {
         verified: post.author.verified,
         destination: post.author.destination_country || null,
         flag: post.author.flag || null,
-        city: (post.author.current_location && post.author.current_location.city) || null
+        city: (post.author.current_location && post.author.current_location.city) || null,
       },
       type: post.category_id?.name || "Unknown Category",
       time: post.createdAt,
       content: post.text_content || "No content available",
       media: post.media?.map((m) => m.media_path) || [],
-      liked: (user.liked_posts || []).some((likedId) => likedId.toString() === post._id.toString()),
+      liked: (user.liked_posts || []).some(
+        (likedId) => likedId.toString() === post._id.toString()
+      ),
       likeCount: post.likes?.length || 0,
       commentCount: post.comments?.length || 0,
-      shareCount: post.shares || 0
+      shareCount: post.shares || 0,
     }));
 
     return res.status(200).json({
@@ -369,14 +400,16 @@ const getAllPost = async (req, res) => {
       data: formattedPosts,
       destination: {
         country: user.destination_country,
-        city: user.current_location?.city || null
-      }
+        city: user.current_location?.city || null,
+      },
     });
   } catch (error) {
     console.error("Error retrieving posts:", error);
     return res.status(500).json({ message: "Failed to retrieve posts." });
   }
 };
+
+
 
 
 // function to search for posts
@@ -1501,5 +1534,6 @@ module.exports = {
   handlePostAdminAction,
   getLikedUsers,
   getDestinationPosts,
-  toggleDestinationPost
+  toggleDestinationPost,
+  getDestinationPostState
 };

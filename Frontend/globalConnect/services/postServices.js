@@ -1,13 +1,13 @@
+// services/postServices.js
+import { useState, useCallback, useEffect } from "react";
 import axios from "axios";
-import { useCallback, useState, useEffect } from "react";
 import config from "../constants/config";
 import { userAuth } from "../contexts/AuthContext";
 
 const ip = config.API_IP;
 const API_URL = `http://${ip}:3000/api/post/all`;
 const DESTINATION_POST_URL = `http://${ip}:3000/api/post/toggle-destination`;
-
-
+const DESTINATION_STATE_URL = `http://${ip}:3000/api/post/destination-post-state`;
 
 // Helper function to format post data
 const formatPostData = (post) => ({
@@ -58,10 +58,12 @@ export const useFetchPosts = (selectedCategory = "All") => {
           headers: { Authorization: `Bearer ${authToken}` },
         });
 
+        // Format the posts returned from the API.
         const newPosts = response.data.data.map(formatPostData);
 
         setPosts((prev) => {
           const combinedPosts = isFirstLoad ? newPosts : [...prev, ...newPosts];
+          // Remove duplicates based on post id
           return combinedPosts.filter(
             (post, index, self) =>
               index === self.findIndex((p) => p.id === post.id)
@@ -125,9 +127,7 @@ export const useSearchPosts = (searchQuery) => {
         const searchResults = response.data.data.map(formatPostData);
 
         setPosts((prev) => {
-          const combinedPosts = isFirstLoad
-            ? searchResults
-            : [...prev, ...searchResults];
+          const combinedPosts = isFirstLoad ? searchResults : [...prev, ...searchResults];
           return combinedPosts.filter(
             (post, index, self) =>
               index === self.findIndex((p) => p.id === post.id)
@@ -147,7 +147,6 @@ export const useSearchPosts = (searchQuery) => {
     [authToken]
   );
 
-  // Reset search when query changes
   useEffect(() => {
     setPosts([]);
     setPage(1);
@@ -179,6 +178,20 @@ export const useToggleDestinationPost = () => {
   const { authToken } = userAuth();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [destinationEnabled, setDestinationEnabled] = useState(false);
+
+  const fetchDestinationState = async () => {
+    try {
+      const response = await axios.get(DESTINATION_STATE_URL, {
+        headers: { Authorization: `Bearer ${authToken}` },
+      });
+      setDestinationEnabled(response.data.is_destinationPost);
+      return response.data.is_destinationPost;
+    } catch (error) {
+      console.error("Error fetching destination state:", error);
+      return false;
+    }
+  };
 
   const toggleDestination = async () => {
     setLoading(true);
@@ -193,22 +206,33 @@ export const useToggleDestinationPost = () => {
         }
       );
 
+      setDestinationEnabled(response.data.is_destinationPost);
       return {
         success: true,
         isEnabled: response.data.is_destinationPost,
-        message: response.data.message
+        message: response.data.message,
       };
     } catch (error) {
       console.error("Error toggling destination post:", error);
       setError(error.response?.data?.message || "Failed to toggle destination post");
       return {
         success: false,
-        error: error.response?.data?.message || "Failed to toggle destination post"
+        error: error.response?.data?.message || "Failed to toggle destination post",
       };
     } finally {
       setLoading(false);
     }
   };
 
-  return { toggleDestination, loading, error };
+  useEffect(() => {
+    fetchDestinationState();
+  }, []);
+
+  return { 
+    toggleDestination, 
+    fetchDestinationState,
+    destinationEnabled,
+    loading, 
+    error 
+  };
 };

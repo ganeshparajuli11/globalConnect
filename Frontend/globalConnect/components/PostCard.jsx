@@ -21,199 +21,6 @@ import { userAuth } from "../contexts/AuthContext";
 import axios from "axios";
 import { useFetchFollowing } from "../services/followFetchService";
 
-// A mapping of many country names to their ISO alpha-2 codes
-const countryNameToCode = {
-  Afghanistan: "af",
-  Albania: "al",
-  Algeria: "dz",
-  Andorra: "ad",
-  Angola: "ao",
-  Argentina: "ar",
-  Armenia: "am",
-  Australia: "au",
-  Austria: "at",
-  Azerbaijan: "az",
-  Bahamas: "bs",
-  Bahrain: "bh",
-  Bangladesh: "bd",
-  Barbados: "bb",
-  Belarus: "by",
-  Belgium: "be",
-  Belize: "bz",
-  Benin: "bj",
-  Bhutan: "bt",
-  Bolivia: "bo",
-  Bosnia: "ba",
-  Botswana: "bw",
-  Brazil: "br",
-  Brunei: "bn",
-  Bulgaria: "bg",
-  Burkina: "bf",
-  Burundi: "bi",
-  Cambodia: "kh",
-  Cameroon: "cm",
-  Canada: "ca",
-  "Central African Republic": "cf",
-  Chad: "td",
-  Chile: "cl",
-  China: "cn",
-  Colombia: "co",
-  Comoros: "km",
-  Congo: "cg",
-  "Costa Rica": "cr",
-  Croatia: "hr",
-  Cuba: "cu",
-  Cyprus: "cy",
-  Czechia: "cz",
-  Denmark: "dk",
-  Djibouti: "dj",
-  Dominica: "dm",
-  "Dominican Republic": "do",
-  Ecuador: "ec",
-  Egypt: "eg",
-  "El Salvador": "sv",
-  "Equatorial Guinea": "gq",
-  Eritrea: "er",
-  Estonia: "ee",
-  Eswatini: "sz",
-  Ethiopia: "et",
-  Fiji: "fj",
-  Finland: "fi",
-  France: "fr",
-  Gabon: "ga",
-  Gambia: "gm",
-  Georgia: "ge",
-  Germany: "de",
-  Ghana: "gh",
-  Greece: "gr",
-  Grenada: "gd",
-  Guatemala: "gt",
-  Guinea: "gn",
-  "Guinea-Bissau": "gw",
-  Guyana: "gy",
-  Haiti: "ht",
-  Honduras: "hn",
-  Hungary: "hu",
-  Iceland: "is",
-  India: "in",
-  Indonesia: "id",
-  Iran: "ir",
-  Iraq: "iq",
-  Ireland: "ie",
-  Israel: "il",
-  Italy: "it",
-  Jamaica: "jm",
-  Japan: "jp",
-  Jordan: "jo",
-  Kazakhstan: "kz",
-  Kenya: "ke",
-  Kiribati: "ki",
-  Kosovo: "xk", // Unofficial code
-  Kuwait: "kw",
-  Kyrgyzstan: "kg",
-  Laos: "la",
-  Latvia: "lv",
-  Lebanon: "lb",
-  Lesotho: "ls",
-  Liberia: "lr",
-  Libya: "ly",
-  Liechtenstein: "li",
-  Lithuania: "lt",
-  Luxembourg: "lu",
-  Madagascar: "mg",
-  Malawi: "mw",
-  Malaysia: "my",
-  Maldives: "mv",
-  Mali: "ml",
-  Malta: "mt",
-  Mauritania: "mr",
-  Mauritius: "mu",
-  Mexico: "mx",
-  Moldova: "md",
-  Monaco: "mc",
-  Mongolia: "mn",
-  Montenegro: "me",
-  Morocco: "ma",
-  Mozambique: "mz",
-  Myanmar: "mm",
-  Namibia: "na",
-  Nauru: "nr",
-  Nepal: "np",
-  Netherlands: "nl",
-  "New Zealand": "nz",
-  Nicaragua: "ni",
-  Niger: "ne",
-  Nigeria: "ng",
-  "North Korea": "kp",
-  "North Macedonia": "mk",
-  Norway: "no",
-  Oman: "om",
-  Pakistan: "pk",
-  Palau: "pw",
-  Panama: "pa",
-  "Papua New Guinea": "pg",
-  Paraguay: "py",
-  Peru: "pe",
-  Philippines: "ph",
-  Poland: "pl",
-  Portugal: "pt",
-  Qatar: "qa",
-  Romania: "ro",
-  Russia: "ru",
-  Rwanda: "rw",
-  "Saint Kitts and Nevis": "kn",
-  "Saint Lucia": "lc",
-  "Saint Vincent and the Grenadines": "vc",
-  Samoa: "ws",
-  "San Marino": "sm",
-  "Sao Tome and Principe": "st",
-  "Saudi Arabia": "sa",
-  Senegal: "sn",
-  Serbia: "rs",
-  Seychelles: "sc",
-  "Sierra Leone": "sl",
-  Singapore: "sg",
-  Slovakia: "sk",
-  Slovenia: "si",
-  Solomon: "sb",
-  Somalia: "so",
-  "South Africa": "za",
-  "South Korea": "kr",
-  "South Sudan": "ss",
-  Spain: "es",
-  "Sri Lanka": "lk",
-  Sudan: "sd",
-  Suriname: "sr",
-  Sweden: "se",
-  Switzerland: "ch",
-  Syria: "sy",
-  Taiwan: "tw",
-  Tajikistan: "tj",
-  Tanzania: "tz",
-  Thailand: "th",
-  Togo: "tg",
-  Tonga: "to",
-  "Trinidad and Tobago": "tt",
-  Tunisia: "tn",
-  Turkey: "tr",
-  Turkmenistan: "tm",
-  Tuvalu: "tv",
-  Uganda: "ug",
-  Ukraine: "ua",
-  "United Arab Emirates": "ae",
-  "United Kingdom": "gb",
-  "United States": "us",
-  Uruguay: "uy",
-  Uzbekistan: "uz",
-  Vanuatu: "vu",
-  Vatican: "va",
-  Venezuela: "ve",
-  Vietnam: "vn",
-  Yemen: "ye",
-  Zambia: "zm",
-  Zimbabwe: "zw",
-};
-
 const PostCard = ({ item, verifiedStatus, router }) => {
   const { authToken } = userAuth();
   const ip = config.API_IP;
@@ -235,40 +42,10 @@ const PostCard = ({ item, verifiedStatus, router }) => {
   const createdAt = moment(item?.time).format("MMM D");
   const contentWidth = Dimensions.get("window").width - 32;
 
-
-// Helper function to get the flag URL for a country name
-const getCountryFlagUrl = (countryName) => {
-  if (!countryName) return null;
-  const countryKey = Object.keys(countryNameToCode).find(
-    (key) => key.toLowerCase() === countryName.trim().toLowerCase()
-  );
-  if (countryKey) {
-    const code = countryNameToCode[countryKey].toLowerCase();
-    const url = `https://flagcdn.com/48x36/${code}.png`;
-    console.log("Country short code:", code);
-    console.log("Generated flag URL:", url);
-    return url;
-  }
-  console.log("No matching country found for:", countryName);
-  return null;
-};
-
-
-  const destinationRaw = item.user?.destination || "";
-  console.log("checking destinaiton name ", destinationRaw);
-  
-  let displayDestination = "";
-  let flagCountry = "";
-  if (destinationRaw) {
-    const destinationParts = destinationRaw.split(",");
-    flagCountry = destinationParts[0] ? destinationParts[0].trim() : "";
-    displayDestination = destinationRaw.trim();
-  } else {
-    // Fallback to using city if destination is not provided.
-    displayDestination = item.user.city ? item.user.city : "";
-    flagCountry = "";
-  }
-  // --- End destination handling ---
+  // New location handling:
+  // Use the flag URL directly from user.flag and show the city (from user.city)
+  const flagUrl = item.user?.flag; // Should be a URL like "https://flagcdn.com/48x36/gb.png"
+  const locationText = item.user?.city ? item.user.city.trim() : "";
 
   // Handle user press with error handling for missing user ID
   const handleUserPress = async () => {
@@ -373,15 +150,17 @@ const getCountryFlagUrl = (countryName) => {
                 />
               )}
             </View>
-            {/* New location block */}
+            {/* New location block: only display flag and city */}
             <View style={styles.locationContainer}>
-              {flagCountry && getCountryFlagUrl(flagCountry) && (
+              {flagUrl && (
                 <Image
-                  source={{ uri: getCountryFlagUrl(flagCountry) }}
+                  source={{ uri: flagUrl }}
                   style={styles.flagIcon}
                 />
               )}
-              <Text style={styles.locationText}>{displayDestination}</Text>
+              {locationText ? (
+                <Text style={styles.locationText}>{locationText}</Text>
+              ) : null}
             </View>
             <Text style={styles.postTime}>{createdAt}</Text>
           </View>
