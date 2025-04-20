@@ -351,17 +351,17 @@ const PostProfile = () => {
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                   {Array.isArray(post.media)
                     ? post.media.map((item, index) => {
-                        const mediaPath = typeof item === "object" ? item.url : item;
-                        return (
-                          <div key={index} className="relative bg-gray-100 rounded-lg overflow-hidden aspect-video">
-                            <img
-                              src={getMediaUrl(mediaPath)}
-                              alt={`Post media ${index + 1}`}
-                              className="w-full h-full object-cover"
-                            />
-                          </div>
-                        );
-                      })
+                      const mediaPath = typeof item === "object" ? item.url : item;
+                      return (
+                        <div key={index} className="relative bg-gray-100 rounded-lg overflow-hidden aspect-video">
+                          <img
+                            src={getMediaUrl(mediaPath)}
+                            alt={`Post media ${index + 1}`}
+                            className="w-full h-full object-cover"
+                          />
+                        </div>
+                      );
+                    })
                     : (
                       <div className="relative bg-gray-100 rounded-lg overflow-hidden aspect-video">
                         <img
@@ -425,10 +425,13 @@ const PostProfile = () => {
         setIsVisible={setModalVisible}
         post={post}
         accessToken={accessToken}
-        onActionComplete={() => {
+        onActionComplete={(actionType) => {
           setModalVisible(false);
-         
-          fetchPost();
+          if (actionType === "delete" || actionType === "permanentDelete") {
+            navigate("/posts/all");
+          } else {
+            fetchPost();
+          }
         }}
       />
     </div>

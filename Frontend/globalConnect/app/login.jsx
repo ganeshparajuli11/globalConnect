@@ -49,6 +49,7 @@ axios.interceptors.response.use(
 );
 const Login = () => {
   const ip = config.API_IP;
+  console.log("ip", ip);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);

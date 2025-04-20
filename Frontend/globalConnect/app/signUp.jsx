@@ -42,7 +42,7 @@ const SignUp = () => {
   // Email validation regex
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-  // Enhanced password validation using regex:
+
   // At least 8 characters, one uppercase, one lowercase, one number, and one special character.
   const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]).{8,}$/;
   const isValidPassword = (pwd) => {

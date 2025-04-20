@@ -1,4 +1,3 @@
-// services/postServices.js
 import { useState, useCallback, useEffect } from "react";
 import axios from "axios";
 import config from "../constants/config";
@@ -38,49 +37,61 @@ export const useFetchPosts = (selectedCategory = "All") => {
   const [error, setError] = useState(null);
 
   const fetchPosts = useCallback(
-    async (pageNumber = 1, isFirstLoad = false) => {
-      if (loading || (!hasMore && !isFirstLoad)) return;
+    async (pageNumber = 1, isFirstLoad = false, searchQuery = "") => {
+        if (loading || (!hasMore && !isFirstLoad)) return;
 
-      setLoading(true);
-      setError(null);
+        setLoading(true);
+        setError(null);
 
-      try {
-        let url = `${API_URL}?page=${pageNumber}&limit=5`;
-        if (selectedCategory && selectedCategory !== "All") {
-          url += `&category=${
-            Array.isArray(selectedCategory)
-              ? selectedCategory.join(",")
-              : selectedCategory
-          }`;
+        try {
+            let url = `${API_URL}?page=${pageNumber}&limit=5`;
+            if (searchQuery) {
+                url += `&search=${encodeURIComponent(searchQuery)}`;
+            }
+            if (selectedCategory && selectedCategory !== "All") {
+                url += `&category=${
+                    Array.isArray(selectedCategory)
+                        ? selectedCategory.join(",")
+                        : selectedCategory
+                }`;
+            }
+
+            console.log("Fetching posts with URL:", url);
+
+            const response = await axios.get(url, {
+                headers: { Authorization: `Bearer ${authToken}` },
+            });
+
+            // Format the posts returned from the API.
+            const newPosts = response.data.data.map(formatPostData);
+
+            setPosts((prev) => {
+                const combinedPosts = isFirstLoad ? newPosts : [...prev, ...newPosts];
+                // Remove duplicates based on post id
+                return combinedPosts.filter(
+                    (post, index, self) =>
+                        index === self.findIndex((p) => p.id === post.id)
+                );
+            });
+
+            setPage(pageNumber + 1);
+            setHasMore(newPosts.length > 0);
+        } catch (error) {
+            const backendMessage = error.response?.data?.message;
+            // Suppress logging for the "destination not set" error
+            if (backendMessage === "Please set your destination country first") {
+                setError(backendMessage);
+                setHasMore(false);
+                return;
+            }
+            console.error("Error fetching posts:", error);
+            setError(backendMessage || "Failed to fetch posts");
+        } finally {
+            setLoading(false);
         }
-
-        const response = await axios.get(url, {
-          headers: { Authorization: `Bearer ${authToken}` },
-        });
-
-        // Format the posts returned from the API.
-        const newPosts = response.data.data.map(formatPostData);
-
-        setPosts((prev) => {
-          const combinedPosts = isFirstLoad ? newPosts : [...prev, ...newPosts];
-          // Remove duplicates based on post id
-          return combinedPosts.filter(
-            (post, index, self) =>
-              index === self.findIndex((p) => p.id === post.id)
-          );
-        });
-
-        setPage(pageNumber + 1);
-        setHasMore(newPosts.length > 0);
-      } catch (error) {
-        console.error("Error fetching posts:", error);
-        setError(error.response?.data?.message || "Failed to fetch posts");
-      } finally {
-        setLoading(false);
-      }
     },
     [authToken, loading, hasMore, selectedCategory]
-  );
+);
 
   const resetPosts = useCallback(() => {
     setPosts([]);
@@ -196,7 +207,7 @@ export const useToggleDestinationPost = () => {
   const toggleDestination = async () => {
     setLoading(true);
     setError(null);
-
+  
     try {
       const response = await axios.put(
         DESTINATION_POST_URL,
@@ -205,7 +216,7 @@ export const useToggleDestinationPost = () => {
           headers: { Authorization: `Bearer ${authToken}` },
         }
       );
-
+  
       setDestinationEnabled(response.data.is_destinationPost);
       return {
         success: true,
@@ -213,11 +224,14 @@ export const useToggleDestinationPost = () => {
         message: response.data.message,
       };
     } catch (error) {
-      console.error("Error toggling destination post:", error);
-      setError(error.response?.data?.message || "Failed to toggle destination post");
+      const backendMessage =
+        error.response?.data?.message ||
+        "Failed to toggle destination post";
+      console.error("Error toggling destination post:", backendMessage);
+      setError(backendMessage);
       return {
         success: false,
-        error: error.response?.data?.message || "Failed to toggle destination post",
+        error: backendMessage,
       };
     } finally {
       setLoading(false);

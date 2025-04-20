@@ -1,4 +1,3 @@
-// home.jsx
 import React, { useState, useEffect, useCallback } from "react";
 import {
   StyleSheet,
@@ -13,7 +12,6 @@ import { useRouter } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 import BottomNav from "../../components/bottomNav";
-import Header from "../../components/Header";
 import ScreenWrapper from "../../components/ScreenWrapper";
 import SearchBar from "../../components/SearchBar";
 import SortCategory from "../../components/SortCategory";
@@ -32,11 +30,6 @@ import { theme } from "../../constants/theme";
 const Home = () => {
   const router = useRouter();
   const { authToken } = userAuth();
-
-  // Uncomment below if you need to enforce login if token is missing
-  // if (!authToken) {
-  //   router.replace("/login");
-  // }
 
   const handleShareError = (error) => {
     if (!error?.error?.includes("getIO is not a function")) {
@@ -61,6 +54,7 @@ const Home = () => {
     loading,
     hasMore,
     page,
+    error,
     resetPosts,
   } = useFetchPosts(selectedCategory);
   const { users, loading: searchUserLoading } = useSearchUsers(searchQuery);
@@ -72,9 +66,10 @@ const Home = () => {
     page: searchPage,
   } = useSearchPosts(searchQuery);
 
-  // When search query or search type changes, fetch search posts (if applicable)
+  // When search query or search type changes, if type is posts, trigger search
   useEffect(() => {
     if (searchQuery.trim() && searchType === "posts") {
+      // reset search posts and fetch first page
       fetchSearchPosts(searchQuery, 1, true);
     }
   }, [searchQuery, searchType]);
@@ -92,35 +87,50 @@ const Home = () => {
     fetchPosts(1, true);
   }, [selectedCategory]);
 
-  // Determine search state
+  // Determine whether we are searching by users or posts
   const isSearching = searchQuery.trim().length > 0;
-  const searchLoading = searchType === "users" ? searchUserLoading : searchPostLoading;
 
   // Handler for switching search type (users or posts)
   const handleSearchTypeChange = (type) => {
     setSearchType(type);
     if (type === "posts" && searchQuery.trim()) {
-      fetchSearchPosts(searchQuery);
+      fetchSearchPosts(searchQuery, 1, true);
     }
   };
 
-  // Render segmented control if searching
+  // Render segmented control for search type
   const renderSearchToggle = () => {
     return (
       <View style={styles.toggleContainer}>
         <TouchableOpacity
-          style={[styles.toggleButton, searchType === "users" && styles.activeToggle]}
+          style={[
+            styles.toggleButton,
+            searchType === "users" && styles.activeToggle,
+          ]}
           onPress={() => handleSearchTypeChange("users")}
         >
-          <Text style={[styles.toggleText, searchType === "users" && styles.activeToggleText]}>
+          <Text
+            style={[
+              styles.toggleText,
+              searchType === "users" && styles.activeToggleText,
+            ]}
+          >
             Users
           </Text>
         </TouchableOpacity>
         <TouchableOpacity
-          style={[styles.toggleButton, searchType === "posts" && styles.activeToggle]}
+          style={[
+            styles.toggleButton,
+            searchType === "posts" && styles.activeToggle,
+          ]}
           onPress={() => handleSearchTypeChange("posts")}
         >
-          <Text style={[styles.toggleText, searchType === "posts" && styles.activeToggleText]}>
+          <Text
+            style={[
+              styles.toggleText,
+              searchType === "posts" && styles.activeToggleText,
+            ]}
+          >
             Posts
           </Text>
         </TouchableOpacity>
@@ -158,7 +168,7 @@ const Home = () => {
       }
     };
     checkUserDOB();
-  }, []);
+  }, [authToken]);
 
   // Handler for DOB modal submission
   const handleDobSubmit = async (selectedDate) => {
@@ -170,6 +180,183 @@ const Home = () => {
     } catch (error) {
       console.error("Error updating DOB:", error);
     }
+  };
+
+  // Render error message if destination is not set
+  const renderErrorMessage = () => {
+    if (error === "Please set your destination country first") {
+      return (
+        <View style={styles.errorContainer}>
+          <Text style={styles.errorText}>
+            Please set your destination country first.
+          </Text>
+          <TouchableOpacity
+            style={styles.updateButton}
+            onPress={() => router.push("/destination")}
+          >
+            <Text style={styles.buttonText}>Update Location</Text>
+          </TouchableOpacity>
+        </View>
+      );
+    }
+    return null;
+  };
+
+  // Render list for posts or search results depending on search type
+  const renderList = () => {
+    // If in search mode and search type is "users"
+    if (isSearching && searchType === "users") {
+      return (
+        <FlatList
+          data={users}
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={styles.listStyle}
+          keyExtractor={(item) => item._id}
+          renderItem={({ item }) => (
+            <UserCard user={item} onFollowToggle={() => {}} />
+          )}
+          ListEmptyComponent={
+            !searchUserLoading && (
+              <View style={styles.emptyContainer}>
+                <Text style={styles.emptyText}>No users found</Text>
+              </View>
+            )
+          }
+          ListFooterComponent={
+            searchUserLoading && (
+              <ActivityIndicator style={{ marginVertical: 30 }} size="large" />
+            )
+          }
+        />
+      );
+    }
+    // If in search mode and search type is "posts"
+    if (isSearching && searchType === "posts") {
+      return (
+        <FlatList
+          data={searchPosts}
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={styles.listStyle}
+          keyExtractor={(item) => item.id}
+          renderItem={({ item }) => (
+            <PostCard
+              item={{
+                ...item,
+                user: {
+                  id: item.user?._id || item.user?.id,
+                  name: item.user?.name,
+                  profile_image: item.user?.profile_image,
+                  verified: item.user?.verified ?? false,
+                  destination: item.user?.destination,
+                  flag: item.user?.flag,
+                  city: item.user?.city,
+                },
+              }}
+              verifiedStatus={item.user?.verified ?? false}
+              router={router}
+              onShareError={handleShareError}
+            />
+          )}
+          onEndReached={handleLoadMoreSearchPosts}
+          onEndReachedThreshold={0.5}
+          ListEmptyComponent={
+            !searchPostLoading && (
+              <View style={styles.emptyContainer}>
+                <Text style={styles.emptyText}>
+                  No matching posts found
+                </Text>
+              </View>
+            )
+          }
+          ListFooterComponent={() => {
+            if (searchPostLoading) {
+              return (
+                <ActivityIndicator style={{ marginVertical: 30 }} size="large" />
+              );
+            }
+            if (!searchHasMore && searchPosts.length > 0) {
+              return (
+                <View style={styles.footerContainer}>
+                  <Text style={styles.footerText}>
+                    No more posts available
+                  </Text>
+                </View>
+              );
+            }
+            return null;
+          }}
+        />
+      );
+    }
+    
+    // Default: show posts (when not searching)
+    return (
+      <>
+        <SortCategory
+          selectedCategory={selectedCategory}
+          setSelectedCategory={setSelectedCategory}
+        />
+        
+        {/* Error message always displayed in a consistent position */}
+        {renderErrorMessage()}
+        
+        <FlatList
+          data={posts}
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={styles.listStyle}
+          keyExtractor={(item) => item.id}
+          renderItem={({ item }) => (
+            <PostCard
+              item={{
+                ...item,
+                user: {
+                  id: item.user?._id || item.user?.id,
+                  name: item.user?.name,
+                  profile_image: item.user?.profile_image,
+                  verified: item.user?.verified ?? false,
+                  destination: item.user?.destination,
+                  flag: item.user?.flag,
+                  city: item.user?.city,
+                },
+              }}
+              verifiedStatus={item.user?.verified ?? false}
+              router={router}
+              onShareError={handleShareError}
+            />
+          )}
+          onEndReached={() => {
+            if (hasMore && !loading) {
+              fetchPosts(page, false);
+            }
+          }}
+          onEndReachedThreshold={0.5}
+          ListEmptyComponent={
+            !loading && (
+              <View style={styles.emptyContainer}>
+                <Text style={styles.emptyText}>No posts available</Text>
+              </View>
+            )
+          }
+          ListFooterComponent={() => {
+            if (loading) {
+              return (
+                <ActivityIndicator style={{ marginVertical: 30 }} size="large" />
+              );
+            }
+            if (!hasMore && posts.length > 0) {
+              return (
+                <View style={styles.footerContainer}>
+                  <Text style={styles.footerText}>
+                    No more posts available
+                  </Text>
+                </View>
+              );
+            }
+            return null;
+          }}
+        />
+      </>
+    );
   };
 
   return (
@@ -190,143 +377,10 @@ const Home = () => {
         {/* Show segmented control when searching */}
         {isSearching && renderSearchToggle()}
 
-        {isSearching ? (
-          searchType === "users" ? (
-            <FlatList
-              data={users}
-              showsVerticalScrollIndicator={false}
-              contentContainerStyle={styles.listStyle}
-              keyExtractor={(item) => item._id}
-              renderItem={({ item }) => (
-                <UserCard user={item} onFollowToggle={() => {}} />
-              )}
-              ListEmptyComponent={
-                !searchLoading && (
-                  <View style={styles.emptyContainer}>
-                    <Text style={styles.emptyText}>No users found</Text>
-                  </View>
-                )
-              }
-              ListFooterComponent={
-                searchLoading && (
-                  <ActivityIndicator style={{ marginVertical: 30 }} size="large" />
-                )
-              }
-            />
-          ) : (
-            <FlatList
-              data={posts}
-              showsVerticalScrollIndicator={false}
-              contentContainerStyle={styles.listStyle}
-              keyExtractor={(item) => item.id}
-              renderItem={({ item }) => (
-                <PostCard
-                  item={{
-                    ...item,
-                    user: {
-                      id: item.user?._id || item.user?.id,
-                      name: item.user?.name,
-                      profile_image: item.user?.profile_image,
-                      verified: item.user?.verified ?? false,
-                      destination: item.user?.destination,
-                      flag: item.user?.flag,
-                      city: item.user?.city,
-                    },
-                  }}
-                  verifiedStatus={item.user?.verified ?? false}
-                  router={router}
-                  onShareError={handleShareError}
-                />
-              )}
-              onEndReached={() => {
-                if (hasMore && !loading) {
-                  fetchPosts(page, false);
-                }
-              }}
-              onEndReachedThreshold={0.5}
-              ListEmptyComponent={
-                !loading && (
-                  <View style={styles.emptyContainer}>
-                    <Text style={styles.emptyText}>No posts available</Text>
-                  </View>
-                )
-              }
-              ListFooterComponent={() => {
-                if (loading) {
-                  return <ActivityIndicator style={{ marginVertical: 30 }} size="large" />;
-                }
-                if (!hasMore && posts.length > 0) {
-                  return (
-                    <View style={styles.footerContainer}>
-                      <Text style={styles.footerText}>No more posts available</Text>
-                    </View>
-                  );
-                }
-                return null;
-              }}
-            />
-          )
-        ) : (
-          <>
-            <SortCategory
-              selectedCategory={selectedCategory}
-              setSelectedCategory={setSelectedCategory}
-            />
-            <FlatList
-              data={posts}
-              showsVerticalScrollIndicator={false}
-              contentContainerStyle={styles.listStyle}
-              keyExtractor={(item) => item.id}
-              renderItem={({ item }) => (
-                <PostCard
-                  item={{
-                    ...item,
-                    user: {
-                      id: item.user?._id || item.user?.id,
-                      name: item.user?.name,
-                      profile_image: item.user?.profile_image,
-                      verified: item.user?.verified ?? false,
-                      destination: item.user?.destination,
-                      flag: item.user?.flag,
-                      city: item.user?.city,
-                    },
-                  }}
-                  verifiedStatus={item.user?.verified ?? false}
-                  router={router}
-                  onShareError={handleShareError}
-                />
-              )}
-              onEndReached={() => {
-                if (hasMore && !loading) {
-                  fetchPosts(page, false);
-                }
-              }}
-              onEndReachedThreshold={0.5}
-              ListEmptyComponent={
-                !loading && (
-                  <View style={styles.emptyContainer}>
-                    <Text style={styles.emptyText}>No posts available</Text>
-                  </View>
-                )
-              }
-              ListFooterComponent={() => {
-                if (loading) {
-                  return <ActivityIndicator style={{ marginVertical: 30 }} size="large" />;
-                }
-                if (!hasMore && posts.length > 0) {
-                  return (
-                    <View style={styles.footerContainer}>
-                      <Text style={styles.footerText}>No more posts available</Text>
-                    </View>
-                  );
-                }
-                return null;
-              }}
-            />
-          </>
-        )}
+        {renderList()}
       </View>
       <BottomNav />
+      
       {/* DOB Modal */}
       <DobCard
         visible={showDobModal}
@@ -406,5 +460,30 @@ const styles = StyleSheet.create({
   },
   activeToggleText: {
     color: theme.colors.white,
+  },
+  // Error banner styles
+  errorContainer: {
+    backgroundColor: "#fdecea",
+    padding: 15,
+    marginHorizontal: wp(4),
+    marginVertical: 10,
+    borderRadius: 8,
+    alignItems: "center",
+  },
+  errorText: {
+    fontSize: 16,
+    color: "#d93025",
+    textAlign: "center",
+    marginBottom: 10,
+  },
+  updateButton: {
+    backgroundColor: theme.colors.primary,
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 5,
+  },
+  buttonText: {
+    color: "#fff",
+    fontWeight: "bold",
   },
 });

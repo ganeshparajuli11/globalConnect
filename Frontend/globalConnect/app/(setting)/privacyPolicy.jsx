@@ -14,6 +14,7 @@ import RenderHTML from 'react-native-render-html';
 import BackButton from '../../components/BackButton';
 import config from '../../constants/config';
 import { StatusBar } from 'expo-status-bar';
+import ScreenWrapper from '../../components/ScreenWrapper';
 
 const PrivacyPolicy = () => {
   const ip = config.API_IP;
@@ -62,7 +63,7 @@ const PrivacyPolicy = () => {
   }
 
   return (
-    <View style={styles.container}>
+    <ScreenWrapper style={styles.container}>
        <StatusBar style="dark" />
       {/* Header with Back Button */}
       <View style={styles.header}>
@@ -89,7 +90,7 @@ const PrivacyPolicy = () => {
           source={{ html: policy.content }}
         />
       </ScrollView>
-    </View>
+    </ScreenWrapper>
   );
 };
 

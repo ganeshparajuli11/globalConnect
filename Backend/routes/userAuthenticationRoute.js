@@ -22,7 +22,7 @@ router.put("/admin/edit/:adminId",uploadProfileImage.single("profile_image"),che
 
 // Admin signup route with profile image upload
 router.post(
-  "/admin/signup",checkAuthentication,checkIsAdmin,checkIsSuperAdmin,
+  "/admin/signup",checkAuthentication,checkIsAdmin,
   uploadProfileImage.single("profile_image"),
   adminSignup
 );

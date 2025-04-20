@@ -1,42 +1,42 @@
-import { writeFileSync } from 'fs';
+#!/usr/bin/env node
+import fs from 'fs';
 import os from 'os';
+import path from 'path';
+import { fileURLToPath } from 'url';
 
 function getWifiIPv4() {
   const nets = os.networkInterfaces();
-  // Iterate over network interface names
-  for (const interfaceName of Object.keys(nets)) {
-    // Check if the interface name contains "wi-fi" or "wireless"
+  for (const name of Object.keys(nets)) {
+    const lname = name.toLowerCase();
     if (
-      interfaceName.toLowerCase().includes('wi-fi') ||
-      interfaceName.toLowerCase().includes('wireless')
+      lname.includes('wi-fi') ||
+      lname.includes('wifi') ||
+      lname.includes('wlan') ||
+      lname.includes('wireless')
     ) {
-      // Look through each address on the interface
-      for (const net of nets[interfaceName]) {
-        // Return the first non‑internal IPv4 address
+      for (const net of nets[name]) {
         if (net.family === 'IPv4' && !net.internal) {
           return net.address;
         }
       }
     }
   }
-  // Fallback in case no Wi‑Fi interface is found
   return '127.0.0.1';
 }
 
-const generate = () => {
-  const ip = getWifiIPv4();
-
-  const config = `
-    const config = {
-      API_IP: "${ip}",
-      EXPO_PROJECT_ID: "74b46798-df04-48a9-8c07-dea648ae237c"
-    };
-
-    export default config;
-  `;
-
-  writeFileSync('./config.js', config.trim());
-  console.log("✅ Updated config.js with IP:", ip);
+const ip = getWifiIPv4();
+const configContents = `const config = {
+  API_IP: "${ip}",
+  EXPO_PROJECT_ID: "74b46798-df04-48a9-8c07-dea648ae237c"
 };
 
-generate();
+export default config;
+`;
+
+// ESM hack to get __dirname
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+const outPath = path.join(__dirname, 'config.js');
+fs.writeFileSync(outPath, configContents.trimStart(), 'utf8');
+console.log(`✅ Updated ${outPath} with API_IP=${ip}`);

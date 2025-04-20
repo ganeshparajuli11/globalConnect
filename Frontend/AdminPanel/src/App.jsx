@@ -53,7 +53,7 @@ function App() {
     };
 
     checkAuth();
-    window.addEventListener("storage", checkAuth); // Listen for changes in localStorage
+    window.addEventListener("storage", checkAuth); ``
     return () => window.removeEventListener("storage", checkAuth);
   }, []);
 

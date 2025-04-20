@@ -1,15 +1,13 @@
 const crypto = require("crypto");
 const User = require("../models/userSchema");
 const Message = require("../models/messageSchema");
-const { sendRealTimeMessage } = require("./socketController"); // Ensure socketController exports a valid io instance
+const { sendRealTimeMessage } = require("./socketController"); 
 const { sendExpoPushNotification } = require("./pushTokenController");
 const Post = require("../models/postSchema");
 const ENCRYPTION_KEY = Buffer.from(process.env.ENCRYPTION_KEY, "hex");
 const IV_LENGTH = 16;
 
-/**
- * Encrypts a string using AES-256-CBC.
- */
+
 const encrypt = (text) => {
   const iv = crypto.randomBytes(IV_LENGTH);
   const cipher = crypto.createCipheriv("aes-256-cbc", ENCRYPTION_KEY, iv);
@@ -17,9 +15,7 @@ const encrypt = (text) => {
   return iv.toString("hex") + ":" + encryptedBuffer.toString("hex");
 };
 
-/**
- * Decrypts an AES-256-CBC encrypted string.
- */
+
 const decrypt = (encryptedText) => {
   try {
     const parts = encryptedText.split(":");
@@ -147,7 +143,6 @@ const markMessageAsRead = async (req, res) => {
 
 /**
  * Fetch messages between current user and a partner (used by both admin and regular users).
- * For regular users, the request body should include senderId (partner's ID).
  */
 const getMessages = async (req, res) => {
   try {
@@ -402,7 +397,7 @@ const getMessagesForAdmin = async (req, res) => {
 
 const sharePost = async (req, res) => {
   try {
-    const { postId, recipientId, customMessage } = req.body; // customMessage is optional
+    const { postId, recipientId, customMessage } = req.body; 
     const senderId = req.user.id;
 
     // Validate request data
@@ -445,8 +440,7 @@ const sharePost = async (req, res) => {
       });
     }
 
-    // Create a new message with messageType "post"
-    // If a custom message is provided, include it; otherwise use a default content
+
     const content = customMessage && customMessage.trim() !== ""
       ? customMessage.trim()
       : "Shared a post with you";

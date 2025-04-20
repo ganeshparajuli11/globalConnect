@@ -270,7 +270,6 @@ const AdminManagement = () => {
                 <th className="py-3 px-4 border-b text-left">Email</th>
                 <th className="py-3 px-4 border-b text-left">Role</th>
                 <th className="py-3 px-4 border-b text-left">Verified</th>
-                <th className="py-3 px-4 border-b text-left">DOB</th>
                 <th className="py-3 px-4 border-b text-center">Actions</th>
               </tr>
             </thead>
@@ -289,7 +288,7 @@ const AdminManagement = () => {
                         src={
                           admin.profile_image?.startsWith("http")
                             ? admin.profile_image
-                            : `http://localhost:3000${admin.profile_image}`
+                            : `http://localhost:3000/${admin.profile_image}`
                         }
                         alt={admin.name}
                         className="w-10 h-10 rounded-full object-cover"
@@ -301,10 +300,7 @@ const AdminManagement = () => {
                     <td className="py-3 px-4 border-b">
                       {admin.verified ? "Yes" : "No"}
                     </td>
-                    {/* Display DOB in a friendly format */}
-                    <td className="py-3 px-4 border-b">
-                      {formatDateForDisplay(admin.dob)}
-                    </td>
+
                     <td className="py-3 px-4 border-b text-center">
                       <button
                         onClick={() => openEditModal(admin)}
@@ -335,13 +331,13 @@ const AdminManagement = () => {
                 <div className="mb-4">
                   <label className="block mb-1 font-semibold">Name</label>
                   <input
-                    type="text"
-                    name="name"
-                    value={adminForm.name}
+                    type="date"
+                    name="dob"
+                    value={adminForm.dob}
                     onChange={handleFormChange}
                     className="w-full border px-3 py-2 rounded"
-                    placeholder="Enter name"
                     required
+                    max={new Date().toISOString().split("T")[0]}
                   />
                 </div>
                 <div className="mb-4">

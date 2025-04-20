@@ -57,7 +57,7 @@ const PostCardDetails = ({
     ? `http://${ip}:3000/${item.user.profile_image}`
     : "https://via.placeholder.com/100";
 
-  const createdAt = moment(item?.time).format("MMM D");
+  const createdAt = moment(item?.time, "MMMM D, YYYY").format("MMM D");
   const contentWidth = Dimensions.get("window").width - 32;
 
   // Handle three-dots press
@@ -155,6 +155,7 @@ const PostCardDetails = ({
     setLikesModalVisible(true);
   };
 
+  console.log("checking post details", item);
   return (
     <View style={[styles.container, hasShadow && styles.shadow]} key={item.id}>
       {/* Header */}

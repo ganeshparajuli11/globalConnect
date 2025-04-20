@@ -107,14 +107,13 @@ async function signup(req, res) {
 
 // admin signup
 async function adminSignup(req, res) {
-  // Extract required fields from the request body
+
   const { name, email, password, dob } = req.body;
 
   // Use the uploaded file information from multer if provided
   let profileImageUrl = "";
   if (req.file) {
     // Construct the file URL based on your storage destination.
-    // For example, if the storage destination is "./uploads/profile/", then:
     profileImageUrl = `uploads/profile/${req.file.filename}`;
   }
 
@@ -141,7 +140,8 @@ async function adminSignup(req, res) {
         .json({ message: "You must be at least 18 years old to register." });
     }
 
-    // Create a new admin with the required fields and explicitly set role to "admin"
+
+    // Explicitly set role to "admin" and verified to true
     const admin = new User({
       name,
       email,
@@ -149,6 +149,7 @@ async function adminSignup(req, res) {
       dob,
       profile_image: profileImageUrl, // Use the URL from the uploaded file
       role: "admin",
+      verified: true 
     });
 
     await admin.save();

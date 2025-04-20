@@ -42,11 +42,6 @@ const PostCard = ({ item, verifiedStatus, router }) => {
   const createdAt = moment(item?.time).format("MMM D");
   const contentWidth = Dimensions.get("window").width - 32;
 
-  // New location handling:
-  // Use the flag URL directly from user.flag and show the city (from user.city)
-  const flagUrl = item.user?.flag; // Should be a URL like "https://flagcdn.com/48x36/gb.png"
-  const locationText = item.user?.city ? item.user.city.trim() : "";
-
   // Handle user press with error handling for missing user ID
   const handleUserPress = async () => {
     try {
@@ -133,6 +128,12 @@ const PostCard = ({ item, verifiedStatus, router }) => {
     setShareModalVisible(false);
   };
 
+  // New content handling: avoid rendering placeholder text
+  const htmlContent =
+    item.content && item.content.trim() !== "No content available"
+      ? item.content
+      : "";
+
   return (
     <View style={[styles.container, styles.shadow]} key={item.id}>
       {/* Header with user info and navigation icon */}
@@ -150,18 +151,18 @@ const PostCard = ({ item, verifiedStatus, router }) => {
                 />
               )}
             </View>
-            {/* New location block: only display flag and city */}
-            <View style={styles.locationContainer}>
-              {flagUrl && (
+            {/* Location block with flag and city */}
+            {item.user.flag && (
+              <View style={styles.locationContainer}>
                 <Image
-                  source={{ uri: flagUrl }}
+                  source={{ uri: item.user.flag }}
                   style={styles.flagIcon}
                 />
-              )}
-              {locationText ? (
-                <Text style={styles.locationText}>{locationText}</Text>
-              ) : null}
-            </View>
+                {item.user.city?.trim() ? (
+                  <Text style={styles.locationText}>{item.user.city.trim()}</Text>
+                ) : null}
+              </View>
+            )}
             <Text style={styles.postTime}>{createdAt}</Text>
           </View>
         </TouchableOpacity>
@@ -175,9 +176,9 @@ const PostCard = ({ item, verifiedStatus, router }) => {
         </TouchableOpacity>
       </View>
 
-      {/* Post content */}
+      {/* Post content with updated HTML handling */}
       <View style={styles.content}>
-        <RenderHtml contentWidth={contentWidth} source={{ html: item.content }} />
+        <RenderHtml contentWidth={contentWidth} source={{ html: htmlContent }} />
       </View>
 
       {/* Media images */}
